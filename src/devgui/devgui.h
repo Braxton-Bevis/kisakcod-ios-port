@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <universal/q_shared.h>
 #include <qcommon/graph.h>
 
@@ -37,7 +38,7 @@ struct DevGuiInput // sizeof=0x70
     float sliderScrollTime;             // ...
     float sliderScrollMaxTimeStep;      // ...
 };
-static_assert(sizeof(DevGuiInput) == 0x70);
+KISAK_LAYOUT_ASSERT(sizeof(DevGuiInput) == 0x70);
 
 union DevMenuChild // sizeof=0x4
 {                                       // ...
@@ -46,7 +47,7 @@ union DevMenuChild // sizeof=0x4
     DevGraph *graph;
     uint16_t menu;
 };
-static_assert(sizeof(DevMenuChild) == 0x4);
+KISAK_LAYOUT_ASSERT(sizeof(DevMenuChild) == 0x4);
 
 struct DevMenuItem // sizeof=0x28
 {                                       // ...
@@ -59,7 +60,7 @@ struct DevMenuItem // sizeof=0x28
     uint16_t parent;            // ...
     DevMenuChild child;                 // ...
 };
-static_assert(sizeof(DevMenuItem) == 0x28);
+KISAK_LAYOUT_ASSERT(sizeof(DevMenuItem) == 0x28);
 
 struct devguiGlob_t // sizeof=0x5E10
 {                                       // ...
@@ -84,7 +85,7 @@ struct devguiGlob_t // sizeof=0x5E10
     int32_t right;                          // ...
     int32_t sliderWidth;                    // ...
 };
-static_assert(sizeof(devguiGlob_t) == 0x5E10);
+KISAK_LAYOUT_ASSERT(sizeof(devguiGlob_t) == 0x5E10);
 
 // devgui
 void __cdecl TRACK_devgui();

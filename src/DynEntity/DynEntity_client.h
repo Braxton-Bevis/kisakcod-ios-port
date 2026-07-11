@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <cstdint>
 
 #include <qcommon/qcommon.h>
@@ -43,14 +44,14 @@ struct DynEntityDef // sizeof=0x60
     PhysMass mass;
     int32_t contents;
 };
-static_assert(sizeof(DynEntityDef) == 0x60);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityDef) == 0x60);
 
 struct DynEntityPose // sizeof=0x20
 {
     GfxPlacement pose;
     float radius;
 };
-static_assert(sizeof(DynEntityPose) == 0x20);;
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityPose) == 0x20);;
 
 struct DynEntityClient // sizeof=0xC
 {
@@ -59,7 +60,7 @@ struct DynEntityClient // sizeof=0xC
     uint16_t lightingHandle;
     int32_t health;
 };
-static_assert(sizeof(DynEntityClient) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityClient) == 0xC);
 
 struct DynEntityColl // sizeof=0x14
 {
@@ -68,7 +69,7 @@ struct DynEntityColl // sizeof=0x14
     float linkMins[2];
     float linkMaxs[2];
 };
-static_assert(sizeof(DynEntityColl) == 0x14);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityColl) == 0x14);
 
 struct DynEntityAreaParms // sizeof=0x14
 {                                       // ...
@@ -79,7 +80,7 @@ struct DynEntityAreaParms // sizeof=0x14
     uint16_t maxCount;          // ...
     uint16_t count;             // ...
 };
-static_assert(sizeof(DynEntityAreaParms) == 0x14);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityAreaParms) == 0x14);
 
 struct DynEntSortStruct // sizeof=0x8
 {
@@ -88,7 +89,7 @@ struct DynEntSortStruct // sizeof=0x8
     // padding byte
     // padding byte
 };
-static_assert(sizeof(DynEntSortStruct) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntSortStruct) == 0x8);
 
 //std::pair<DynEntSortStruct *first, DynEntSortStruct *second>; // sizeof=0x8
 
@@ -100,7 +101,7 @@ struct BreakablePiece // sizeof=0xC
     bool active;                        // ...
     // padding byte
 };
-static_assert(sizeof(BreakablePiece) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(BreakablePiece) == 0xC);
 
 struct pointtrace_t;
 struct trace_t;
@@ -254,7 +255,7 @@ struct DynEntityProps // sizeof=0x8
     bool usePhysics;
     bool destroyable;
 };
-static_assert(sizeof(DynEntityProps) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityProps) == 0x8);
 
 struct DynEntityCreateParams // sizeof=0x1C0
 {                                       // ...
@@ -271,7 +272,7 @@ struct DynEntityCreateParams // sizeof=0x1C0
     float momentsOfInertia[3];          // ...
     float productsOfInertia[3];         // ...
 };
-static_assert(sizeof(DynEntityCreateParams) == 0x1C0);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityCreateParams) == 0x1C0);
 
 #ifdef KISAK_MP
 void __cdecl DynEnt_LoadEntities();
@@ -298,7 +299,7 @@ union DynEntityCollTree_u // sizeof=0x2
     uint16_t parent;
     uint16_t nextFree;
 };
-static_assert(sizeof(DynEntityCollTree_u) == 0x2);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityCollTree_u) == 0x2);
 
 struct DynEntityCollTree // sizeof=0xC
 {                                       // ...
@@ -307,7 +308,7 @@ struct DynEntityCollTree // sizeof=0xC
     DynEntityCollTree_u u;
     uint16_t child[2];
 };
-static_assert(sizeof(DynEntityCollTree) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityCollTree) == 0xC);
 
 struct DynEntityCollSector // sizeof=0x14
 {                                       // ...
@@ -317,7 +318,7 @@ struct DynEntityCollSector // sizeof=0x14
     // padding byte
     // padding byte
 };
-static_assert(sizeof(DynEntityCollSector) == 0x14);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityCollSector) == 0x14);
 
 struct DynEntityCollWorld // sizeof=0x501C
 {                                       // ...
@@ -328,7 +329,7 @@ struct DynEntityCollWorld // sizeof=0x501C
     // padding byte
     DynEntityCollSector sectors[1024];
 };
-static_assert(sizeof(DynEntityCollWorld) == 0x501C);
+KISAK_LAYOUT_ASSERT(sizeof(DynEntityCollWorld) == 0x501C);
 
 void __cdecl TRACK_DynEntityCollWorld();
 DynEntityCollSector *__cdecl DynEnt_GetCollSector(DynEntityCollType collType, uint32_t sectorIndex);

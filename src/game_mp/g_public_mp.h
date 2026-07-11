@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #ifndef KISAK_MP
 #error This File is MultiPlayer Only
 #endif
@@ -25,7 +26,7 @@ struct BuiltinFunctionDef // sizeof=0xC
     void(__cdecl *actionFunc)();
     int32_t type;
 };
-static_assert(sizeof(BuiltinFunctionDef) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(BuiltinFunctionDef) == 0xC);
 
 struct BuiltinMethodDef // sizeof=0xC
 {                                       // ...
@@ -33,7 +34,7 @@ struct BuiltinMethodDef // sizeof=0xC
     void(__cdecl *actionFunc)(scr_entref_t); // ...
     int32_t type;                           // ...
 };
-static_assert(sizeof(BuiltinMethodDef) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(BuiltinMethodDef) == 0xC);
 
 static uint16_t *modNames[16] =
 {
@@ -61,7 +62,7 @@ struct gameTypeScript_t // sizeof=0x84
     char pszName[64];                   // ...
     int32_t bTeamBased;
 };
-static_assert(sizeof(gameTypeScript_t) == 0x84);
+KISAK_LAYOUT_ASSERT(sizeof(gameTypeScript_t) == 0x84);
 
 struct scr_data_t_s // sizeof=0x10A8
 {                                       // ...
@@ -77,7 +78,7 @@ struct scr_data_t_s // sizeof=0x10A8
     int32_t iNumGameTypes;                  // ...
     gameTypeScript_t list[32];          // ...
 };
-static_assert(sizeof(scr_data_t_s) == 0x10A8);
+KISAK_LAYOUT_ASSERT(sizeof(scr_data_t_s) == 0x10A8);
 
 struct corpseInfo_t // sizeof=0x4DC
 {                                       // ...
@@ -90,7 +91,7 @@ struct corpseInfo_t // sizeof=0x4DC
     // padding byte
     // padding byte
 };
-static_assert(sizeof(corpseInfo_t) == 0x4DC);
+KISAK_LAYOUT_ASSERT(sizeof(corpseInfo_t) == 0x4DC);
 
 struct scr_data_t // sizeof=0x379C
 {                                       // ...
@@ -102,7 +103,7 @@ struct scr_data_t // sizeof=0x379C
     int32_t createstruct;                   // ...
     corpseInfo_t playerCorpseInfo[8];   // ...
 };
-static_assert(sizeof(scr_data_t) == 0x379C);
+KISAK_LAYOUT_ASSERT(sizeof(scr_data_t) == 0x379C);
 
 // g_active_mp
 void __cdecl P_DamageFeedback(gentity_s *player);
@@ -1047,7 +1048,7 @@ struct useList_t // sizeof=0x8
     gentity_s *ent;                     // ...
     float score;
 };
-static_assert(sizeof(useList_t) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(useList_t) == 0x8);
 
 void __cdecl Player_UpdateActivate(gentity_s *ent);
 char __cdecl Player_ActivateCmd(gentity_s *ent);

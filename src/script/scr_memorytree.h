@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <cstdint>
 
 struct MemoryNode // sizeof=0xC
@@ -7,7 +8,7 @@ struct MemoryNode // sizeof=0xC
     uint16_t next;              // XREF: MT_Init(void)+4E/w
     uint32_t padding[2];            // XREF: MT_RemoveHeadMemoryNode+61/w
 };
-static_assert(sizeof(MemoryNode) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(MemoryNode) == 12);
 
 #define MEMORY_NODE_BITS 16
 #define MEMORY_NODE_COUNT 0x10000
@@ -31,7 +32,7 @@ struct __declspec(align(128)) scrMemTreeGlob_t // sizeof=0xC0380
                                         // MT_DumpTree(void)+1FB/r ...
     int totalAllocBuckets;              // XREF: MT_DumpTree(void):loc_59E7AE/r
 };
-static_assert(sizeof(scrMemTreeGlob_t) == 0xC0380);
+KISAK_LAYOUT_ASSERT(sizeof(scrMemTreeGlob_t) == 0xC0380);
 
 static const char* mt_type_names[22] =
 {

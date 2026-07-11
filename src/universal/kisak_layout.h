@@ -7,7 +7,7 @@
 #pragma once
 
 #if defined(KISAK_IOS)
-#define KISAK_LAYOUT_ASSERT(expr) static_assert(true, "x86-32 layout assert relaxed for iOS probe: " #expr)
+#define KISAK_LAYOUT_ASSERT(...) static_assert(true, "x86-32 layout assert relaxed for iOS probe")
 #else
-#define KISAK_LAYOUT_ASSERT(expr) static_assert(expr)
+#define KISAK_LAYOUT_ASSERT(...) static_assert(__VA_ARGS__)
 #endif

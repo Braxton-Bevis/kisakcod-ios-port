@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include "scr_variable.h"
 #include "scr_debugger.h"
 #include <setjmp.h>
@@ -10,7 +11,7 @@ struct ArchivedCanonicalStringInfo // sizeof=0x8
     // padding byte
     const char *value;
 };
-static_assert(sizeof(ArchivedCanonicalStringInfo) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(ArchivedCanonicalStringInfo) == 0x8);
 
 struct scrEvaluateGlob_t // sizeof=0x10
 {                                       // ...
@@ -22,7 +23,7 @@ struct scrEvaluateGlob_t // sizeof=0x10
     bool objectChanged;                 // ...
     // padding byte
 };
-static_assert(sizeof(scrEvaluateGlob_t) == 0x10);
+KISAK_LAYOUT_ASSERT(sizeof(scrEvaluateGlob_t) == 0x10);
 
 void __cdecl TRACK_scr_evaluate();
 uint32_t __cdecl Scr_GetBuiltin(sval_u func_name);

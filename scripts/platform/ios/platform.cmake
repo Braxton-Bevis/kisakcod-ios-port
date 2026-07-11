@@ -13,7 +13,7 @@ set(PLATFORM_OVERRIDE_DIR "${SRC_DIR}/_platform/ios")
 add_compile_options(
     -fno-strict-aliasing   # pervasive type-punning through pointer casts
     -fwrapv                # signed-overflow wrap assumed by decompiled arithmetic
-    -fdeclspec             # accept MSVC __declspec(align(...)) etc. in decompiled headers
+    -fms-extensions        # MSVC-isms throughout the decomp: __declspec, __forceinline, __int32, anonymous structs
     -w                     # first pass: collect hard errors only, warnings later
     -ferror-limit=25
 )

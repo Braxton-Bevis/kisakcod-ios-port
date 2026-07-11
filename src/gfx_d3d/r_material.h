@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #include <d3d9.h>
 
 #include "r_gfx.h"
@@ -264,7 +265,7 @@ struct MaterialPixelShaderProgram // sizeof=0xC
     IDirect3DPixelShader9 *ps;
     GfxPixelShaderLoadDef loadDef;
 };
-static_assert(sizeof(MaterialPixelShaderProgram) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(MaterialPixelShaderProgram) == 12);
 
 struct MaterialPixelShader // sizeof=0x10
 {                                       // ...
@@ -455,7 +456,7 @@ struct MaterialTechniqueSet // sizeof=0x94
     MaterialTechniqueSet *remappedTechniqueSet;
     MaterialTechnique *techniques[34];
 };
-static_assert(sizeof(MaterialTechniqueSet) == 148);
+KISAK_LAYOUT_ASSERT(sizeof(MaterialTechniqueSet) == 148);
 
 struct Material // sizeof=0x50
 {                                       // ...
@@ -472,7 +473,7 @@ struct Material // sizeof=0x50
     MaterialConstantDef *constantTable;
     GfxStateBits *stateBitsTable;
 };
-static_assert(sizeof(Material) == 80);
+KISAK_LAYOUT_ASSERT(sizeof(Material) == 80);
 
 struct MaterialMemory // sizeof=0x8
 {                                       // ...

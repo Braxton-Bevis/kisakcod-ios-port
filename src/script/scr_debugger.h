@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include "scr_variable.h"
 #include "scr_parser.h"
 #include "scr_yacc.h"
@@ -12,14 +13,14 @@ struct debugger_sval_s // sizeof=0x4
 {
     debugger_sval_s *next;
 };
-static_assert(sizeof(debugger_sval_s) == 0x4);
+KISAK_LAYOUT_ASSERT(sizeof(debugger_sval_s) == 0x4);
 
 struct scr_localVar_t // sizeof=0x8
 {                                       // ...
     uint32_t name;                  // ...
     uint32_t sourcePos;             // ...
 };
-static_assert(sizeof(scr_localVar_t) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(scr_localVar_t) == 0x8);
 
 #define LOCAL_VAR_STACK_SIZE 64
 #define MAX_SWITCH_CASES 1024
@@ -33,7 +34,7 @@ struct scr_block_s // sizeof=0x218
     uint8_t localVarsInitBits[8];
     scr_localVar_t localVars[LOCAL_VAR_STACK_SIZE];
 };
-static_assert(sizeof(scr_block_s) == 0x218);
+KISAK_LAYOUT_ASSERT(sizeof(scr_block_s) == 0x218);
 
 union sval_u // sizeof=0x4
 {                                       // ...
@@ -68,7 +69,7 @@ union sval_u // sizeof=0x4
     const char *debugString;
     scr_block_s *block;
 };
-static_assert(sizeof(sval_u) == 0x4);
+KISAK_LAYOUT_ASSERT(sizeof(sval_u) == 0x4);
 
 struct ScriptExpression_t // sizeof=0xC
 {                                       // ...
@@ -76,7 +77,7 @@ struct ScriptExpression_t // sizeof=0xC
     int breakonExpr;                    // ...
     debugger_sval_s *exprHead;          // ...
 };
-static_assert(sizeof(ScriptExpression_t) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(ScriptExpression_t) == 0xC);
 
 struct Scr_SelectedLineInfo // sizeof=0xC
 {                                       // ...
@@ -87,7 +88,7 @@ struct Scr_SelectedLineInfo // sizeof=0xC
     // padding byte
     // padding byte
 };
-static_assert(sizeof(Scr_SelectedLineInfo) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_SelectedLineInfo) == 0xC);
 
 struct Scr_Breakpoint // sizeof=0x1C
 {                                       // ...
@@ -99,7 +100,7 @@ struct Scr_Breakpoint // sizeof=0x1C
     Scr_Breakpoint *next;               // ...
     Scr_Breakpoint **prev;
 };
-static_assert(sizeof(Scr_Breakpoint) == 0x1C);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_Breakpoint) == 0x1C);
 
 struct Scr_WatchElement_s // sizeof=0x64
 {
@@ -138,28 +139,28 @@ struct Scr_WatchElement_s // sizeof=0x64
     Scr_WatchElement_s *childHead;
     Scr_WatchElement_s *next;
 };
-static_assert(sizeof(Scr_WatchElement_s) == 0x64);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_WatchElement_s) == 0x64);
 
 struct Scr_OpcodeList_s // sizeof=0x8
 {
     char *codePos;
     Scr_OpcodeList_s *next;
 };
-static_assert(sizeof(Scr_OpcodeList_s) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_OpcodeList_s) == 0x8);
 
 struct Scr_WatchElementNode_s // sizeof=0x8
 {
     Scr_WatchElement_s *element;
     Scr_WatchElementNode_s *next;
 };
-static_assert(sizeof(Scr_WatchElementNode_s) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_WatchElementNode_s) == 0x8);
 
 struct Scr_WatchElementDoubleNode_t // sizeof=0x8
 {
     Scr_WatchElementNode_s *list;
     Scr_WatchElementNode_s *removedList;
 };
-static_assert(sizeof(Scr_WatchElementDoubleNode_t) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_WatchElementDoubleNode_t) == 0x8);
 
 struct scrDebuggerGlob_t // sizeof=0x2B8
 {                                       // ...
@@ -221,7 +222,7 @@ struct scrDebuggerGlob_t // sizeof=0x2B8
     int breakpointCount;                // ...
     int gainFocusTime;                  // ...
 };
-static_assert(sizeof(scrDebuggerGlob_t) == 0x2B8);
+KISAK_LAYOUT_ASSERT(sizeof(scrDebuggerGlob_t) == 0x2B8);
 
 void __cdecl TRACK_scr_debugger();
 void __cdecl Scr_KeyEvent(int key);

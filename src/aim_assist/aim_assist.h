@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <universal/q_shared.h>
 #include <cgame/cg_local.h>
 #include <qcommon/graph.h>
@@ -15,7 +16,7 @@ struct AimTarget // sizeof=0x2C
     float maxs[3];
     float velocity[3];
 };
-static_assert(sizeof(AimTarget) == 0x2C);
+KISAK_LAYOUT_ASSERT(sizeof(AimTarget) == 0x2C);
 
 struct AimTargetGlob // sizeof=0x1608
 {                                       // ...
@@ -24,7 +25,7 @@ struct AimTargetGlob // sizeof=0x1608
     AimTarget clientTargets[64];
     int32_t clientTargetCount;
 };
-static_assert(sizeof(AimTargetGlob) == 0x1608);
+KISAK_LAYOUT_ASSERT(sizeof(AimTargetGlob) == 0x1608);
 
 struct AimTweakables // sizeof=0x20
 {                                       // ...
@@ -37,7 +38,7 @@ struct AimTweakables // sizeof=0x20
     float lockOnRegionWidth;
     float lockOnRegionHeight;
 };
-static_assert(sizeof(AimTweakables) == 0x20);
+KISAK_LAYOUT_ASSERT(sizeof(AimTweakables) == 0x20);
 
 struct AimScreenTarget // sizeof=0x34
 {                                       // ...
@@ -49,7 +50,7 @@ struct AimScreenTarget // sizeof=0x34
     float distSqr;                      // ...
     float crosshairDistSqr;             // ...
 };
-static_assert(sizeof(AimScreenTarget) == 0x34);
+KISAK_LAYOUT_ASSERT(sizeof(AimScreenTarget) == 0x34);
 
 struct AimAssistGlobals // sizeof=0xE34
 {                                       // ...
@@ -92,7 +93,7 @@ struct AimAssistGlobals // sizeof=0xE34
     float autoMeleeYawTarget;
     int32_t lockOnTargetEnt;
 };
-static_assert(sizeof(AimAssistGlobals) == 0xE34);
+KISAK_LAYOUT_ASSERT(sizeof(AimAssistGlobals) == 0xE34);
 
 struct AimInput // sizeof=0x30
 {                                       // ...
@@ -109,7 +110,7 @@ struct AimInput // sizeof=0x30
     int32_t localClientNum;                 // ...
     const struct playerState_s *ps;            // ...
 };
-static_assert(sizeof(AimInput) == 0x30);
+KISAK_LAYOUT_ASSERT(sizeof(AimInput) == 0x30);
 
 struct AimOutput // sizeof=0x10
 {                                       // ...
@@ -121,7 +122,7 @@ struct AimOutput // sizeof=0x10
     // padding byte
     // padding byte
 };
-static_assert(sizeof(AimOutput) == 0x10);
+KISAK_LAYOUT_ASSERT(sizeof(AimOutput) == 0x10);
 
 void __cdecl TRACK_aim_assist();
 void __cdecl AimAssist_Init(int32_t localClientNum);

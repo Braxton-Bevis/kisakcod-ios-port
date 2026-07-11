@@ -43,7 +43,7 @@ jobs:
             name=$(echo "$f" | tr '/' '_')
             if xcrun clang++ -target arm64-apple-ios15.0 -isysroot "$SDK" \
                  -std=gnu++20 -fsyntax-only -ferror-limit=25 \
-                 -fno-strict-aliasing -fwrapv -fdeclspec -w \
+                 -fno-strict-aliasing -fwrapv -fms-extensions -w \
                  -DKISAK_MP -DKISAK_IOS -Isrc -Ideps \
                  "$f" > "census/logs/$name.log" 2>&1; then
               echo -e "$f\tPASS\t-" >> census/census.tsv
@@ -54,6 +54,42 @@ jobs:
           done
           echo '=== CENSUS ==='
           column -t -s $'\t' census/census.tsv
+
+      # Objective 4 (TRANSLATION path) probe: recompile the renderer-facing TUs
+      # with DXVK's native d3d9/windows compatibility headers in place of the
+      # Windows SDK. Measures how much of the engine's D3D9 usage the
+      # D3D9->Vulkan(->MoltenVK->Metal) translation layer can absorb at the
+      # source level. Failures expected and recorded, same as the raw census.
+      - name: DXVK-native header census (renderer TUs)
+        run: |
+          set -uo pipefail
+          git clone --depth 1 --branch v2.7.1 https://github.com/doitsujin/dxvk dxvk-headers || \
+            git clone --depth 1 https://github.com/doitsujin/dxvk dxvk-headers
+          D3D9_H=$(find dxvk-headers/include -name d3d9.h | head -n1)
+          if [ -z "$D3D9_H" ]; then echo 'BLOCKER: no d3d9.h in dxvk include tree'; find dxvk-headers/include -maxdepth 3 -type d; exit 1; fi
+          DXDIR=$(dirname "$D3D9_H")
+          WINDIR=$(dirname "$DXDIR")/windows
+          echo "Using DXVK headers: $DXDIR and $WINDIR"
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          mkdir -p census/dxvk-logs
+          echo -e "file\tstatus\tfirst_error" > census/census-dxvk.tsv
+          for f in src/gfx_d3d/r_init.cpp src/gfx_d3d/rb_backend.cpp src/win32/win_configure.cpp; do
+            [ -f "$f" ] || continue
+            name=$(echo "$f" | tr '/' '_')
+            if xcrun clang++ -target arm64-apple-ios15.0 -isysroot "$SDK" \
+                 -std=gnu++20 -fsyntax-only -ferror-limit=25 \
+                 -fno-strict-aliasing -fwrapv -fms-extensions -w \
+                 -DKISAK_MP -DKISAK_IOS -Isrc -Ideps \
+                 -isystem "$DXDIR" -isystem "$WINDIR" \
+                 "$f" > "census/dxvk-logs/$name.log" 2>&1; then
+              echo -e "$f\tPASS\t-" >> census/census-dxvk.tsv
+            else
+              first=$(grep -m1 ' error: ' "census/dxvk-logs/$name.log" | sed 's/\t/ /g' || true)
+              echo -e "$f\tFAIL\t${first:-unknown}" >> census/census-dxvk.tsv
+            fi
+          done
+          echo '=== DXVK CENSUS ==='
+          column -t -s $'\t' census/census-dxvk.tsv
 
       - uses: actions/upload-artifact@v4
         with:

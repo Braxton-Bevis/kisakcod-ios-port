@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #include <universal/q_shared.h>
 
 struct gentity_s;
@@ -10,13 +11,13 @@ struct EntHandleInfo // sizeof=0x8 // (SP/MP same)
     uint16_t next;              // ...
     uint16_t prev;              // ...
 };
-static_assert(sizeof(EntHandleInfo) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(EntHandleInfo) == 0x8);
 
 struct EntHandleList // sizeof=0x2 // (SP/MP same)
 {                                       // ...
     uint16_t infoIndex;
 };
-static_assert(sizeof(EntHandleList) == 0x2);
+KISAK_LAYOUT_ASSERT(sizeof(EntHandleList) == 0x2);
 
 struct EntHandle // sizeof=0x4 // (SP/MP same)
 {                                       // ...
@@ -31,7 +32,7 @@ struct EntHandle // sizeof=0x4 // (SP/MP same)
     static void Init();
     static void Shutdown();
 };
-static_assert(sizeof(EntHandle) == 0x4);
+KISAK_LAYOUT_ASSERT(sizeof(EntHandle) == 0x4);
 
 void __cdecl EntHandleDissociate(gentity_s *ent);
 void __cdecl EntHandleDissociateInternal(EntHandleList *entHandleList);

@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <universal/com_math.h>
 #include <gfx_d3d/r_material.h>
 //#include <physics/phys_local.h>
@@ -30,7 +31,7 @@ struct XModelCollTri_s // sizeof=0x30
     float svec[4];
     float tvec[4];
 };
-static_assert(sizeof(XModelCollTri_s) == 48);
+KISAK_LAYOUT_ASSERT(sizeof(XModelCollTri_s) == 48);
 
 struct XBoneInfo // sizeof=0x28
 {                                       // ...
@@ -38,7 +39,7 @@ struct XBoneInfo // sizeof=0x28
     float offset[3];
     float radiusSquared;
 };
-static_assert(sizeof(XBoneInfo) == 40);
+KISAK_LAYOUT_ASSERT(sizeof(XBoneInfo) == 40);
 
 struct XModelCollSurf_s // sizeof=0x2C
 {
@@ -92,14 +93,14 @@ struct XModel // sizeof=0xDC
     struct PhysPreset* physPreset;
     struct PhysGeomList* physGeoms;
 };
-static_assert(sizeof(XModel) == 220);
+KISAK_LAYOUT_ASSERT(sizeof(XModel) == 220);
 
 struct XModelPiece // sizeof=0x10
 {
     XModel *model;
     float offset[3];
 };
-static_assert(sizeof(XModelPiece) == 16);
+KISAK_LAYOUT_ASSERT(sizeof(XModelPiece) == 16);
 
 struct XModelPieces // sizeof=0xC
 {                                       // ...
@@ -107,7 +108,7 @@ struct XModelPieces // sizeof=0xC
     int numpieces;
     XModelPiece *pieces;
 };
-static_assert(sizeof(XModelPieces) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(XModelPieces) == 12);
 
 struct QueueElement // sizeof=0x8
 {                                       // ...
@@ -143,7 +144,7 @@ struct XModelSurfs // sizeof=0x14
     struct XSurface *surfs;                    // ...
     int partBits[4];                    // ...
 };
-static_assert(sizeof(XModelSurfs) == 20);
+KISAK_LAYOUT_ASSERT(sizeof(XModelSurfs) == 20);
 
 struct XModelConfigEntry // sizeof=0x404
 {                                       // ...
@@ -175,7 +176,7 @@ struct XModelPartsLoad // sizeof=0x1C
     unsigned __int8 *partClassification;
     DObjAnimMat *baseMat;
 };
-static_assert(sizeof(XModelPartsLoad) == 28);
+KISAK_LAYOUT_ASSERT(sizeof(XModelPartsLoad) == 28);
 
 struct XModelDefault // sizeof=0x4C
 {                                       // ...
@@ -202,7 +203,7 @@ struct XVertexInfo_s // sizeof=0x40
     unsigned __int8 pad;
     __int16 boneOffset;
 };
-static_assert(sizeof(XVertexInfo_s) == 64);
+KISAK_LAYOUT_ASSERT(sizeof(XVertexInfo_s) == 64);
 
 struct XBlendLoadInfo // sizeof=0x4
 {                                       // ...

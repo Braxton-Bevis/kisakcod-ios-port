@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #ifndef KISAK_MP
 #error This File is for MultiPlayer Only
 #endif
@@ -75,7 +76,7 @@ struct usercmd_s // sizeof=0x20
     uint8_t meleeChargeDist;    // XREF: CL_CreateCmd+6A/w
     char selectedLocation[2];
 };
-static_assert(sizeof(usercmd_s) == 0x20);
+KISAK_LAYOUT_ASSERT(sizeof(usercmd_s) == 0x20);
 
 struct hudelem_s;
 

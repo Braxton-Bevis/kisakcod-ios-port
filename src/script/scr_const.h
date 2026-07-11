@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <cstdint>
 
 #ifdef KISAK_MP
@@ -191,7 +192,7 @@ struct scr_const_t // sizeof=0x174
     uint16_t back_right;        // ...
     uint16_t tag_gunner_pov;    // ...
 };
-static_assert(sizeof(scr_const_t) == 0x174);
+KISAK_LAYOUT_ASSERT(sizeof(scr_const_t) == 0x174);
 
 #elif KISAK_SP
 struct scr_const_t

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #include <d3d9.h>
 
 #include <universal/com_math.h>
@@ -51,7 +52,7 @@ struct GfxPackedVertex // sizeof=0x20
     PackedUnitVec normal;
     PackedUnitVec tangent;
 };
-static_assert(sizeof(GfxPackedVertex) == 32);
+KISAK_LAYOUT_ASSERT(sizeof(GfxPackedVertex) == 32);
 
 struct GfxPackedVertexNormal // sizeof=0x8
 {                                       // ...
@@ -228,7 +229,7 @@ struct GfxImage // sizeof=0x24
     bool delayLoadPixels;
     const char* name;
 };
-static_assert(sizeof(GfxImage) == 36);
+KISAK_LAYOUT_ASSERT(sizeof(GfxImage) == 36);
 
 struct GfxCodeMatrices // sizeof=0x800
 {                                       // ...
@@ -380,7 +381,7 @@ struct GfxWorldDpvsStatic // sizeof=0x68
     uint32_t* surfaceCastsSunShadow; // ...
     volatile int usageCount;
 };
-static_assert(sizeof(GfxWorldDpvsStatic) == 0x68);
+KISAK_LAYOUT_ASSERT(sizeof(GfxWorldDpvsStatic) == 0x68);
 
 using EntVisData = byte *[3];
 
@@ -657,7 +658,7 @@ struct GfxPixelShaderLoadDef // sizeof=0x8
     uint16_t programSize;
     uint16_t loadForRenderer;
 };
-static_assert(sizeof(GfxPixelShaderLoadDef) == 8);
+KISAK_LAYOUT_ASSERT(sizeof(GfxPixelShaderLoadDef) == 8);
 
 struct GfxDepthOfField // sizeof=0x20
 {                                       // ...

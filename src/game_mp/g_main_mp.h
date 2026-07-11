@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #ifdef KISAK_SP
 #error This file is for Multi-Player only
 #endif
@@ -25,7 +26,7 @@ struct entityHandler_t // sizeof=0x28
     int32_t methodOfDeath;
     int32_t splashMethodOfDeath;
 };
-static_assert(sizeof(entityHandler_t) == 0x28);
+KISAK_LAYOUT_ASSERT(sizeof(entityHandler_t) == 0x28);
 
 struct trigger_info_t // sizeof=0xC
 {                                       // ...
@@ -34,7 +35,7 @@ struct trigger_info_t // sizeof=0xC
     int32_t useCount;
     int32_t otherUseCount;
 };
-static_assert(sizeof(trigger_info_t) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(trigger_info_t) == 0xC);
 
 struct cached_tag_mat_t // sizeof=0x3C
 {                                       // ...
@@ -45,7 +46,7 @@ struct cached_tag_mat_t // sizeof=0x3C
     // padding byte
     float tagMat[4][3];                 // ...
 };
-static_assert(sizeof(cached_tag_mat_t) == 0x3C);
+KISAK_LAYOUT_ASSERT(sizeof(cached_tag_mat_t) == 0x3C);
 
 struct level_locals_t // sizeof=0x2E6C
 {                                       // ...
@@ -106,7 +107,7 @@ struct level_locals_t // sizeof=0x2E6C
     float compassNorth[2];              // ...
     scr_vehicle_s *vehicles;            // ...
 };
-static_assert(sizeof(level_locals_t) == 0x2E6C);
+KISAK_LAYOUT_ASSERT(sizeof(level_locals_t) == 0x2E6C);
 
 void __cdecl TRACK_g_main();
 int32_t __cdecl G_GetSavePersist();

@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include "scr_stringlist.h"
 #include <cstdint>
 
@@ -11,7 +12,7 @@ struct OpcodeLookup // sizeof=0x18
     int profileBuiltInTime;
     int profileUsage;
 };
-static_assert(sizeof(OpcodeLookup) == 0x18);
+KISAK_LAYOUT_ASSERT(sizeof(OpcodeLookup) == 0x18);
 
 struct Scr_SourcePos_t // sizeof=0xC
 {                                       // ...
@@ -19,7 +20,7 @@ struct Scr_SourcePos_t // sizeof=0xC
     int lineNum;                        // ...
     uint32_t sourcePos;             // ...
 };
-static_assert(sizeof(Scr_SourcePos_t) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(Scr_SourcePos_t) == 0xC);
 
 struct SourceBufferInfo // sizeof=0x2C
 {
@@ -38,21 +39,21 @@ struct SourceBufferInfo // sizeof=0x2C
     float totalTime;
     float totalBuiltIn;
 };
-static_assert(sizeof(SourceBufferInfo) == 44);
+KISAK_LAYOUT_ASSERT(sizeof(SourceBufferInfo) == 44);
 
 struct SourceLookup // sizeof=0x8
 {
     uint32_t sourcePos;
     int type;
 };
-static_assert(sizeof(SourceLookup) == 8);
+KISAK_LAYOUT_ASSERT(sizeof(SourceLookup) == 8);
 
 struct SaveSourceBufferInfo // sizeof=0x8
 {
     char *sourceBuf;
     int len;
 };
-static_assert(sizeof(SaveSourceBufferInfo) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(SaveSourceBufferInfo) == 0x8);
 
 struct scrParserGlob_t // sizeof=0x34
 {                                       // ...
@@ -70,7 +71,7 @@ struct scrParserGlob_t // sizeof=0x34
     int delayedSourceIndex;             // ...
     int threadStartSourceIndex;         // ...
 };
-static_assert(sizeof(scrParserGlob_t) == 0x34);
+KISAK_LAYOUT_ASSERT(sizeof(scrParserGlob_t) == 0x34);
 
 struct scrParserPub_t // sizeof=0x10
 {                                       // ...
@@ -79,7 +80,7 @@ struct scrParserPub_t // sizeof=0x10
     const char *scriptfilename;         // ...
     const char *sourceBuf;              // ...
 };
-static_assert(sizeof(scrParserPub_t) == 0x10);
+KISAK_LAYOUT_ASSERT(sizeof(scrParserPub_t) == 0x10);
 
 void __cdecl TRACK_scr_parser();
 void __cdecl Scr_InitOpcodeLookup();

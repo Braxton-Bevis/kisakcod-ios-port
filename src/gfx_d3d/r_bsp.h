@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include "r_gfx.h"
 #include "r_sky.h"
 #include "r_primarylights.h"
@@ -203,7 +204,7 @@ struct GfxWorld // sizeof=0x2DC
     GfxWorldDpvsStatic dpvs;            // ...
     GfxWorldDpvsDynamic dpvsDyn;        // ...
 };
-static_assert(sizeof(GfxWorld) == 0x2DC);
+KISAK_LAYOUT_ASSERT(sizeof(GfxWorld) == 0x2DC);
 
 // r_bsp
 void __cdecl R_ReloadWorld();

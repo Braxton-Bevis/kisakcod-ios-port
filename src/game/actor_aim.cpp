@@ -1,3 +1,4 @@
+#include <universal/kisak_layout.h>
 #ifndef KISAK_SP 
 #error This file is for SinglePlayer only 
 #endif
@@ -1099,7 +1100,7 @@ void __cdecl Actor_CommonAccuracyGraphEventCallback(
     char v14[32]; // [sp+50h] [-2050h] BYREF
     //_QWORD v15[1030]; // [sp+70h] [-2030h] BYREF
     char v15[8240];
-    static_assert(sizeof(_QWORD[1030]) == sizeof(char[8240])); // We changed the type, so this is a check
+    KISAK_LAYOUT_ASSERT(sizeof(_QWORD[1030]) == sizeof(char[8240])); // We changed the type, so this is a check
 
     if (!graph)
         MyAssertHandler("c:\\trees\\cod3\\cod3src\\src\\game\\actor_aim.cpp", 1054, 0, "%s", "graph");

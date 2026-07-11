@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <server/sv_world.h>
 
 #ifdef KISAK_MP
@@ -473,7 +474,7 @@ struct item_ent_t // sizeof=0xC (SP/MP same)
     int32_t clipAmmoCount;
     int32_t index;
 };
-static_assert(sizeof(item_ent_t) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(item_ent_t) == 0xC);
 
 struct mover_ent_t // sizeof=0x60 (SP/MP same)
 {                                       // ...
@@ -490,7 +491,7 @@ struct mover_ent_t // sizeof=0x60 (SP/MP same)
     float apos2[3];
     float apos3[3];
 };
-static_assert(sizeof(mover_ent_t) == 0x60);
+KISAK_LAYOUT_ASSERT(sizeof(mover_ent_t) == 0x60);
 
 #ifdef KISAK_MP
 struct entityShared_t // sizeof=0x68
@@ -511,7 +512,7 @@ struct entityShared_t // sizeof=0x68
     EntHandle ownerNum;
     int32_t eventTime;
 };
-static_assert(sizeof(entityShared_t) == 0x68);
+KISAK_LAYOUT_ASSERT(sizeof(entityShared_t) == 0x68);
 #elif KISAK_SP
 struct entityShared_t
 {
@@ -551,7 +552,7 @@ struct corpse_ent_t // sizeof=0x4
 {                                       // ...
     int32_t deathAnimStartTime;
 };
-static_assert(sizeof(corpse_ent_t) == 0x4);
+KISAK_LAYOUT_ASSERT(sizeof(corpse_ent_t) == 0x4);
 
 
 
@@ -567,7 +568,7 @@ struct missile_ent_t // sizeof=0x3C
     MissileStage stage;
     MissileFlightMode flightMode;
 };
-static_assert(sizeof(missile_ent_t) == 0x3C);
+KISAK_LAYOUT_ASSERT(sizeof(missile_ent_t) == 0x3C);
 
 enum EntHandler_t : uint8_t
 {

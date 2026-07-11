@@ -1,3 +1,4 @@
+#include <universal/kisak_layout.h>
 #include "r_fog.h"
 #include "r_init.h"
 
@@ -44,7 +45,7 @@ void __cdecl R_SwitchFog(uint32_t fogvar, int startTime, int transitionTime)
 
 void __cdecl R_ArchiveFogState(MemoryFile *memFile)
 {
-    static_assert(sizeof(GfxFog) * FOG_COUNT == 100);
+    KISAK_LAYOUT_ASSERT(sizeof(GfxFog) * FOG_COUNT == 100);
 
     MemFile_ArchiveData(memFile, sizeof(GfxFog) * FOG_COUNT, rg.fogSettings);
     MemFile_ArchiveData(memFile, sizeof(int), &rg.fogIndex);

@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include "r_scene.h"
 
 struct GfxModelSurfaceInfo // sizeof=0xC
@@ -24,14 +25,14 @@ struct GfxModelSkinnedSurface // sizeof=0x18
         int oldSkinnedCachedOffset;
     };
 };
-static_assert(sizeof(GfxModelSkinnedSurface) == 24);
+KISAK_LAYOUT_ASSERT(sizeof(GfxModelSkinnedSurface) == 24);
 
 struct GfxModelRigidSurface // sizeof=0x38
 {
     GfxModelSkinnedSurface surf;
     GfxScaledPlacement placement;
 };
-static_assert(sizeof(GfxModelRigidSurface) == 56);
+KISAK_LAYOUT_ASSERT(sizeof(GfxModelRigidSurface) == 56);
 
 struct SkinXModelCmd // sizeof=0x1C
 {                                       // ...

@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <ode/ode.h>
 #include <qcommon/bitarray.h>
 #include <cstdint>
@@ -38,7 +39,7 @@ struct DObjAnimMat // sizeof=0x20
     float trans[3];                     // ...
     float transWeight;                  // ...
 };
-static_assert(sizeof(DObjAnimMat) == 32);
+KISAK_LAYOUT_ASSERT(sizeof(DObjAnimMat) == 32);
 
 struct DSkelPartBits // sizeof=0x30
 {                                       // ...

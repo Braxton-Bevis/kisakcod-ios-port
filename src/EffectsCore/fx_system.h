@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <cstdint>
 
 #include <qcommon/qcommon.h>
@@ -232,7 +233,7 @@ struct FxMarkTri // sizeof=0xC
     uint16_t indices[3];        // ...
     GfxMarkContext context;             // ...
 };
-static_assert(sizeof(FxMarkTri) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(FxMarkTri) == 0xC);
 
 struct MarkInfoCollidedDObj // sizeof=0xC
 {                                       // ...
@@ -242,7 +243,7 @@ struct MarkInfoCollidedDObj // sizeof=0xC
     // padding byte
     // padding byte
 };
-static_assert(sizeof(MarkInfoCollidedDObj) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(MarkInfoCollidedDObj) == 0xC);
 
 struct MarkInfoCollidedBModel // sizeof=0xC
 {                                       // ...
@@ -252,7 +253,7 @@ struct MarkInfoCollidedBModel // sizeof=0xC
     // padding byte
     // padding byte
 };
-static_assert(sizeof(MarkInfoCollidedBModel) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(MarkInfoCollidedBModel) == 0xC);
 
 struct MarkInfo // sizeof=0x448
 {                                       // ...
@@ -286,7 +287,7 @@ struct MarkInfo // sizeof=0x448
     void(__cdecl *callback)(void *, int32_t, FxMarkTri *, int32_t, FxMarkPoint *, const float *, const float *);
     void *callbackContext;
 };
-static_assert(sizeof(MarkInfo) == 0x448);
+KISAK_LAYOUT_ASSERT(sizeof(MarkInfo) == 0x448);
 
 struct MarkModelCoreContext // sizeof=0x1C
 {                                       // ...
@@ -298,7 +299,7 @@ struct MarkModelCoreContext // sizeof=0x1C
     const float (*transformMatrix)[3];  // ...
     const float (*transformNormalMatrix)[3]; // ...
 };
-static_assert(sizeof(MarkModelCoreContext) == 0x1C);
+KISAK_LAYOUT_ASSERT(sizeof(MarkModelCoreContext) == 0x1C);
 
 struct FxMarkDObjUpdateContext // sizeof=0x108
 {                                       // ...
@@ -309,7 +310,7 @@ struct FxMarkDObjUpdateContext // sizeof=0x108
     // padding byte
     uint16_t brushIndex;
 };
-static_assert(sizeof(FxMarkDObjUpdateContext) == 0x108);
+KISAK_LAYOUT_ASSERT(sizeof(FxMarkDObjUpdateContext) == 0x108);
 
 struct FxActiveMarkSurf // sizeof=0x14
 {                                       // ...
@@ -320,7 +321,7 @@ struct FxActiveMarkSurf // sizeof=0x14
     int32_t indexCount;
     uint16_t *indices;
 };
-static_assert(sizeof(FxActiveMarkSurf) == 0x14);
+KISAK_LAYOUT_ASSERT(sizeof(FxActiveMarkSurf) == 0x14);
 
 void __cdecl TRACK_fx_marks();
 void __cdecl FX_InitMarksSystem(FxMarksSystem *marksSystem);
@@ -604,7 +605,7 @@ struct FxDrawState // sizeof=0xA8
     float physicsLerpFrac;
     int32_t msecDraw;                       // ...
 };
-static_assert(sizeof(FxDrawState) == 0xA8);
+KISAK_LAYOUT_ASSERT(sizeof(FxDrawState) == 0xA8);
 
 struct FxTrailSegmentDrawState // sizeof=0x3C
 {                                       // ...
@@ -616,7 +617,7 @@ struct FxTrailSegmentDrawState // sizeof=0x3C
     float uCoord;                       // ...
     uint8_t color[4];           // ...
 };
-static_assert(sizeof(FxTrailSegmentDrawState) == 0x3C);
+KISAK_LAYOUT_ASSERT(sizeof(FxTrailSegmentDrawState) == 0x3C);
 
 struct FxBeam // sizeof=0x34
 {                                       // ...
@@ -630,14 +631,14 @@ struct FxBeam // sizeof=0x34
     int32_t segmentCount;                   // ...
     float wiggleDist;                   // ...
 };
-static_assert(sizeof(FxBeam) == 0x34);
+KISAK_LAYOUT_ASSERT(sizeof(FxBeam) == 0x34);
 
 struct FxBeamInfo // sizeof=0x1384
 {                                       // ...
     FxBeam beams[96];
     int32_t beamCount;                      // ...
 };
-static_assert(sizeof(FxBeamInfo) == 0x1384);
+KISAK_LAYOUT_ASSERT(sizeof(FxBeamInfo) == 0x1384);
 
 struct FxPostLight // sizeof=0x24
 {                                       // ...
@@ -647,14 +648,14 @@ struct FxPostLight // sizeof=0x24
     GfxColor color;                     // ...
     Material *material;                 // ...
 };
-static_assert(sizeof(FxPostLight) == 0x24);
+KISAK_LAYOUT_ASSERT(sizeof(FxPostLight) == 0x24);
 
 struct FxPostLightInfo // sizeof=0xD84
 {                                       // ...
     FxPostLight postLights[96];
     int32_t postLightCount;                 // ...
 };
-static_assert(sizeof(FxPostLightInfo) == 0xD84);
+KISAK_LAYOUT_ASSERT(sizeof(FxPostLightInfo) == 0xD84);
 
 struct FxGenerateVertsCmd // sizeof=0x44
 {                                       // ...
@@ -666,7 +667,7 @@ struct FxGenerateVertsCmd // sizeof=0x44
     float vieworg[3];
     float viewaxis[3][3];
 };
-static_assert(sizeof(FxGenerateVertsCmd) == 0x44);
+KISAK_LAYOUT_ASSERT(sizeof(FxGenerateVertsCmd) == 0x44);
 
 void __cdecl FX_EvaluateVisAlpha(FxElemPreVisualState *preVisState, FxElemVisualState *visState);
 uint8_t __cdecl FX_InterpolateColor(
@@ -857,7 +858,7 @@ struct FxInsertSortElem // sizeof=0x14
     // padding byte
     // padding byte
 };
-static_assert(sizeof(FxInsertSortElem) == 0x14);
+KISAK_LAYOUT_ASSERT(sizeof(FxInsertSortElem) == 0x14);
 
 void __cdecl FX_SortEffects(FxSystem *system);
 void __cdecl FX_WaitBeginIteratingOverEffects_Exclusive(FxSystem *system);
@@ -883,14 +884,14 @@ struct FxEffectDefTableEntry // sizeof=0x8
     uint32_t key;
     const FxEffectDef *effectDef;
 };
-static_assert(sizeof(FxEffectDefTableEntry) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(FxEffectDefTableEntry) == 0x8);
 
 struct FxEffectDefTable // sizeof=0x2004
 {                                       // ...
     int32_t count;
     FxEffectDefTableEntry entries[1024];
 };
-static_assert(sizeof(FxEffectDefTable) == 0x2004);
+KISAK_LAYOUT_ASSERT(sizeof(FxEffectDefTable) == 0x2004);
 
 void __cdecl FX_Restore(int32_t clientIndex, MemoryFile *memFile);
 void __cdecl FX_RestoreEffectDefTable(MemoryFile *memFile, FxEffectDefTable *table);
@@ -933,7 +934,7 @@ struct FxProfileEntry // sizeof=0x1C
     int32_t activeTrailElemCount;
     int32_t pendingTrailElemCount;
 };
-static_assert(sizeof(FxProfileEntry) == 0x1C);
+KISAK_LAYOUT_ASSERT(sizeof(FxProfileEntry) == 0x1C);
 
 void __cdecl FX_DrawProfile(int32_t clientIndex, void(__cdecl *drawFunc)(char *), float *profilePos);
 FxProfileEntry *__cdecl FX_GetProfileEntry(const FxEffectDef *effectDef, FxProfileEntry *entryPool, int32_t *entryCount);
@@ -961,7 +962,7 @@ struct FxSprite // sizeof=0x20
     float minScreenRadius;
     int32_t flags;
 };
-static_assert(sizeof(FxSprite) == 0x20);
+KISAK_LAYOUT_ASSERT(sizeof(FxSprite) == 0x20);
 
 void __cdecl FX_SpriteGenerateVerts(FxGenerateVertsCmd *cmd);
 void __cdecl FX_GenerateSpriteCodeMeshVerts(FxSprite *sprite, FxGenerateVertsCmd *cmd);
@@ -1268,14 +1269,14 @@ struct FxCurve // sizeof=0xC
     int32_t keyCount;
     float keys[1];
 };
-static_assert(sizeof(FxCurve) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(FxCurve) == 0xC);
 
 struct FxCurveIterator // sizeof=0x8
 {                                       // ...
     const FxCurve *master;
     int32_t currentKeyIndex;
 };
-static_assert(sizeof(FxCurveIterator) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(FxCurveIterator) == 0x8);
 
 double __cdecl FxCurve_Interpolate1d(const float *key, float intermediateTime);
 void __cdecl FxCurve_Interpolate3d(const float *key, float intermediateTime, float *result);
@@ -1300,7 +1301,7 @@ struct FxEditorElemAtlas // sizeof=0x1C
     int32_t rowIndexBits;
     int32_t entryCount;
 };
-static_assert(sizeof(FxEditorElemAtlas) == 0x1C);
+KISAK_LAYOUT_ASSERT(sizeof(FxEditorElemAtlas) == 0x1C);
 
 struct FxEditorTrailDef // sizeof=0x608
 {                                       // ...
@@ -1309,7 +1310,7 @@ struct FxEditorTrailDef // sizeof=0x608
     uint16_t inds[128];
     int32_t indCount;
 };
-static_assert(sizeof(FxEditorTrailDef) == 0x608);
+KISAK_LAYOUT_ASSERT(sizeof(FxEditorTrailDef) == 0x608);
 
 struct FxEditorElemDef // sizeof=0x858
 {                                       // ...
@@ -1368,7 +1369,7 @@ struct FxEditorElemDef // sizeof=0x858
     float trailScrollTime;
     FxEditorTrailDef trailDef;
 };
-static_assert(sizeof(FxEditorElemDef) == 0x858);
+KISAK_LAYOUT_ASSERT(sizeof(FxEditorElemDef) == 0x858);
 
 struct FxEditorEffectDef // sizeof=0x10B44
 {                                       // ...
@@ -1376,20 +1377,20 @@ struct FxEditorEffectDef // sizeof=0x10B44
     int32_t elemCount;
     FxEditorElemDef elems[32];
 };
-static_assert(sizeof(FxEditorEffectDef) == 0x10B44);
+KISAK_LAYOUT_ASSERT(sizeof(FxEditorEffectDef) == 0x10B44);
 
 struct FxElemField // sizeof=0x8
 {                                       // ...
     const char *keyName;                // ...
     bool(__cdecl *handler)(const char **, FxEditorElemDef *); // ...
 };
-static_assert(sizeof(FxElemField) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(FxElemField) == 0x8);
 
 struct FxFlagOutputSet // sizeof=0xC
 {                                       // ...
     int32_t *flags[3];                      // ...
 };
-static_assert(sizeof(FxFlagOutputSet) == 0xC);
+KISAK_LAYOUT_ASSERT(sizeof(FxFlagOutputSet) == 0xC);
 
 struct FxFlagDef // sizeof=0x10
 {
@@ -1398,7 +1399,7 @@ struct FxFlagDef // sizeof=0x10
     int32_t mask;
     int32_t value;
 };
-static_assert(sizeof(FxFlagDef) == 0x10);
+KISAK_LAYOUT_ASSERT(sizeof(FxFlagDef) == 0x10);
 
 enum FxSampleChannel : int32_t
 {                                       // ...

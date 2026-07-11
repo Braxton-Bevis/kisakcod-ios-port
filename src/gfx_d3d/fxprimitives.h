@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #include <universal/q_shared.h>
 #include <universal/com_math.h>
 
@@ -70,7 +71,7 @@ struct FxEffectDef // sizeof=0x20
     int elemDefCountEmission;
     const FxElemDef *elemDefs;
 };
-static_assert(sizeof(FxEffectDef) == 32);
+KISAK_LAYOUT_ASSERT(sizeof(FxEffectDef) == 32);
 
 struct FxEffect // sizeof=0x80
 {                                       // ...
@@ -489,7 +490,7 @@ struct FxImpactTable // sizeof=0x8
     const char *name;
     FxImpactEntry *table;
 };
-static_assert(sizeof(FxImpactTable) == 8);
+KISAK_LAYOUT_ASSERT(sizeof(FxImpactTable) == 8);
 
 struct FxSystemBuffers // sizeof=0x47480
 {                                       // ...

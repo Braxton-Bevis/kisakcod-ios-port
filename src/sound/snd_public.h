@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #include <qcommon/qcommon.h>
 #include <msslib/mss.h>
 #include <gfx_d3d/fxprimitives.h>
@@ -107,7 +108,7 @@ struct LoadedSound // sizeof=0x2C
     const char *name;
     MssSoundCOD4 sound;
 };
-static_assert(sizeof(LoadedSound) == 44);
+KISAK_LAYOUT_ASSERT(sizeof(LoadedSound) == 44);
 
 struct StreamFileNameRaw // sizeof=0x8
 {                                       // ...
@@ -146,7 +147,7 @@ struct SndCurve // sizeof=0x48
     int knotCount;                      // ...
     float knots[8][2];                  // ...
 };
-static_assert(sizeof(SndCurve) == 72);
+KISAK_LAYOUT_ASSERT(sizeof(SndCurve) == 72);
 
 struct MSSSpeakerLevels // sizeof=0x10
 {                                       // ...
@@ -199,7 +200,7 @@ struct snd_alias_t // sizeof=0x5C
     float envelopPercentage;
     SpeakerMap *speakerMap;
 };
-static_assert(sizeof(snd_alias_t) == 92);
+KISAK_LAYOUT_ASSERT(sizeof(snd_alias_t) == 92);
 
 struct snd_alias_list_t // sizeof=0xC
 {                                       // ...
@@ -207,7 +208,7 @@ struct snd_alias_list_t // sizeof=0xC
     snd_alias_t *head;                  // ...
     int count;                          // ...
 };
-static_assert(sizeof(snd_alias_list_t) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(snd_alias_list_t) == 12);
 
 struct snd_entchannel_info_t // sizeof=0x50
 {                                       // ...

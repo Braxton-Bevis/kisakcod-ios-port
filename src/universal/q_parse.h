@@ -30,7 +30,7 @@ struct ParseThreadInfo // sizeof=0x460C
     const char *prevTokenPos;
     char line[1024];
 };
-static_assert(sizeof(struct ParseThreadInfo) == 0x460C);
+KISAK_LAYOUT_ASSERT(sizeof(struct ParseThreadInfo) == 0x460C);
 
 struct com_parse_mark_t // sizeof=0x14
 {                                       // ...
@@ -40,7 +40,7 @@ struct com_parse_mark_t // sizeof=0x14
     int backup_lines;
     const char *backup_text;
 };
-static_assert(sizeof(struct com_parse_mark_t) == 0x14);
+KISAK_LAYOUT_ASSERT(sizeof(struct com_parse_mark_t) == 0x14);
 
 void __cdecl TRACK_q_parse();
 void __cdecl Com_InitParse();

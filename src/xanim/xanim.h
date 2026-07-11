@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 // LWSS: This file has way too many structs. KISAKTODO: move out later.
 #include "xanim_public.h"
 #include <script/scr_stringlist.h>
@@ -33,7 +34,7 @@ union XAnimIndices // sizeof=0x4
     uint16_t *_2;
     void *data;
 };
-static_assert(sizeof(XAnimIndices) == 4);
+KISAK_LAYOUT_ASSERT(sizeof(XAnimIndices) == 4);
 struct XAnimNotifyInfo // sizeof=0x8
 {
     uint16_t name;
@@ -177,7 +178,7 @@ struct XAnimParts // sizeof=0x58
     XAnimNotifyInfo *notify;
     XAnimDeltaPart *deltaPart;
 };
-static_assert(sizeof(XAnimParts) == 88);
+KISAK_LAYOUT_ASSERT(sizeof(XAnimParts) == 88);
 
 struct XModelNameMap // sizeof=0x4
 {                                       // ...
@@ -824,7 +825,7 @@ struct WeaponDef // sizeof=0x878
     float adsDofStart;
     float adsDofEnd;
 };
-static_assert(sizeof(WeaponDef) == 2168);
+KISAK_LAYOUT_ASSERT(sizeof(WeaponDef) == 2168);
 
 struct SndDriverGlobals // sizeof=0x4
 {                                       // ...
@@ -837,7 +838,7 @@ struct RawFile // sizeof=0xC
     int len;
     const char* buffer;
 };
-static_assert(sizeof(RawFile) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(RawFile) == 12);
 
 struct PhysPreset // sizeof=0x2C
 {                                       // ...
@@ -997,7 +998,7 @@ struct XAsset // sizeof=0x8
     XAssetType type;                    // ...
     XAssetHeader header;                // ...
 };
-static_assert(sizeof(XAsset) == 8);
+KISAK_LAYOUT_ASSERT(sizeof(XAsset) == 8);
 
 union XAssetSize // sizeof=0x878
 {                                       // ...
@@ -1108,7 +1109,7 @@ struct ScriptStringList // sizeof=0x8
     int count;
     const char **strings;
 };
-static_assert(sizeof(ScriptStringList) == 8);
+KISAK_LAYOUT_ASSERT(sizeof(ScriptStringList) == 8);
 
 struct XAssetList // sizeof=0x10
 {                                       // ...
@@ -1116,7 +1117,7 @@ struct XAssetList // sizeof=0x10
     int assetCount;
     XAsset *assets;
 };
-static_assert(sizeof(XAssetList) == 16);
+KISAK_LAYOUT_ASSERT(sizeof(XAssetList) == 16);
 
 struct XFile // sizeof=0x2C
 {                                       // ...
@@ -1124,7 +1125,7 @@ struct XFile // sizeof=0x2C
     uint32_t externalSize;          // ...
     uint32_t blockSize[9];          // ...
 };
-static_assert(sizeof(XFile) == 44);
+KISAK_LAYOUT_ASSERT(sizeof(XFile) == 44);
 
 struct XSurfaceCollisionAabb // sizeof=0xC
 {                                       // ...
@@ -1161,14 +1162,14 @@ struct XRigidVertList // sizeof=0xC
     uint16_t triCount;          // ...
     XSurfaceCollisionTree *collisionTree;
 };
-static_assert(sizeof(XRigidVertList) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(XRigidVertList) == 12);
 
 struct XSurfaceVertexInfo // sizeof=0xC
 {                                       // ...
     __int16 vertCount[4];
     uint16_t *vertsBlend;
 };
-static_assert(sizeof(XSurfaceVertexInfo) == 12);
+KISAK_LAYOUT_ASSERT(sizeof(XSurfaceVertexInfo) == 12);
 
 struct XSurface // sizeof=0x38
 {
@@ -1187,7 +1188,7 @@ struct XSurface // sizeof=0x38
     XRigidVertList *vertList;
     int partBits[4];
 };
-static_assert(sizeof(XSurface) == 56);
+KISAK_LAYOUT_ASSERT(sizeof(XSurface) == 56);
 
 struct DObj_s;
 

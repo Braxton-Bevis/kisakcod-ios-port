@@ -1,4 +1,5 @@
 #pragma once
+#include <universal/kisak_layout.h>
 #include <cstdint>
 
 struct adjacencyWinding_t // sizeof=0x34
@@ -6,14 +7,14 @@ struct adjacencyWinding_t // sizeof=0x34
     int32_t numsides;                       // ...
     int32_t sides[12];
 };
-static_assert(sizeof(adjacencyWinding_t) == 0x34);
+KISAK_LAYOUT_ASSERT(sizeof(adjacencyWinding_t) == 0x34);
 
 struct SimplePlaneIntersection // sizeof=0x18
 {                                       // ...
     float xyz[3];                       // ...
     int32_t planeIndex[3];
 };
-static_assert(sizeof(SimplePlaneIntersection) == 0x18);
+KISAK_LAYOUT_ASSERT(sizeof(SimplePlaneIntersection) == 0x18);
 
 adjacencyWinding_t *__cdecl BuildBrushdAdjacencyWindingForSide(
     float *sideNormal,

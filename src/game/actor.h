@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #ifndef KISAK_SP 
 #error This file is for SinglePlayer only 
 #endif
@@ -413,9 +414,9 @@ struct actor_s
 // pointers via raw byte arithmetic that only works if sentientInfo is at offset
 // 0x834 and sentient_info_t is 40 bytes. If a field is added/removed/reordered
 // these asserts will fire and the magic-offset code will silently break.
-static_assert(sizeof(actor_s) == 0x1e90, "actor_s size drift vs CoD3SP IDA");
+KISAK_LAYOUT_ASSERT(sizeof(actor_s) == 0x1e90, "actor_s size drift vs CoD3SP IDA");
 static_assert(offsetof(actor_s, sentientInfo) == 0x834, "actor_s.sentientInfo offset drift vs CoD3SP IDA");
-static_assert(sizeof(sentient_info_t) == 0x28, "sentient_info_t size drift vs CoD3SP IDA");
+KISAK_LAYOUT_ASSERT(sizeof(sentient_info_t) == 0x28, "sentient_info_t size drift vs CoD3SP IDA");
 
 int __cdecl Path_IsValidClaimNode(const pathnode_t *node);
 int __cdecl Path_IsCoverNode(const pathnode_t *node);

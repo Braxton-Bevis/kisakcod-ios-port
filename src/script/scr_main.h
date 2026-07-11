@@ -1,5 +1,6 @@
 #pragma once
 
+#include <universal/kisak_layout.h>
 #include <universal/q_shared.h>
 
 #include <universal/com_memory.h>
@@ -71,7 +72,7 @@ struct scrVarPub_t // sizeof=0x2007C
     int totalObjectRefCount;
     volatile uint32_t totalVectorRefCount;
 };
-static_assert(sizeof(scrVarPub_t) == 0x2007C);
+KISAK_LAYOUT_ASSERT(sizeof(scrVarPub_t) == 0x2007C);
 
 struct PrecacheEntry // sizeof=0x8
 {                                       // ...
@@ -80,7 +81,7 @@ struct PrecacheEntry // sizeof=0x8
     // padding byte
     uint32_t sourcePos;
 };
-static_assert(sizeof(PrecacheEntry) == 0x8);
+KISAK_LAYOUT_ASSERT(sizeof(PrecacheEntry) == 0x8);
 
 extern scrVarPub_t scrVarPub;
 extern scrVarDebugPub_t scrVarDebugPubBuf;
