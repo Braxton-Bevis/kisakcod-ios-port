@@ -92,3 +92,86 @@ game logic (bg_*, g_*) nearly clean; qcommon/universal failing on Win32 headers;
 win32/ and gfx_d3d/ failing catastrophically.
 
 ---
+
+## M2 — Build retarget + compile census, rounds 1–2 (2026-07-11)
+
+**Attempted:** retarget the build graph to arm64-apple-ios and measure the *real*
+compile error surface of 13 representative TUs against the actual iOS SDK
+(Xcode 16.4 clang, `-target arm64-apple-ios15.0`), on the macOS runner.
+
+**Concrete changes (round 1):**
+- Root `CMakeLists.txt`: `KISAK_PLATFORM` now overridable (`-DKISAK_PLATFORM=ios`);
+  ios platform routes to a new probe subproject instead of mp/sp/dedi.
+- `scripts/platform/ios/platform.cmake` (clang flags replace `/MT /O2 ...`),
+  `scripts/ios/CMakeLists.txt` (OBJECT-library census target),
+  `.github/workflows/ios-compile-probe.yml` (configure check + per-file census + artifact).
+
+**Compiled/Ran?** CMake configure with `-DKISAK_PLATFORM=ios -DCMAKE_SYSTEM_NAME=iOS`
+**succeeds** on macOS (run 29168930111). Census round 1: **0/13 TUs compile.** Exact
+first-errors, by class:
+
+| Class | Example (verbatim) | Depth |
+|---|---|---|
+| x86-32 layout asserts | `static assertion failed due to requirement 'sizeof(StringTable) == 16'` (ptr,int,int,ptr = 24 on LP64) | FUNDAMENTAL |
+| Missing C header | `use of undeclared identifier 'INT_MIN'` (MSVC leaks `<climits>`) | trivial |
+| POSIX symbol clash | `float __cdecl random()` vs stdlib `long random(void)` → "functions that differ only in return type cannot be overloaded" | small |
+| MSVC keywords | `__declspec(align(128))` rejected; later `__forceinline`, `unsigned __int32` bitfields | one flag |
+| Win32 headers | `'Windows.h' file not found` (qcommon/threads.h), `'dinput.h' file not found` (win32/win_local.h) | subsystem port |
+| Binary-only dep | `MSS.H did not detect your platform` (Miles Sound has no iOS/ARM64 library) | stub/replace |
+
+**Round 2 fixes:** `<climits>` in q_shared.h; `random()`→`q_engine_random()` token rename
+(iOS only, stdlib pre-included so include-guards protect its decl); `-fdeclspec`;
+`KISAK_LAYOUT_ASSERT` macro (relaxed on iOS with grep-able paper trail, unchanged on win32)
+applied to the two firing asserts; **M3 filesystem patch** (below) included.
+
+**Round 2 result (run 29169065384):** all round-1 fix classes verified gone.
+**`src/ios/sys_ios_paths.mm` PASSES** — first engine-repo TU to compile clean for
+arm64-apple-ios. Census reached the next stratum: more layout asserts (SpawnVar 2572,
+VariableStackBuffer 12, ParseThreadInfo 17932), `__forceinline` (→ `-fms-extensions`),
+`__int32` bitfields (same flag).
+
+**Assessment of the deep wall (measured, not guessed):**
+- **249 `static_assert(sizeof ...)` sites in 42 files** — the decomp pins x86-32 struct
+  layouts, which fastfile/asset deserialization depends on. Round 3 relaxes ALL of them
+  mechanically via `KISAK_LAYOUT_ASSERT` to let the census reach what lies beneath;
+  actually *running* on arm64 will require real 64-bit layout work for every serialized
+  struct (this is the single largest porting cost in the codebase).
+- **73 inline x86 `__asm` occurrences in 20 files** (cg_ents.cpp alone: 22) — each needs
+  a C or NEON rewrite.
+
+**Next hypothesis (round 3):** with all layout asserts relaxed + `-fms-extensions`, the
+portable-logic TUs (bg_pmove, g_main_mp) get much deeper — likely all the way to success
+or to Win32-header includes; gfx_d3d TUs reach `d3d9.h` (then the DXVK-native header
+stage measures the translation path); threads/win_main stay walled behind Win32 headers.
+
+---
+
+## M3 — Filesystem sandboxing (2026-07-11) — code landed, compile-verified
+
+**Attempted:** Objective 3 — root every engine write in the iOS app sandbox.
+
+**Analysis:** the FS is Quake-lineage. Every path in the engine derives from two dvars
+registered in `FS_RegisterDvars` (src/universal/com_files.cpp):
+`fs_basepath` ← `Sys_Cwd()` (read-only game data) and `fs_homepath` ← NULL-stub →
+falls back to basepath (ALL writes: configs, players/, mods/, screenshots). The
+decomp's own homepath source was already stubbed (`RETURN_ZERO32()`), so the seam is
+exactly two assignments.
+
+**Concrete change:**
+- New `src/ios/sys_ios.h` + `src/ios/sys_ios_paths.mm`: `Sys_iOS_BundlePath()` (app
+  bundle resources, read-only game data), `Sys_iOS_DocumentsPath()` (persistent writable),
+  `Sys_iOS_CachesPath()` (purgeable) via NSFileManager/NSBundle, cached as C strings the
+  dvar system can hold forever.
+- `com_files.cpp` `FS_RegisterDvars`: `#ifdef KISAK_IOS` → basepath = bundle path,
+  homepath = Documents. Win32 codepath byte-identical.
+
+**Compiled/Ran?** sys_ios_paths.mm compiles clean for arm64-apple-ios (census round 2).
+The com_files.cpp patch itself can't compile-verify until the file's other blockers fall
+(it's in the census list, so this is tracked automatically). Behavioral proof of the
+write path: the M1 stub already wrote+read back a file in Documents/ under CI.
+
+**Known residual risk (documented, deferred):** the engine has scattered direct-path
+file I/O outside FS_* (dependency-scan agents are mapping every fopen/CreateFile site);
+those sites must be audited to route through FS_BuildOSPath once the engine links.
+
+---

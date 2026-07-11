@@ -63,8 +63,12 @@ jobs:
       - name: DXVK-native header census (renderer TUs)
         run: |
           set -uo pipefail
-          git clone --depth 1 --branch v2.7.1 https://github.com/doitsujin/dxvk dxvk-headers || \
-            git clone --depth 1 https://github.com/doitsujin/dxvk dxvk-headers
+          # include/native/directx is a submodule (Joshua-Ashton/mingw-directx-headers) —
+          # a plain shallow clone leaves it empty (learned the hard way, run 29169151347)
+          git clone --depth 1 --branch v2.7.1 --recurse-submodules=include/native/directx --shallow-submodules \
+            https://github.com/doitsujin/dxvk dxvk-headers || \
+            git clone --depth 1 --recurse-submodules=include/native/directx --shallow-submodules \
+              https://github.com/doitsujin/dxvk dxvk-headers
           D3D9_H=$(find dxvk-headers/include -name d3d9.h | head -n1)
           if [ -z "$D3D9_H" ]; then echo 'BLOCKER: no d3d9.h in dxvk include tree'; find dxvk-headers/include -maxdepth 3 -type d; exit 1; fi
           DXDIR=$(dirname "$D3D9_H")

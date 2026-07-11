@@ -1567,8 +1567,15 @@ inline T Buf_Read(unsigned char **pos)
     return value;
 }
 
+#ifdef KISAK_IOS
+// arm64: translate the engine's SSE intrinsics to NEON (deps/sse2neon, MIT).
+// <intrin.h> MSVC intrinsics (_BitScanReverse, __cpuid, ...) have no blanket
+// replacement — sites that use them surface individually in the compile census.
+#include <sse2neon/sse2neon.h>
+#else
 #include <xmmintrin.h>  // SSE
 #include <intrin.h>
+#endif
 
 // (https://github.com/SwagSoftware/KisakCOD/issues/52)
 // 
