@@ -279,6 +279,40 @@ Remaining failure classes at experiment close (all characterized):
 Census loop closed here deliberately: every remaining error is either shallow-mechanical
 or a scoped replace-subsystem item. Continuing rounds would be porting, not probing.
 
+## M6 — Stub v2/v3: MetalFX upscaling, controller support, graphics settings menu (2026-07-11)
+
+**Attempted (user request):** MetalFX + controller support + in-app graphics settings.
+Ray tracing itself ruled out with documented evidence: MoltenVK implements no
+VK_KHR_ray_tracing/ray_query (so the TRANSLATION path structurally cannot carry RT);
+MetalFX's RT piece (MTL4FXTemporalDenoisedScaler) is iOS 26/Metal 4 and presupposes a
+ray tracer producing noisy RT output; COD4 lighting is baked lightmaps with no RT hooks.
+MetalFX **spatial upscaling** (MTLFXSpatialScaler, iOS 16+) is the applicable piece.
+
+**Concrete changes (ios/Stub):**
+- Scene renders at a configurable scale (50/75/100%) into an offscreen texture;
+  `MTLFXSpatialScaler` upscales into the drawable (`framebufferOnly=false`), gated by
+  `supportsDevice` at runtime AND `#if canImport(MetalFX)` at compile time.
+- Controller support: `GCVirtualController` (left thumbstick + A/B on-screen overlay —
+  doubling as the Objective-5 touch overlay) and physical controllers via
+  `GCControllerDidConnect`, one shared bind path. Stick moves the triangle (shader
+  offset uniform), A switches palette, B recenters.
+- GRAPHICS settings menu (gear button): MetalFX on/off, render scale, frame cap
+  (30/60/max via `CADisplayLink.preferredFrameRateRange`), persisted in UserDefaults,
+  panel auto-shown on first launch. Stub-scale preview of the engine's future
+  r_metalfx/r_renderScale dvar surface — the engine's own graphics menu (decompiled
+  ui/ code) cannot run until the engine renders.
+
+**Errors hit (real, fixed):** first v2 push failed on the simulator job only:
+`error: no such module 'MetalFX'` — the **iphonesimulator SDK in Xcode 16.4 does not
+ship the MetalFX module at all** (device SDK does; device job passed). Fix:
+compile-gate with canImport, honest fallback status string.
+
+**Compiled/Ran?** v2-fix run green: simulator marker file shows
+`controller=Apple Touch Controller` (virtual controller connected + bound) and
+`metalfx=module absent in this SDK (simulator)`; screenshot shows A/B buttons rendered
+on screen. Device IPA (with live MetalFX path) builds green. v3 (settings menu) result
+recorded below.
+
 ## FINAL — win32 regression verdict (2026-07-11) ✅
 
 Run 29169595761 (workflow_dispatch on final HEAD, full engine Debug + Release):

@@ -69,9 +69,19 @@ iOS 18.5 SDK) with downloadable artifacts.
   but the engine already contains a parallel `shader_bin` precompiled-blob loader that
   bypasses D3DX entirely (DEPENDENCY_MAP §8).
 
-### Objective 5 — Touch input: ⛔ NOT STARTED (by protocol: only after something renders)
-- Scoped in DEPENDENCY_MAP §2: GCMouse/GCKeyboard/touch → `Sys_QueEvent`, replacing the
-  Win32 message pump. The stub app is the natural host for the first overlay.
+### Objective 5 — Touch/controller input: ✅ FIRST PASS LANDED (stub-level, CI-verified)
+- `GCVirtualController` on-screen overlay (left thumbstick + A/B) IS the touch overlay,
+  and physical gamepads bind through the identical `GCController` path. CI marker proves
+  the connect (`controller=Apple Touch Controller`); the screenshot shows the overlay.
+  Stick moves the rendered triangle; buttons mutate render state.
+- Stub also gained **MetalFX spatial upscaling** (50/75% render scale → native, runtime
+  `supportsDevice` + compile-time `canImport` gates — the iphonesimulator SDK ships no
+  MetalFX module) and an in-app **GRAPHICS settings menu** (MetalFX toggle, render scale,
+  frame cap; UserDefaults-persisted) — the prototype for surfacing engine r_* dvars on iOS.
+- Engine-level input (feeding `Sys_QueEvent`) remains future work per DEPENDENCY_MAP §2.
+- Ray tracing: ruled out for the TRANSLATION path with evidence — MoltenVK implements no
+  VK_KHR_ray_tracing extensions; MetalFX's RT denoiser (MTL4FXTemporalDenoisedScaler,
+  iOS 26/Metal 4) presupposes a ray tracer; COD4 content is baked-lightmap with no RT hooks.
 
 ---
 
