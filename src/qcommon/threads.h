@@ -1,6 +1,15 @@
 #pragma once
 
+#ifdef KISAK_IOS
+// Windows.h was included solely for DWORD/HANDLE in the extern arrays at the
+// bottom of this file. Win32 DWORD is always 32-bit (unsigned long on LP64
+// Darwin is 64-bit, so uint32_t, not unsigned long).
+#include <cstdint>
+typedef uint32_t DWORD;
+typedef void *HANDLE;
+#else
 #include <Windows.h> // literally just for some of the extern types at the bottom
+#endif
 #include <gfx_d3d/rb_backend.h> // THREAD_CONTEXT_COUNT
 
 enum ThreadOwner : __int32

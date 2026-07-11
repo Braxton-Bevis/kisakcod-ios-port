@@ -4,16 +4,20 @@
 #include <universal/com_memory.h>
 #include <qcommon/com_fileaccess.h>
 #include <qcommon/qcommon.h>
-#include <win32/win_local.h>
+#ifndef KISAK_IOS
+#include <win32/win_local.h>   // Win32 platform layer (dinput/winsock); use-sites surface individually on iOS
+#endif
 #include <qcommon/threads.h>
 #include <stringed/stringed_hooks.h>
 #include <qcommon/unzip.h>
 #include <qcommon/com_bsp.h>
 #include <qcommon/cmd.h>
 #include <qcommon/files.h>
-#include <io.h>
 #ifdef KISAK_IOS
+#include <unistd.h>            // <io.h> is MSVC-only; _access/_mkdir sites surface individually
 #include <ios/sys_ios.h>
+#else
+#include <io.h>
 #endif
 
 const dvar_t *fs_remotePCDirectory;

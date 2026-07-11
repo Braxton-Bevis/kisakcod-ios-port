@@ -546,7 +546,7 @@ enum MissileFlightMode : __int32
     MISSILEFLIGHTMODE_DIRECT = 0x1,
 };
 
-enum team_t;
+enum team_t : __int32;  // underlying type required for ISO forward decl; matches game/teams.h:7
 #ifdef KISAK_MP
 struct corpse_ent_t // sizeof=0x4
 {                                       // ...

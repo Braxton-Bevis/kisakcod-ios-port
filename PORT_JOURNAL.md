@@ -175,3 +175,42 @@ file I/O outside FS_* (dependency-scan agents are mapping every fopen/CreateFile
 those sites must be audited to route through FS_BuildOSPath once the engine links.
 
 ---
+
+## M2 — Census round 3 + fixes for round 4 (2026-07-11)
+
+**Attempted:** relax the entire layout-assert stratum in one mechanical move and see
+what the census reaches underneath; add the DXVK-native header stage (Objective 4).
+
+**Concrete changes:** scripted conversion of all remaining 247 `static_assert(sizeof`
+sites (41 files) to `KISAK_LAYOUT_ASSERT` (variadic — 3 sites carry message args) with
+automatic `#include <universal/kisak_layout.h>` insertion; `-fdeclspec` →
+`-fms-extensions` (also unlocks `__forceinline`, `unsigned __int32` bitfields).
+
+**Compiled/Ran?** Run 29169151347: census step ran; results (from step log):
+- The assert stratum is GONE. Six TUs (bg_pmove, g_main_mp, sv_main_mp, cmd, com_files,
+  r_init) now reach **`xmmintrin.h:14: "This header is only meant to be used on x86 and
+  x64 architecture"`** — the SSE-intrinsics stratum. Poison source is a single site:
+  `qcommon/qcommon.h:1570-71` includes `<xmmintrin.h>` + `<intrin.h>` unconditionally.
+- Three TUs (scr_vm, xmodel, phys_ode) reach **`'d3d9.h' file not found`** via
+  `gfx_d3d/r_gfx.h` / `r_material.h` — the D3D9 renderer types leak into script VM,
+  animation, and physics headers. Confirms the TRANSLATION-path header shim matters far
+  beyond gfx_d3d itself.
+- threads.cpp (Windows.h), win_main/win_common (dinput.h), snd_mss (Miles) unchanged.
+
+**Error (own bug):** the new DXVK header stage FAILED — `BLOCKER: no d3d9.h in dxvk
+include tree`. Diagnosis via GitHub API: `include/native/directx` in doitsujin/dxvk is a
+**git submodule** → `Joshua-Ashton/mingw-directx-headers`; `git clone --depth 1` leaves
+it empty. Fix: `--recurse-submodules=include/native/directx --shallow-submodules`.
+
+**Round 4 changes (pushed):** vendored `deps/sse2neon/sse2neon.h` v1.8.0 (MIT, SSE→NEON)
+gated by `KISAK_IOS` at the qcommon.h poison site (`<intrin.h>` MSVC intrinsics get no
+blanket shim — per-site surfacing is intentional); DXVK submodule clone fix;
+`workflow_dispatch` on the upstream Windows CI → **win32 regression build triggered**
+(run 29169268868) to prove the ~50-file src/ touch didn't break MSVC.
+
+**Next hypothesis:** round 4 gets bg_pmove/g_main_mp very deep (possibly PASS); the DXVK
+stage compiles r_init.cpp substantially further against mingw-directx d3d9.h; the win32
+build stays green (all engine-code edits are `#ifdef KISAK_IOS`-guarded or
+semantics-preserving macros).
+
+---

@@ -525,7 +525,7 @@ void __cdecl DObjArchive(DObj_s *obj)
     obj->models = NULL;
     DObjFree(obj);
 
-    static_assert((sizeof(DObj_s) - sizeof(obj->models)) == 96);
+    KISAK_LAYOUT_ASSERT((sizeof(DObj_s) - sizeof(obj->models)) == 96);
     memcpy(obj, &savedObj, sizeof(DObj_s) - sizeof(obj->models));
 }
 
