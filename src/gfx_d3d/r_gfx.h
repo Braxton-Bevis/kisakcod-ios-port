@@ -7,6 +7,8 @@
 #include <qcommon/com_pack.h>
 #include <cstdint>
 
+typedef unsigned char byte;   // identical to q_shared.h:114; this header is included standalone
+
 struct Material;
 struct XModel;
 

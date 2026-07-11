@@ -26,9 +26,14 @@
 #define USE_POOL_ALLOCATOR
 
 // make alloca happy
+#ifdef __APPLE__
+#include <stdlib.h>
+#include <alloca.h>
+#else
 #include <malloc.h>
+#endif
 
-#ifndef alloca
+#if !defined(alloca) && !defined(__APPLE__)
 #define alloca _alloca
 #endif
 

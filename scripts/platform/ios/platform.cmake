@@ -19,3 +19,12 @@ add_compile_options(
 )
 
 add_compile_definitions(KISAK_IOS)
+
+# TRANSLATION renderer path: the engine's <d3d9.h> resolves to DXVK's native
+# headers (mingw-directx-headers submodule + windows_base.h shims). Point
+# DXVK_NATIVE_INCLUDE at a dxvk checkout's include/native directory, e.g.
+#   git clone --recurse-submodules=include/native/directx https://github.com/doitsujin/dxvk
+#   cmake ... -DDXVK_NATIVE_INCLUDE=/path/to/dxvk/include/native
+if(DEFINED DXVK_NATIVE_INCLUDE)
+    include_directories(SYSTEM "${DXVK_NATIVE_INCLUDE}/directx" "${DXVK_NATIVE_INCLUDE}/windows")
+endif()

@@ -2,7 +2,9 @@
 
 #include <universal/kisak_layout.h>
 #include <qcommon/qcommon.h>
-#include <msslib/mss.h>
+#ifndef KISAK_IOS
+#include <msslib/mss.h>   // Miles Sound System: Windows/x86-only binary dep; this public header uses none of its types
+#endif
 #include <gfx_d3d/fxprimitives.h>
 #include <universal/memfile.h>
 
