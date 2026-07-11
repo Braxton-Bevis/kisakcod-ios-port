@@ -24,11 +24,16 @@ final class MetalViewController: UIViewController {
     private var wroteFirstFrameMarker = false
     private let hudLabel = UILabel()
 
-    // MetalFX spatial upscaling: the scene renders at renderScale of the drawable,
-    // then MTLFXSpatialScaler upscales into the drawable. Unsupported GPUs (and
-    // the CI simulator) fall back to direct native-resolution rendering; the HUD
-    // and the sandbox marker file record which path is live.
-    private let renderScale: CGFloat = 0.5
+    // Graphics settings — persisted in UserDefaults (the stub-scale preview of the
+    // engine's future r_* dvar surface: r_metalfx / r_renderScale / com_maxfps).
+    private var fxEnabled = UserDefaults.standard.object(forKey: "kisak.fxEnabled") as? Bool ?? true
+    private var renderScalePct = UserDefaults.standard.object(forKey: "kisak.renderScalePct") as? Int ?? 50
+    private var frameCap = UserDefaults.standard.object(forKey: "kisak.frameCap") as? Int ?? 0   // 0 = uncapped
+
+    // MetalFX spatial upscaling: the scene renders at renderScalePct of the drawable,
+    // then MTLFXSpatialScaler upscales into the drawable. Unsupported GPUs (and the
+    // CI simulator, whose SDK lacks the module) fall back to direct rendering; the
+    // HUD and the sandbox marker file record which path is live.
     #if canImport(MetalFX)
     private var spatialScaler: MTLFXSpatialScaler?
     #endif
@@ -43,6 +48,13 @@ final class MetalViewController: UIViewController {
     private var stick = SIMD2<Float>(0, 0)
     private var triangleOffset = SIMD2<Float>(0, 0)
     private var paletteFlash = false
+
+    // Settings UI
+    private let settingsPanel = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+    private let fxSwitch = UISwitch()
+    private let scaleControl = UISegmentedControl(items: ["50%", "75%", "100%"])
+    private let capControl = UISegmentedControl(items: ["30", "60", "Max"])
+    private let statusFootnote = UILabel()
 
     override func loadView() { view = MetalView() }
     private var metalView: MetalView { view as! MetalView }
@@ -84,11 +96,13 @@ final class MetalViewController: UIViewController {
             hudLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
         ])
 
+        setUpSettingsUI()
         setUpControllers()
 
         let link = CADisplayLink(target: self, selector: #selector(renderFrame))
         link.add(to: .main, forMode: .common)
         displayLink = link
+        applyFrameCap()
     }
 
     override func viewDidLayoutSubviews() {
@@ -96,6 +110,113 @@ final class MetalViewController: UIViewController {
         let scale = view.window?.screen.scale ?? UIScreen.main.scale
         metalView.metalLayer.drawableSize = CGSize(width: view.bounds.width * scale,
                                                    height: view.bounds.height * scale)
+    }
+
+    // MARK: - Graphics settings UI
+
+    private func setUpSettingsUI() {
+        var gearConfig = UIButton.Configuration.plain()
+        gearConfig.image = UIImage(systemName: "gearshape.fill")
+        gearConfig.baseForegroundColor = .white
+        let gear = UIButton(configuration: gearConfig)
+        gear.addAction(UIAction { [weak self] _ in self?.toggleSettings() }, for: .touchUpInside)
+        gear.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(gear)
+
+        let title = UILabel()
+        title.text = "GRAPHICS"
+        title.textColor = .white
+        title.font = .monospacedSystemFont(ofSize: 12, weight: .bold)
+
+        fxSwitch.isOn = fxEnabled
+        fxSwitch.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.fxEnabled = self.fxSwitch.isOn
+            UserDefaults.standard.set(self.fxEnabled, forKey: "kisak.fxEnabled")
+            self.lastScalerDrawableSize = .zero   // force scaler rebuild next frame
+        }, for: .valueChanged)
+
+        scaleControl.selectedSegmentIndex = [50: 0, 75: 1, 100: 2][renderScalePct] ?? 0
+        scaleControl.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.renderScalePct = [0: 50, 1: 75, 2: 100][self.scaleControl.selectedSegmentIndex] ?? 50
+            UserDefaults.standard.set(self.renderScalePct, forKey: "kisak.renderScalePct")
+            self.lastScalerDrawableSize = .zero
+        }, for: .valueChanged)
+
+        capControl.selectedSegmentIndex = [30: 0, 60: 1, 0: 2][frameCap] ?? 2
+        capControl.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.frameCap = [0: 30, 1: 60, 2: 0][self.capControl.selectedSegmentIndex] ?? 0
+            UserDefaults.standard.set(self.frameCap, forKey: "kisak.frameCap")
+            self.applyFrameCap()
+        }, for: .valueChanged)
+
+        statusFootnote.textColor = .lightGray
+        statusFootnote.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        statusFootnote.numberOfLines = 0
+
+        let stack = UIStackView(arrangedSubviews: [
+            title,
+            Self.row("MetalFX upscaling", fxSwitch),
+            Self.row("Render scale", scaleControl),
+            Self.row("Frame cap", capControl),
+            statusFootnote,
+        ])
+        stack.axis = .vertical
+        stack.spacing = 10
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        settingsPanel.layer.cornerRadius = 14
+        settingsPanel.clipsToBounds = true
+        settingsPanel.translatesAutoresizingMaskIntoConstraints = false
+        settingsPanel.contentView.addSubview(stack)
+        view.addSubview(settingsPanel)
+
+        NSLayoutConstraint.activate([
+            gear.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            gear.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
+            settingsPanel.topAnchor.constraint(equalTo: gear.bottomAnchor, constant: 6),
+            settingsPanel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            settingsPanel.widthAnchor.constraint(equalToConstant: 300),
+            stack.topAnchor.constraint(equalTo: settingsPanel.contentView.topAnchor, constant: 12),
+            stack.bottomAnchor.constraint(equalTo: settingsPanel.contentView.bottomAnchor, constant: -12),
+            stack.leadingAnchor.constraint(equalTo: settingsPanel.contentView.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: settingsPanel.contentView.trailingAnchor, constant: -12),
+        ])
+
+        // Visible on first-ever launch (so the CI screenshot proves the menu exists,
+        // and users discover it); hidden afterwards until the gear is tapped.
+        let seen = UserDefaults.standard.bool(forKey: "kisak.seenSettings")
+        settingsPanel.isHidden = seen
+        UserDefaults.standard.set(true, forKey: "kisak.seenSettings")
+    }
+
+    private static func row(_ text: String, _ control: UIView) -> UIStackView {
+        let label = UILabel()
+        label.text = text
+        label.textColor = .white
+        label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        let row = UIStackView(arrangedSubviews: [label, control])
+        row.axis = .horizontal
+        row.distribution = .equalSpacing
+        row.alignment = .center
+        return row
+    }
+
+    private func toggleSettings() {
+        settingsPanel.isHidden.toggle()
+    }
+
+    private func applyFrameCap() {
+        guard let link = displayLink else { return }
+        if frameCap > 0 {
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(frameCap),
+                                                            maximum: Float(frameCap),
+                                                            preferred: Float(frameCap))
+        } else {
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 120)
+        }
     }
 
     // MARK: - Controllers
@@ -148,12 +269,21 @@ final class MetalViewController: UIViewController {
         #else
         spatialScaler = nil
 
+        guard fxEnabled else {
+            metalFXStatus = "off (settings) — direct render"
+            return
+        }
+        guard renderScalePct < 100 else {
+            metalFXStatus = "off (100% scale) — direct render"
+            return
+        }
         guard MTLFXSpatialScalerDescriptor.supportsDevice(device) else {
             metalFXStatus = "unsupported (\(device.name)) — direct render"
             return
         }
-        let inW = max(1, Int(drawableSize.width * renderScale))
-        let inH = max(1, Int(drawableSize.height * renderScale))
+        let effectiveScale = CGFloat(renderScalePct) / 100.0
+        let inW = max(1, Int(drawableSize.width * effectiveScale))
+        let inH = max(1, Int(drawableSize.height * effectiveScale))
         let outW = Int(drawableSize.width), outH = Int(drawableSize.height)
 
         let texDesc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
@@ -236,6 +366,7 @@ final class MetalViewController: UIViewController {
             writeFirstFrameMarker()
         }
         if frameIndex % 30 == 0 {
+            statusFootnote.text = metalFXStatus
             hudLabel.text = """
             KisakCOD iOS stub — Metal live
             GPU: \(device.name)  frame \(frameIndex)
@@ -247,8 +378,8 @@ final class MetalViewController: UIViewController {
 
     // Proof-of-run artifact: CI (and a curious human) can pull this out of the app
     // sandbox container to verify Metal actually presented a frame, and which
-    // MetalFX/controller paths were live. Doubles as the first demonstration of
-    // the Documents-directory write path that Objective 3 routes the engine through.
+    // MetalFX/controller/settings paths were live. Doubles as the first demonstration
+    // of the Documents-directory write path that Objective 3 routes the engine through.
     private func writeFirstFrameMarker() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let marker = docs.appendingPathComponent("metal_first_frame.txt")
@@ -258,10 +389,10 @@ final class MetalViewController: UIViewController {
         drawableSize=\(metalView.metalLayer.drawableSize)
         metalfx=\(metalFXStatus)
         controller=\(controllerStatus)
+        settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
         date=\(ISO8601DateFormatter().string(from: Date()))
         """
         try? contents.write(to: marker, atomically: true, encoding: .utf8)
-        NSLog("KISAK_STUB_FIRST_FRAME_OK gpu=%@ metalfx=%@ controller=%@",
-              device.name, metalFXStatus, controllerStatus)
+        NSLog("KISAK_STUB_FIRST_FRAME_OK gpu=%@ metalfx=%@ controller=%@", device.name, metalFXStatus, controllerStatus)
     }
 }
