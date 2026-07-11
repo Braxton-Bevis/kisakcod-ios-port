@@ -1,8 +1,12 @@
 import UIKit
 import Metal
-import MetalFX
 import GameController
 import QuartzCore
+#if canImport(MetalFX)
+// The iphonesimulator SDK (as of Xcode 16.4) does not ship the MetalFX module
+// at all — only the device SDK does. Everything MetalFX is compile-gated.
+import MetalFX
+#endif
 
 // A UIView whose backing layer IS a CAMetalLayer — the iOS equivalent of the
 // HWND the engine's D3D9 device would have been created against.
@@ -25,7 +29,9 @@ final class MetalViewController: UIViewController {
     // the CI simulator) fall back to direct native-resolution rendering; the HUD
     // and the sandbox marker file record which path is live.
     private let renderScale: CGFloat = 0.5
+    #if canImport(MetalFX)
     private var spatialScaler: MTLFXSpatialScaler?
+    #endif
     private var sceneColorTexture: MTLTexture?
     private var lastScalerDrawableSize: CGSize = .zero
     private var metalFXStatus = "init"
@@ -136,8 +142,11 @@ final class MetalViewController: UIViewController {
     private func ensureScaler(for drawableSize: CGSize) {
         guard drawableSize != lastScalerDrawableSize else { return }
         lastScalerDrawableSize = drawableSize
-        spatialScaler = nil
         sceneColorTexture = nil
+        #if !canImport(MetalFX)
+        metalFXStatus = "module absent in this SDK (simulator) — direct render"
+        #else
+        spatialScaler = nil
 
         guard MTLFXSpatialScalerDescriptor.supportsDevice(device) else {
             metalFXStatus = "unsupported (\(device.name)) — direct render"
@@ -167,6 +176,7 @@ final class MetalViewController: UIViewController {
             ? "spatial \(inW)x\(inH) → \(outW)x\(outH)"
             : "scaler creation failed — direct render"
         if spatialScaler == nil { sceneColorTexture = nil }
+        #endif
     }
 
     // MARK: - Frame loop
@@ -207,11 +217,13 @@ final class MetalViewController: UIViewController {
             encoder.endEncoding()
         }
 
+        #if canImport(MetalFX)
         if let scaler = spatialScaler, let scene = sceneColorTexture {
             scaler.colorTexture = scene
             scaler.outputTexture = drawable.texture
             scaler.encode(commandBuffer: commandBuffer)
         }
+        #endif
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
