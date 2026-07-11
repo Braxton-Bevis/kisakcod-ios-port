@@ -61,5 +61,11 @@ xcrun simctl install booted dd/Build/Products/Debug-iphonesimulator/KisakStub.ap
 xcrun simctl launch booted dev.braxton.kisakstub
 ```
 
-Expected on screen: dark blue slowly color-shifting background, one large RGB-gradient
-triangle, white HUD text `KisakCOD iOS stub — Metal live / GPU: <name> frame <n>` counting up.
+Expected on screen: dark blue slowly color-shifting background, an RGB-gradient triangle,
+a system **virtual game controller overlay** (left thumbstick + A/B buttons —
+GCVirtualController), and a white HUD reporting GPU, frame counter, **MetalFX status**
+(`spatial WxH → WxH` on supported hardware, `unsupported — direct render` on the
+simulator), and controller name + live stick values. The left stick moves the triangle
+(physical controllers work identically via GCController), A switches the background
+palette, B recenters. The scene renders at 0.5× resolution and MetalFX spatial-upscales
+it to native when the GPU supports it (iOS 16+, `MTLFXSpatialScalerDescriptor.supportsDevice`).
