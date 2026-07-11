@@ -97,9 +97,9 @@ iOS 18.5 SDK) with downloadable artifacts.
 | 7 | ODE stdarg fix | 10 TUs converge on ONE engine-internal C++ error: broken never-instantiated template (`ui_shared.h:1401`) — zero platform headers left in their error paths |
 | 8 | `-fdelayed-template-parsing` (MSVC template semantics) | **`bg_pmove.cpp` PASSES — first full engine TU compiling for arm64-apple-ios.** Remaining classes: zlib `Byte` typedef clash, `HWND__` tag absent from DXVK's windows_base.h (both shallow), plus the two by-design terminal walls (win32 layer / Miles) |
 
-Win32 regression: run 29169268868 (workflow_dispatch, Debug+Release full engine build)
-validates that all engine-source edits are invisible to MSVC — result recorded in the
-journal's final entry.
+Win32 regression: run 29169595761 (workflow_dispatch on final HEAD, Debug+Release full
+engine build) — **both configurations green** (Release 24m41s, Debug 17m13s). Every
+engine-source edit made by this experiment is invisible to the MSVC/win32 build.
 
 ---
 

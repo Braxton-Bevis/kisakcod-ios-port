@@ -279,6 +279,15 @@ Remaining failure classes at experiment close (all characterized):
 Census loop closed here deliberately: every remaining error is either shallow-mechanical
 or a scoped replace-subsystem item. Continuing rounds would be porting, not probing.
 
+## FINAL — win32 regression verdict (2026-07-11) ✅
+
+Run 29169595761 (workflow_dispatch on final HEAD, full engine Debug + Release):
+**both green** (Release 24m41s, Debug 17m13s). All ~50 engine-source files touched by
+the experiment (layout-assert macro conversion across 43 files, `#ifdef KISAK_IOS`
+gates in com_files/com_math/qcommon/threads.h/snd_public.h/bg_public.h, ODE header
+gates, r_gfx.h `byte` typedef) are invisible to the MSVC/win32 build. The probe is
+non-destructive to the upstream target. Experiment closed — see FRONTIER_REPORT.md.
+
 **Decision (Objective 4):** DXVK native headers are now the *census baseline* — the
 TRANSLATION path is formally chosen. `scripts/platform/ios/platform.cmake` accepts
 `-DDXVK_NATIVE_INCLUDE=<dxvk>/include/native` for the CMake path; CI pins dxvk v2.7.1
