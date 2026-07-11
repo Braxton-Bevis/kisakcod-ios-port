@@ -1,0 +1,34 @@
+# XcodeGen spec for the KisakCOD iOS stub shell.
+# Regenerate the .xcodeproj any time with:  xcodegen generate  (run inside ios/)
+# The .xcodeproj is deliberately NOT checked in — this file is the source of truth.
+name: KisakStub
+options:
+  bundleIdPrefix: dev.braxton
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+targets:
+  KisakStub:
+    type: application
+    platform: iOS
+    sources:
+      - Stub
+    info:
+      path: Stub/Info.plist
+      properties:
+        CFBundleDisplayName: KisakStub
+        UILaunchScreen: {}            # empty launch screen dict -> app gets full native resolution
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortrait
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.braxton.kisakstub
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: false

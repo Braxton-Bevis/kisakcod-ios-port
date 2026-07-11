@@ -1,0 +1,117 @@
+name: iOS Stub - Build, Simulator Launch Proof, Device IPA
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-stub.yml'
+  workflow_dispatch:
+
+jobs:
+  # Job 1: build for the iOS Simulator, boot one, install + launch the app,
+  # and collect hard evidence: a screenshot and the marker file the app writes
+  # into its sandbox after presenting its first Metal frame.
+  simulator-launch-proof:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build (iphonesimulator)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project KisakStub.xcodeproj \
+            -scheme KisakStub \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath dd \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -n 40
+
+      - name: Boot simulator, install, launch, capture proof
+        run: |
+          set -euxo pipefail
+          UDID=$(xcrun simctl list devices available --json \
+            | jq -r '[.devices[] | .[] | select(.name | test("^iPhone"))][0].udid')
+          echo "Using simulator UDID=$UDID"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" ios/dd/Build/Products/Debug-iphonesimulator/KisakStub.app
+          xcrun simctl launch "$UDID" dev.braxton.kisakstub
+          sleep 10
+          mkdir -p proof
+          xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-1.png
+          sleep 5
+          xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-2.png
+          # HARD ASSERTION: the app only writes this file after successfully
+          # presenting a Metal frame. Missing file -> job fails.
+          CONTAINER=$(xcrun simctl get_app_container "$UDID" dev.braxton.kisakstub data)
+          cat "$CONTAINER/Documents/metal_first_frame.txt" | tee proof/metal_first_frame.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulator-launch-proof
+          path: proof/
+          retention-days: 14
+
+  # Job 2: build the real arm64 device binary (unsigned) and package it as an
+  # .ipa. Signing is the human last-mile: Sideloadly on Windows or Xcode on Mac
+  # re-signs with a personal Apple ID. See ios/README.md.
+  device-ipa-unsigned:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build (iphoneos, unsigned)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project KisakStub.xcodeproj \
+            -scheme KisakStub \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath dd \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -n 40
+
+      - name: Verify binary is arm64-apple-ios and package IPA
+        working-directory: ios
+        run: |
+          set -euxo pipefail
+          APP=dd/Build/Products/Release-iphoneos/KisakStub.app
+          lipo -info "$APP/KisakStub"
+          otool -l "$APP/KisakStub" | grep -A3 LC_BUILD_VERSION
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry KisakStub-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KisakStub-unsigned-ipa
+          path: ios/KisakStub-unsigned.ipa
+          retention-days: 14
