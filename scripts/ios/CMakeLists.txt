@@ -9,6 +9,7 @@ project(KisakCOD-ios-probe)
 include(${PLATFORM_DIR}/${KISAK_PLATFORM}/platform.cmake)
 
 set(IOS_PROBE_SOURCES
+    "${SRC_DIR}/ios/sys_ios_paths.mm"        # new iOS platform layer (must compile clean)
     "${SRC_DIR}/bgame/bg_pmove.cpp"          # shared game logic (expected most portable)
     "${SRC_DIR}/game_mp/g_main_mp.cpp"       # server game logic
     "${SRC_DIR}/server_mp/sv_main_mp.cpp"    # server core

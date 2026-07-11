@@ -43,7 +43,7 @@ jobs:
             name=$(echo "$f" | tr '/' '_')
             if xcrun clang++ -target arm64-apple-ios15.0 -isysroot "$SDK" \
                  -std=gnu++20 -fsyntax-only -ferror-limit=25 \
-                 -fno-strict-aliasing -fwrapv -w \
+                 -fno-strict-aliasing -fwrapv -fdeclspec -w \
                  -DKISAK_MP -DKISAK_IOS -Isrc -Ideps \
                  "$f" > "census/logs/$name.log" 2>&1; then
               echo -e "$f\tPASS\t-" >> census/census.tsv

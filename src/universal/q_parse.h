@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "kisak_layout.h"
 
 struct parseInfo_t // sizeof=0x420
 {                                       // ...
@@ -19,7 +20,7 @@ struct parseInfo_t // sizeof=0x420
     const char *backup_text;
     const char *parseFile;
 };
-static_assert(sizeof(struct parseInfo_t) == 0x420);
+KISAK_LAYOUT_ASSERT(sizeof(struct parseInfo_t) == 0x420);
 
 struct ParseThreadInfo // sizeof=0x460C
 {                                       // ...

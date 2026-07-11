@@ -5,6 +5,9 @@
 // q_shared.h -- included first by ALL program modules.
 // A user mod should never modify this file
 
+#include <climits>   // INT_MIN/INT_MAX used below; MSVC headers leak these, clang/iOS does not
+#include "kisak_layout.h"   // KISAK_LAYOUT_ASSERT — x86-32 layout asserts, relaxable on iOS
+
 #ifdef _WIN32
 #pragma warning(disable : 4018)     // signed/unsigned mismatch
 //#pragma warning(disable : 4032)		//formal parameter 'number' has different type when promoted
@@ -850,7 +853,7 @@ struct StringTable // sizeof=0x10
 	int rowCount;
 	const char **values;
 };
-static_assert(sizeof(StringTable) == 16);
+KISAK_LAYOUT_ASSERT(sizeof(StringTable) == 16);
 
 const char *__cdecl StringTable_GetColumnValueForRow(const StringTable *table, int row, int column);
 const char *__cdecl StringTable_Lookup(

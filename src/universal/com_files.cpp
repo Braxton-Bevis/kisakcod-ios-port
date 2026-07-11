@@ -12,6 +12,9 @@
 #include <qcommon/cmd.h>
 #include <qcommon/files.h>
 #include <io.h>
+#ifdef KISAK_IOS
+#include <ios/sys_ios.h>
+#endif
 
 const dvar_t *fs_remotePCDirectory;
 const dvar_t *fs_remotePCName;
@@ -1269,7 +1272,13 @@ void FS_RegisterDvars()
     fs_copyfiles = Dvar_RegisterBool("fs_copyfiles", 0, DVAR_INIT, "Copy all used files to another location");
     v1 = (char *)Sys_DefaultCDPath();
     fs_cdpath = Dvar_RegisterString("fs_cdpath", v1, DVAR_INIT, "CD path");
+#ifdef KISAK_IOS
+    // iOS sandbox (Objective 3): game data is read from the code-signed app
+    // bundle; Sys_Cwd() inside an app container is meaningless ('/').
+    v2 = (char *)Sys_iOS_BundlePath();
+#else
     v2 = Sys_Cwd();
+#endif
     fs_basepath = Dvar_RegisterString("fs_basepath", v2, DVAR_INIT | DVAR_AUTOEXEC, "Base game path");
     fs_basegame = Dvar_RegisterString("fs_basegame", (char *)"", DVAR_INIT, "Base game name");
     fs_gameDirVar = Dvar_RegisterString(
@@ -1279,7 +1288,15 @@ void FS_RegisterDvars()
         "Game data directory. Must be \"\" or a sub directory of 'mods/'.");
     Dvar_SetDomainFunc((dvar_s *)fs_gameDirVar, FS_GameDirDomainFunc);
     fs_ignoreLocalized = Dvar_RegisterBool("fs_ignoreLocalized", 0, DVAR_LATCH | DVAR_CHEAT, "Ignore localized files");
+#ifdef KISAK_IOS
+    // iOS sandbox (Objective 3): every write the engine ever makes (configs,
+    // players/, mods/, screenshots, logs) roots here — the only writable,
+    // persistent location an iOS app owns. The M1 stub already proved this
+    // path works by writing its first-frame marker into Documents/.
+    homePath = (char *)Sys_iOS_DocumentsPath();
+#else
     homePath = (char *)RETURN_ZERO32();
+#endif
     if (!homePath || !*homePath)
         homePath = (char *)fs_basepath->reset.integer;
     fs_homepath = Dvar_RegisterString("fs_homepath", homePath, DVAR_INIT | DVAR_AUTOEXEC, "Game home path");

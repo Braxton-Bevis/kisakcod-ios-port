@@ -159,8 +159,17 @@ bool __cdecl Vec4IsNormalized(const vec4r v);
 
 void __cdecl TRACK_com_math();
 
-// == RANDOM == 
+// == RANDOM ==
 void __cdecl Rand_Init(int seed);
+
+#ifdef KISAK_IOS
+// POSIX <stdlib.h> declares `long random(void)`; C++ forbids overloading on
+// return type alone, so on iOS the engine's float random() is renamed at the
+// token level. stdlib.h is pulled in first so its declaration is already made
+// (include guards prevent the macro from ever mangling it).
+#include <stdlib.h>
+#define random() q_engine_random()
+#endif
 
 float __cdecl random();
 float __cdecl crandom();
