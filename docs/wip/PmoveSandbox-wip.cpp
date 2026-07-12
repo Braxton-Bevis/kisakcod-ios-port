@@ -19,7 +19,7 @@
 #include <cmath>
 
 // Engine entry point (defined in src_bgame_bg_pmove.cpp.o):
-//   void __cdecl Pmove(pmove_t *pm);   (declared via bg_public.h/bg_local.h)
+//   void __cdecl Pmove(pmove_t *pm);
 void __cdecl Pmove(pmove_t *pm);
 // Dvar-seeding registrars from the real bg_jump.cpp / bg_mantle.cpp objects.
 void __cdecl Jump_RegisterDvars();
