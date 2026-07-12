@@ -533,3 +533,18 @@ cataloged; 45 pointer-bearing fastfile structs identified; full closure estimate
 catalog / community precedent incl. OpenAssetTools GPL-3.0 as adaptable, CoD4x AGPL as
 read-only reference). Both docs reviewed before commit.
 
+
+## Stream 1 VERIFIED - LP64 hunk allocator green on both gates (2026-07-12, Windows seat)
+
+NEXT_SESSION stream 1 complete: 33 pointer-truncation sites converted across 14
+functions in com_memory.{cpp,h} (+1 caller in cm_load_obj.cpp), HunkUser end/pos
+pointer-sized under KISAK_IOS, page math at native 16KB granularity. Gates:
+- iOS census 26/26 PASS (run 29176526294) - after fixing a PRE-EXISTING CI-vs-local
+  drift: CI compiled against stock dxvk v2.7.1 headers while the Mac's local census
+  used the M9-patched ones; CI now applies scripts/platform/ios/dxvk-v2.7.1-ios.patch
+  after cloning (attribution verified against the prior run's artifact).
+- Windows regression build green (run 29176449196) - all changes #else-preserve the
+  original code.
+Stream 2 (boot scaffold) is unblocked. FASTFILE_PLAN.md + struct catalog also landed
+this session (see FF-prep entry).
+
