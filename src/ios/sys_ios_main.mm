@@ -21,13 +21,10 @@
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 
-// Objective-C's objc.h typedefs BOOL as `bool` (arm64); DXVK's windows_base.h
-// (pulled in by win_local.h → <Windows.h>) typedefs BOOL as `int` — a hard
-// typedef clash inside a single .mm TU. Foundation/UIKit are parsed first with
-// the real ObjC BOOL, then the Win32 BOOL is renamed for the engine includes.
-// Engine declarations spelled `BOOL` (Sys_RemoveDirTree, IN_ShowSystemCursor)
-// are therefore spelled `int` in the definitions below — the identical type.
-#define BOOL WIN32_BOOL
+// DXVK's windows_base.h now carries an __OBJC__ guard (added with the iOS WSI
+// backend): ObjC++ TUs keep the ObjC runtime's BOOL and Win32 code uses
+// WINBOOL. Engine declarations spelled `BOOL` resolve to the ObjC BOOL here;
+// the definitions below use the same spelling so signatures keep matching.
 #include <win32/win_local.h>
 
 #include <client/client.h>
@@ -558,7 +555,7 @@ void IN_DeactivateWin32Mouse()
     // KISAKTODO(ios-input): no cursor to capture/release exists on iOS
 }
 
-void __cdecl IN_ShowSystemCursor(int show) // BOOL in win_local.h — see BOOL note at top
+void __cdecl IN_ShowSystemCursor(BOOL show) // BOOL: ObjC bool via windows_base.h __OBJC__ guard
 {
     // KISAKTODO(ios-input): no system cursor on iOS (UIPointerInteraction on iPadOS later)
 }
@@ -572,7 +569,7 @@ void __cdecl Sys_Mkdir(const char *path)
     mkdir(path, 0755);
 }
 
-int __cdecl Sys_RemoveDirTree(const char *path) // BOOL in win_local.h — see BOOL note at top
+BOOL __cdecl Sys_RemoveDirTree(const char *path)
 {
     @autoreleasepool
     {
