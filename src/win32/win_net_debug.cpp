@@ -2,6 +2,9 @@
 #include "win_net_debug.h"
 #include <script/scr_vm.h>
 #include "win_local.h"
+#ifdef KISAK_IOS
+#include <ios/bsd_net_compat.h> // winsock 1.1 -> BSD sockets (DEPENDENCY_MAP §5); win_local.h no longer pulls winsock.h on iOS
+#endif
 
 static int g_debugClient;
 
@@ -115,7 +118,12 @@ void __cdecl Sys_Listen_f()
 			}
 		}
 		g_debugClient = 1;
+#ifdef KISAK_IOS
+		// SPI_SETSCREENSAVEACTIVE(FALSE) has no iOS analogue; the platform
+		// layer pins UIApplication.idleTimerDisabled at init (DEPENDENCY_MAP §2)
+#else
 		SystemParametersInfoA(0x2001u, 0, 0, 3u);
+#endif
 	}
 }
 
@@ -260,9 +268,15 @@ int __cdecl Sys_ReadDebugSocketData(char *buffer, int len, int blocking)
 		buffer += read;
 	}
 	err = WSAGetLastError();
+#ifdef KISAK_IOS
+	if (err == EWOULDBLOCK) // winsock 10035
+		goto block;
+	if (err == ECONNRESET) // winsock 10054
+#else
 	if (err == 10035)
 		goto block;
 	if (err == 10054)
+#endif
 	{
 		Sys_DebugSocketError("Sys_ReadDebugSocketData: Socket closed");
 	}
@@ -302,7 +316,11 @@ int __cdecl Sys_UpdateDebugSocket()
 			if (ip_debugSocket[i] == -1)
 			{
 				ip_debugSocket[i] = 0;
+#ifdef KISAK_IOS
+				if (WSAGetLastError() != EWOULDBLOCK) // winsock 10035
+#else
 				if (WSAGetLastError() != 10035)
+#endif
 				{
 					v1 = NET_ErrorString();
 					v2 = va("Sys_UpdateDebugSocket: %s\n", v1);
@@ -356,9 +374,15 @@ void __cdecl Sys_DebugSend(int channel, const char *buf, int len, const char *na
 				g_debugReadBytesRemote = debugReadBytesRemote;
 			}
 			err = WSAGetLastError();
+#ifdef KISAK_IOS
+			if (err != EWOULDBLOCK) // winsock 10035
+			{
+				if (err == ECONNRESET) // winsock 10054
+#else
 			if (err != 10035)
 			{
 				if (err == 10054)
+#endif
 				{
 					Sys_DebugSocketError("Sys_DebugSend: Socket closed");
 				}
@@ -377,7 +401,11 @@ void __cdecl Sys_DebugSend(int channel, const char *buf, int len, const char *na
 			MyAssertHandler(".\\win32\\win_net.cpp", 1911, 0, "%s", "ip_debugSocket[channel]");
 		while (send(ip_debugSocket[channel], buf, len, 0) == -1)
 		{
+#ifdef KISAK_IOS
+			if (WSAGetLastError() != EWOULDBLOCK) // winsock 10035
+#else
 			if (WSAGetLastError() != 10035)
+#endif
 			{
 				v6 = NET_ErrorString();
 				v7 = va("%s: %s", name, v6);

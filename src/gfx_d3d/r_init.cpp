@@ -32,6 +32,10 @@
 #include <game_mp/g_public_mp.h>
 #endif
 
+#ifdef KISAK_IOS
+#include <ios/r_ios_window.h> // Sys_iOS_GetHostWindow — app shell owns the window
+#endif
+
 enum DxCapsResponse : __int32
 {                                       // ...
     DX_CAPS_RESPONSE_QUIT = 0x0,  // ...
@@ -357,6 +361,13 @@ void __cdecl TRACK_r_init()
 
 void __cdecl Sys_DirectXFatalError()
 {
+#ifdef KISAK_IOS
+    // No message-box UI on iOS; the D3D9 layer here is DXVK, so a failure
+    // means the Vulkan/MoltenVK stack didn't come up. Log and die.
+    Sys_EnterCriticalSection(CRITSECT_FATAL_ERROR);
+    Sys_Print("FATAL: DirectX (DXVK d3d9) initialization failed\n");
+    exit(-1);
+#else
     HWND ActiveWindow; // eax
     char *v1; // [esp-Ch] [ebp-Ch]
     char *v2; // [esp-8h] [ebp-8h]
@@ -368,6 +379,7 @@ void __cdecl Sys_DirectXFatalError()
     MessageBoxA(ActiveWindow, v1, v2, 0x10u);
     ShellExecuteA(0, "open", "Docs\\TechHelp\\Tech Help\\Information\\DirectX.htm", 0, 0, 3);
     exit(-1);
+#endif
 }
 
 const char *__stdcall DXGetErrorDescription9A(int a1)
@@ -2901,9 +2913,15 @@ void R_ShutdownDirect3D()
     {
         if (!dx.windows[--dx.windowCount].hwnd)
             MyAssertHandler(".\\r_init.cpp", 2205, 0, "%s", "dx.windows[dx.windowCount].hwnd");
+#ifdef KISAK_IOS
+        // No Win32 window to destroy — the CAMetalLayer-backed view is owned
+        // by UIKit and outlives the renderer.
+        dx.windows[dx.windowCount].hwnd = 0;
+#else
         if (IsWindow(dx.windows[dx.windowCount].hwnd))
             DestroyWindow(dx.windows[dx.windowCount].hwnd);
         dx.windows[dx.windowCount].hwnd = 0;
+#endif
     }
     if (dx.device)
     {
@@ -3471,6 +3489,7 @@ void __cdecl R_SetShadowmapFormats_DX(uint32_t adapterIndex)
     gfxMetrics.shadowmapSamplerState = (SAMPLER_CLAMP_V | SAMPLER_CLAMP_U | SAMPLER_FILTER_NEAREST);
 }
 
+#ifndef KISAK_IOS // monitor enumeration is Win32-only; one screen on iOS
 struct GfxEnumMonitors // sizeof=0x8
 {                                       // ...
     int monitorIndex;                   // ...
@@ -3489,9 +3508,15 @@ int __stdcall R_MonitorEnumCallback(HMONITOR__ *monitorHandle, HDC__ *hdc, tagRE
         return 0;
     }
 }
+#endif
 
 HMONITOR__ *__cdecl R_ChooseMonitor()
 {
+#ifdef KISAK_IOS
+    // Single display; adapter 0 wins in R_ChooseAdapter, which already
+    // handles desiredMonitor == NULL.
+    return 0;
+#else
     POINT pt; // [esp+0h] [ebp-10h]
     GfxEnumMonitors enumData; // [esp+8h] [ebp-8h] BYREF
 
@@ -3506,6 +3531,7 @@ HMONITOR__ *__cdecl R_ChooseMonitor()
     pt.x = Dvar_GetInt("vid_xpos");
     pt.y = Dvar_GetInt("vid_ypos");
     return MonitorFromPoint(pt, 1u);
+#endif
 }
 
 uint32_t __cdecl R_ChooseAdapter()
@@ -3538,6 +3564,43 @@ uint32_t __cdecl R_ChooseAdapter()
 
 char __cdecl R_CreateWindow(GfxWindowParms *wndParms)
 {
+#ifdef KISAK_IOS
+    iassert( wndParms );
+    iassert( wndParms->hwnd == NULL );
+    if (wndParms->fullscreen)
+    {
+        Com_Printf(
+            8,
+            "Attempting %i x %i fullscreen with 32 bpp at %i hz\n",
+            wndParms->displayWidth,
+            wndParms->displayHeight,
+            wndParms->hz);
+    }
+    else
+    {
+        Com_Printf(
+            8,
+            "Attempting %i x %i window at (%i, %i)\n",
+            wndParms->displayWidth,
+            wndParms->displayHeight,
+            wndParms->x,
+            wndParms->y);
+    }
+    // The CAMetalLayer-backed UIView already exists — the app shell created it
+    // before renderer init. Adopt it; no RegisterClass/AdjustWindowRect/
+    // CreateWindowEx/SetFocus on iOS.
+    wndParms->hwnd = (HWND__ *)Sys_iOS_GetHostWindow();
+    if (wndParms->hwnd)
+    {
+        Com_Printf(8, "Game window successfully created.\n");
+        return 1;
+    }
+    else
+    {
+        Com_Printf(8, "Couldn't create a window.\n");
+        return 0;
+    }
+#else
     DWORD exStyle; // [esp+0h] [ebp-1Ch]
     DWORD style; // [esp+4h] [ebp-18h]
     HINSTANCE__ *hinst; // [esp+8h] [ebp-14h]
@@ -3608,22 +3671,31 @@ char __cdecl R_CreateWindow(GfxWindowParms *wndParms)
         Com_Printf(8, "Couldn't create a window.\n");
         return 0;
     }
+#endif
 }
 
 void __cdecl Sys_HideSplashWindow()
 {
+#ifdef KISAK_IOS
+    // Splash is LaunchScreen.storyboard on iOS; UIKit owns and dismisses it.
+#else
     if (g_splashWnd)
         ShowWindow(g_splashWnd, 0);
+#endif
 }
 
 void __cdecl Sys_DestroySplashWindow()
 {
+#ifdef KISAK_IOS
+    // No Win32 splash window to destroy on iOS.
+#else
     if (g_splashWnd)
     {
         Sys_HideSplashWindow();
         DestroyWindow(g_splashWnd);
         g_splashWnd = 0;
     }
+#endif
 }
 
 char __cdecl R_CreateGameWindow(GfxWindowParms *wndParms)
@@ -3633,7 +3705,11 @@ char __cdecl R_CreateGameWindow(GfxWindowParms *wndParms)
     if (!R_InitHardware(wndParms))
         return 0;
     dx.targetWindowIndex = 0;
+#ifdef KISAK_IOS
+    // Host view is already visible; nothing to ShowWindow.
+#else
     ShowWindow(wndParms->hwnd, 5);
+#endif
     Sys_HideSplashWindow();
     return 1;
 }
@@ -3994,6 +4070,19 @@ void __cdecl R_SetupAntiAliasing(const GfxWindowParms *wndParms)
 
 bool __cdecl R_GetMonitorDimensions(int *width, int *height)
 {
+#ifdef KISAK_IOS
+    // Single fixed display; no Win32 monitor API. DXVK's d3d9 reports the
+    // screen size as adapter 0's current display mode.
+    _D3DDISPLAYMODE mode; // BYREF
+
+    if (dx.d3d9 && dx.d3d9->GetAdapterDisplayMode(dx.adapterIndex, &mode) >= 0)
+    {
+        *width = mode.Width;
+        *height = mode.Height;
+        return *width > 0 && *height > 0;
+    }
+    return 0;
+#else
     tagMONITORINFO mi; // [esp+0h] [ebp-2Ch] BYREF
     HMONITOR__ *adapterMonitor; // [esp+28h] [ebp-4h]
 
@@ -4011,6 +4100,7 @@ bool __cdecl R_GetMonitorDimensions(int *width, int *height)
         *height = GetSystemMetrics(1);
         return *width > 0 && *height > 0;
     }
+#endif
 }
 
 HRESULT __cdecl R_CreateDeviceInternal(HWND__ *hwnd, uint32_t behavior, _D3DPRESENT_PARAMETERS_ *d3dpp)

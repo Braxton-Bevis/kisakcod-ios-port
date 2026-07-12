@@ -16,6 +16,7 @@ add_compile_options(
     -fms-extensions        # MSVC-isms throughout the decomp: __declspec, __forceinline, __int32, anonymous structs
     -fdelayed-template-parsing  # MSVC never parses uninstantiated template bodies; the decomp contains broken ones (ui_shared.h:1401)
     -w                     # first pass: collect hard errors only, warnings later
+    -Wno-c++11-narrowing   # r_state.h pins 0x80000000 into an __int32 enum; MSVC wraps silently, same bits either way
     -ferror-limit=25
 )
 

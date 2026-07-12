@@ -327,7 +327,7 @@ TRANSLATION path is formally chosen. `scripts/platform/ios/platform.cmake` accep
 `-DDXVK_NATIVE_INCLUDE=<dxvk>/include/native` for the CMake path; CI pins dxvk v2.7.1
 (with the `--recurse-submodules=include/native/directx` lesson baked in).
 
-**Runtime plan for the translation stack (documented, NOT yet attempted):**
+**Runtime plan for the translation stack (documented, NOT yet attempted — resolved in M8, see below):**
 engine d3d9 calls → DXVK d3d9 module built *native* for iOS → Vulkan → MoltenVK →
 CAMetalLayer (the stub app's layer, already proven on-device-class). Honest risk
 register: (1) DXVK has no official Apple support — community D3D9-on-MoltenVK forks
@@ -340,3 +340,108 @@ consumes directly, so runtime HLSL compilation is avoidable. Item (1) is the nex
 frontier past this experiment's horizon.
 
 ---
+
+## M7 — The Mac arrives: entire experiment reproduced locally (2026-07-11)
+
+**Attempted:** the FRONTIER_REPORT "what a human does next" list, on a real Mac
+(macOS 26.5, Xcode 26.6, iOS 26.5 SDK, 8-core/8GB) with no Homebrew — toolchain
+bootstrapped from release binaries alone (cmake 4.3.3, xcodegen 2.45.4,
+meson 1.11.2 + ninja via pip, glslang from Khronos releases).
+
+**Compiled/Ran?** ✅ everything:
+- Stub app built locally first try (after `xcodebuild -downloadComponent
+  MetalToolchain` — Xcode 26 ships the Metal compiler as a separate download).
+- Booted an iPhone 17 Pro simulator; screenshots + sandbox marker verified
+  (live render loop, virtual controller connected, settings persisted).
+- The compile census reproduced EXACTLY against the iOS 26.5 SDK: same 2/14
+  PASS, same failure strata as runs 29169xxxxxx on the 18.5 SDK. The
+  experiment's CI-only measurements hold on real local hardware.
+
+## M8 — Census sweep: 2/14 → 23/23, all subsystems ported (2026-07-11)
+
+**Concrete changes (mine + six parallel subsystem ports):**
+- Shared compat surface: `src/ios/msvc_crt_compat.h/.cpp` (MSVC CRT spellings →
+  libc: _stricmp/_vsnprintf/fopen_s/sprintf_s/_TRUNCATE/…, Interlocked* →
+  __atomic with Win32 return semantics, __rdtsc → cntvct_el0),
+  `src/ios/win32_tags.h` (HWND__/HINSTANCE__/… incomplete tags, tagPOINT,
+  ARRAYSIZE, Sleep → nanosleep), zlib `Byte` typedef (TARGET_OS_MAC guard bug),
+  win_local.h made an iOS-safe gateway (dinput/winsock gated, DXVK typedefs).
+- `qcommon/threads.cpp`: real pthreads port — events as mutex+cond,
+  CREATE_SUSPENDED via start-gate, mach thread_suspend/resume, QoS classes.
+- `universal/com_files.cpp`+`win_common.cpp`: POSIX port (stat/opendir/mkdir),
+  plus LP64 landmines fixed on the FS boot path (DvarValue .integer-as-pointer
+  reads → .string, Sys_ListFiles 4-byte-pointer sizings).
+- `win32/win_net.cpp`: winsock → BSD sockets. `win32/win_steam.cpp`: explicit
+  no-op backend. `sound/`: typed Miles stub (`mss_ios_stub.h` + no-op AIL_*).
+- NEW `src/ios/sys_ios_main.mm`: the platform entry layer replacing
+  win_main.cpp (Sys_* contract: event queue, POSIX fs, UIPasteboard clipboard,
+  sysctl SysInfo; UIKit input wiring left as KISAKTODO).
+- `gfx_d3d/r_init.cpp`: windowing seam — R_CreateWindow adopts the app shell's
+  CAMetalLayer view via `Sys_iOS_GetHostWindow()` (KISAKTODO bring-up),
+  single-screen R_ChooseMonitor, GetAdapterDisplayMode for metrics.
+- cmd.cpp dumpraw dev tool gated (std::format needs iOS 16.3; LP64-unsafe).
+
+**Census: all 23 tracked TUs compile clean for arm64-apple-ios** (list grew
+from 14: + sys_ios_main, msvc_crt_compat, snd_ios_stub, g_utils_mp, huffman,
+msg_mp, q_shared, com_math, win_net, win_steam; win_main.cpp retired in favor
+of its replacement). Zero platform headers OR platform symbols left anywhere.
+
+## M9 — FRONTIER RESOLVED: DXVK d3d9 builds as an arm64-apple-ios library (2026-07-11)
+
+The "riskiest unknown in the whole port" (FRONTIER_REPORT #2) fell in an
+afternoon. dxvk v2.7.1 cross-compiles for iOS with a **5-hunk patch**
+(`scripts/platform/ios/dxvk-v2.7.1-ios.patch`):
+`__unix__`→`+ __APPLE__` in util_win32_compat.h (the entire "no Apple support"
+wall was one preprocessor gate), an lzcnt overload ambiguity (Darwin size_t),
+Apple's 1-arg pthread_setname_np, a missing <cstddef>, and
+static-archive-instead-of-version-script linking on Darwin. WSI = SDL2 built
+for iOS (official upstream support). Result, machine-verified:
+
+> `libdxvk_d3d9.a` — arm64, `Direct3DCreate9`/`Direct3DCreate9Ex` exported,
+> 46,804 symbols, alongside libdxvk/libdxso/libwsi/libvkcommon static libs.
+
+Reproducer: `scripts/platform/ios/build-dxvk-ios.sh`. MoltenVK v1.4.1 iOS
+xcframework downloaded (prebuilt) as the Vulkan implementation for runtime
+bring-up — which is the remaining unknown: instance/device creation +
+SDL_Window over the CAMetalLayer + engine d3d9 calls end-to-end.
+
+## M10 — ENGINE CODE EXECUTES ON iOS (2026-07-11)
+
+`scripts/platform/ios/build-engine-lib.sh` archives every census-passing TU
+into `ios/libs/<sdk>/libkisakcod.a` (23 TUs, device + simulator). The stub
+links the leaf subset (`libkisaksmoke.a`: com_math, q_shared, msg_mp, huffman,
+msvc_crt_compat — heavier TUs await their dependency closure) with a
+scaffolding TU (`ios/Stub/EngineSmoke.cpp`) satisfying 21 externs into
+not-yet-graduated TUs (abort-loudly stubs + zeroed globals, documented).
+
+**Ran?** ✅ Simulator AND physical device. HUD + sandbox marker:
+`engine=len=5.00 out=(0.60,0.00,0.80) bits255=8 bits1024=11 wild=0` —
+Vec3NormalizeTo (player math), GetMinBitCountForNum (network bit-packing,
+running through the LP64 _BitScanReverse fix), I_stricmpwild (FS wildcard) all
+return exactly the predicted values.
+
+## M11 — Physical device: iPad Pro 13" (M5), signed with the user's Apple ID (2026-07-11)
+
+Stub v4 (graphics settings expanded: 3-tier shader quality with real pipeline
+states, capability-gated ray-tracing toggle, 25–100% render scale, live
+resolution readout, 30/60/120/Max cap, measured-FPS HUD) built with automatic
+signing (personal team NCYQDHQ93F; first build minted the certificate),
+installed and launched via devicectl on iPadOS (Developer Mode + one manual
+trust tap in Settings). Marker file pulled off the device:
+
+```
+gpu=Apple M5 GPU
+drawableSize=(3200.0, 2400.0)
+resolution=1600×1200 → 3200×2400
+metalfx=spatial 1600x1200 → 3200x2400   ← REAL MetalFX spatial upscaling
+raytracing=supported, off               ← M5 reports Metal RT capability
+fps=120.0                               ← ProMotion, uncapped
+engine=len=5.00 out=(0.60,0.00,0.80) bits255=8 bits1024=11 wild=0
+```
+
+The HUD MetalFX line on this chip reads **"spatial 1600x1200 → 3200x2400"** —
+the first time the MetalFX code path (simulator: "module absent") has executed:
+the scene renders at 50% scale and MTLFXSpatialScaler feeds the drawable at
+native 3200×2400. Wireless installs: the CoreDevice pairing tunnel
+(iPad-of-Braxton-2.coredevice.local) serves network installs automatically
+once paired — verified by devicectl after USB unplug (see README dev notes).

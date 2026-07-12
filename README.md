@@ -37,10 +37,10 @@ There is no macOS/Linux/ARM branch to start from. The engine assumes Windows API
 | Build retarget: `cmake -DKISAK_PLATFORM=ios` + per-file compile census in CI | ✅ complete |
 | Windows→iOS dependency map (every API family → concrete replacement) | ✅ [DEPENDENCY_MAP.md](DEPENDENCY_MAP.md) |
 | Filesystem sandboxing (`fs_basepath` → app bundle, `fs_homepath` → `Documents/`) | ✅ landed |
-| First engine translation unit compiling for `arm64-apple-ios` | ✅ `bg_pmove.cpp` (player movement) |
+| Engine translation units compiling for `arm64-apple-ios` | ✅ **23/23 census TUs** — game logic, script VM, threading (pthreads), FS (POSIX), net (BSD sockets), sound (Miles stub), renderer init |
 | D3D9 header layer absorbed by DXVK native headers on the iOS SDK | ✅ proven |
-| DXVK/MoltenVK built as an iOS library (the renderer runtime) | ⛔ next frontier |
-| Engine linking / running on device | ⛔ far frontier (see the four walls) |
+| DXVK d3d9 built as an iOS library (the renderer runtime) | ✅ **`libdxvk_d3d9.a` (arm64)** — 5-hunk patch + SDL2-iOS WSI, [build script](scripts/platform/ios/build-dxvk-ios.sh); runtime bring-up vs MoltenVK is the next frontier |
+| Engine linking / running on device | 🟡 **first engine code executes on iOS** — math/bit-packing/string TUs linked into the stub, verified in simulator **and on iPad Pro (M5)** with MetalFX spatial upscaling live at 120 fps |
 | win32 build unaffected by all of the above | ✅ full engine builds green (Debug + Release) |
 
 ## The experiment

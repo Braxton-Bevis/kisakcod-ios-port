@@ -4,9 +4,7 @@
 #include <universal/com_memory.h>
 #include <qcommon/com_fileaccess.h>
 #include <qcommon/qcommon.h>
-#ifndef KISAK_IOS
-#include <win32/win_local.h>   // Win32 platform layer (dinput/winsock); use-sites surface individually on iOS
-#endif
+#include <win32/win_local.h>   // self-gates for iOS (DXVK windows_base typedefs); declares the Sys_* FS helpers used below
 #include <qcommon/threads.h>
 #include <stringed/stringed_hooks.h>
 #include <qcommon/unzip.h>
@@ -15,7 +13,16 @@
 #include <qcommon/files.h>
 #ifdef KISAK_IOS
 #include <unistd.h>            // <io.h> is MSVC-only; _access/_mkdir sites surface individually
+#include <sys/stat.h>          // stat/chmod replace GetFileAttributesA in FS_OpenFileOverwrite
+#include <dirent.h>            // opendir/readdir replace _findfirst64i32 in Sys_DirectoryHasContents
 #include <ios/sys_ios.h>
+#ifndef ARRAYSIZE
+#define ARRAYSIZE(a) (sizeof(a) / sizeof((a)[0]))   // winnt.h macro; absent from DXVK's windows_base.h
+#endif
+// Win32 InterlockedCompareExchange(dest, exch, comparand) returns the initial
+// value of *dest; the GCC builtin takes (dest, comparand, exch) — note the
+// swapped argument order. Macro alias keeps the call site untouched.
+#define InterlockedCompareExchange(dest, exch, comparand) __sync_val_compare_and_swap((dest), (comparand), (exch))
 #else
 #include <io.h>
 #endif
@@ -310,10 +317,18 @@ int __cdecl FS_OpenFileOverwrite(char *qpath)
     {
         if (fs_debug->current.integer)
             Com_Printf(10, "FS_FOpenFileOverWrite: %s\n", ospath);
+#ifdef KISAK_IOS
+        // FILE_ATTRIBUTE_READONLY (0x1) has no POSIX bit: "read-only" here
+        // means the owner-write permission is missing — restore it.
+        struct stat st;
+        if (stat(ospath, &st) == 0 && (st.st_mode & S_IWUSR) == 0)
+            chmod(ospath, st.st_mode | S_IWUSR);
+#else
         oldAttributes = GetFileAttributesA(ospath);
         attributes = oldAttributes & 0xFFFFFFFE;
         if ((oldAttributes & 0xFFFFFFFE) != oldAttributes)
             SetFileAttributesA(ospath, attributes);
+#endif
         return FS_GetHandleAndOpenFile(qpath, ospath, FS_THREAD_MAIN);
     }
     else
@@ -401,7 +416,13 @@ void __cdecl FS_ReplaceSeparators(char *path)
             if (!wasSep)
             {
                 wasSep = 1;
+#ifdef KISAK_IOS
+                // OS separator is '/'; on APFS '\' is a legal filename char,
+                // so backslashed paths would never open (DEPENDENCY_MAP §6).
+                *dst++ = 47;
+#else
                 *dst++ = 92;
+#endif
             }
         }
         else
@@ -469,12 +490,22 @@ int __cdecl FS_CreatePath(char *OSPath)
     {
         for (ofs = OSPath + 1; *ofs; ++ofs)
         {
+#ifdef KISAK_IOS
+            // OS paths carry '/' on iOS (see FS_ReplaceSeparators above)
+            if (*ofs == 47)
+            {
+                *ofs = 0;
+                Sys_Mkdir(OSPath);
+                *ofs = 47;
+            }
+#else
             if (*ofs == 92)
             {
                 *ofs = 0;
                 Sys_Mkdir(OSPath);
                 *ofs = 92;
             }
+#endif
         }
         return 0;
     }
@@ -595,7 +626,11 @@ int __cdecl FS_FOpenTextFileWrite(const char *filename)
     FS_CheckFileSystemStarted();
     h = FS_HandleForFile(FS_THREAD_MAIN);
     fsh[h].zipFile = 0;
+#ifdef KISAK_IOS
+    FS_BuildOSPath((char *)fs_homepath->current.string, fs_gamedir, filename, ospath); // LP64: .string, not .integer (4-byte truncation)
+#else
     FS_BuildOSPath((char *)fs_homepath->current.integer, fs_gamedir, filename, ospath);
+#endif
     if (fs_debug->current.integer)
         Com_Printf(10, "FS_FOpenFileWrite: %s\n", ospath);
     if (FS_CreatePath(ospath))
@@ -623,7 +658,11 @@ int __cdecl FS_FOpenFileAppend(const char *filename)
     h = FS_HandleForFile(IsMainThread ? FS_THREAD_MAIN : FS_THREAD_BACKEND);
     fsh[h].zipFile = 0;
     I_strncpyz(fsh[h].name, filename, 256);
+#ifdef KISAK_IOS
+    FS_BuildOSPath((char *)fs_homepath->current.string, fs_gamedir, filename, ospath); // LP64: .string, not .integer (4-byte truncation)
+#else
     FS_BuildOSPath((char *)fs_homepath->current.integer, fs_gamedir, filename, ospath);
+#endif
     if (fs_debug->current.integer)
         Com_Printf(10, "FS_FOpenFileAppend: %s\n", ospath);
     if (FS_CreatePath(ospath))
@@ -873,7 +912,11 @@ uint32_t __cdecl FS_FOpenFileReadForThread(const char *filename, int *file, FsTh
                         Com_Printf(10, "FS_FOpenFileRead: %s (found in '%s/%s')\n", sanitizedName, dir->path, dir->gamedir);
                     if (fs_copyfiles->current.enabled && !I_stricmp(dir->path, fs_cdpath->current.string))
                     {
+#ifdef KISAK_IOS
+                        FS_BuildOSPathForThread((char*)fs_basepath->current.string, dir->gamedir, sanitizedName, copypath, thread); // LP64: .string, not .integer (4-byte truncation)
+#else
                         FS_BuildOSPathForThread((char*)fs_basepath->current.integer, dir->gamedir, sanitizedName, copypath, thread);
+#endif
                         FS_CopyFile(netpath, copypath);
                     }
                     return FS_filelength(*file);
@@ -963,7 +1006,11 @@ bool __cdecl FS_Delete(const char *filename)
         MyAssertHandler(".\\universal\\com_files.cpp", 2205, 0, "%s", "filename");
     if (!*filename)
         return 0;
+#ifdef KISAK_IOS
+    FS_BuildOSPath((char *)fs_homepath->current.string, fs_gamedir, filename, ospath); // LP64: .string, not .integer (4-byte truncation)
+#else
     FS_BuildOSPath((char *)fs_homepath->current.integer, fs_gamedir, filename, ospath);
+#endif
     return remove(ospath) != -1;
 }
 
@@ -1190,7 +1237,11 @@ int __cdecl FS_FileExists(char *file)
     FILE *f; // [esp+0h] [ebp-10Ch]
     char testpath[260]; // [esp+4h] [ebp-108h] BYREF
 
+#ifdef KISAK_IOS
+    FS_BuildOSPath((char *)fs_homepath->current.string, fs_gamedir, file, testpath); // LP64: .string, not .integer (4-byte truncation)
+#else
     FS_BuildOSPath((char *)fs_homepath->current.integer, fs_gamedir, file, testpath);
+#endif
     f = FS_FileOpenReadBinary(testpath);
     if (!f)
         return 0;
@@ -1248,6 +1299,23 @@ bool __cdecl FS_GameDirDomainFunc(dvar_s *dvar, DvarValue newValue)
 
     if (!dvar)
         MyAssertHandler(".\\universal\\com_files.cpp", 4241, 0, "%s", "dvar");
+#ifdef KISAK_IOS
+    // LP64: DvarValue.integer only aliases the low half of the string pointer,
+    // and (int)strstr(...) truncates too — same checks through .string.
+    if (!*newValue.string)
+        return 1;
+    if (I_strnicmp(newValue.string, "mods", 4))
+        return 0;
+    if (strlen(newValue.string) < 6 || newValue.string[4] != 47 && newValue.string[4] != 92)
+        return 0;
+    result = 0;
+    if (!strstr(newValue.string, ".."))
+    {
+        if (!strstr(newValue.string, "::"))
+            return 1;
+    }
+    return result;
+#else
     if (!*(_BYTE *)newValue.integer)
         return 1;
     if (I_strnicmp(newValue.string, "mods", 4))
@@ -1263,6 +1331,7 @@ bool __cdecl FS_GameDirDomainFunc(dvar_s *dvar, DvarValue newValue)
             return 1;
     }
     return result;
+#endif
 }
 
 void FS_RegisterDvars()
@@ -1298,11 +1367,13 @@ void FS_RegisterDvars()
     // persistent location an iOS app owns. The M1 stub already proved this
     // path works by writing its first-frame marker into Documents/.
     homePath = (char *)Sys_iOS_DocumentsPath();
+    if (!homePath || !*homePath)
+        homePath = (char *)fs_basepath->reset.string; // LP64: .string, not .integer (4-byte truncation)
 #else
     homePath = (char *)RETURN_ZERO32();
-#endif
     if (!homePath || !*homePath)
         homePath = (char *)fs_basepath->reset.integer;
+#endif
     fs_homepath = Dvar_RegisterString("fs_homepath", homePath, DVAR_INIT | DVAR_AUTOEXEC, "Game home path");
     fs_restrict = Dvar_RegisterBool("fs_restrict", 0, DVAR_INIT, "Restrict file access for demos etc.");
 }
@@ -1613,6 +1684,41 @@ int __cdecl Sys_DirectoryHasContents(const char *directory)
         }
     } while (_findnext64i32(findhandle, &findinfo) != -1);
     _findclose(findhandle);
+    return 0;
+}
+#elif defined(KISAK_IOS)
+int __cdecl Sys_DirectoryHasContents(const char *directory)
+{
+    // POSIX rewrite of the _findfirst64i32 scan above; the "%s\\*" pattern
+    // becomes a plain opendir (DEPENDENCY_MAP §6 backslash-path site).
+    DIR *findhandle;
+    dirent *findinfo;
+    struct stat st;
+    bool isDir;
+    char childPath[512];
+
+    findhandle = opendir(directory);
+    if (!findhandle)
+        return 0;
+    while ((findinfo = readdir(findhandle)) != NULL)
+    {
+        if (findinfo->d_type != DT_UNKNOWN)
+        {
+            isDir = findinfo->d_type == DT_DIR;
+        }
+        else
+        {
+            Com_sprintf(childPath, 0x200u, "%s/%s", directory, findinfo->d_name);
+            isDir = stat(childPath, &st) == 0 && S_ISDIR(st.st_mode);
+        }
+        if (!isDir
+            || I_stricmp(findinfo->d_name, ".") && I_stricmp(findinfo->d_name, "..") && I_stricmp(findinfo->d_name, "CVS"))
+        {
+            closedir(findhandle);
+            return 1;
+        }
+    }
+    closedir(findhandle);
     return 0;
 }
 #endif
@@ -1943,6 +2049,68 @@ void __cdecl FS_Startup(char *gameName)
 
     Com_Printf(10, "----- FS_Startup -----\n");
     FS_RegisterDvars();
+#ifdef KISAK_IOS
+    // LP64: DvarValue.integer is 4 bytes and only aliases the low half of the
+    // 8-byte string pointer — every `.integer`-as-char* below is `.string` on
+    // iOS (DEPENDENCY_MAP §12 dvar-pointer class). Logic otherwise identical.
+    if (*fs_basepath->current.string)
+    {
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char*)"devraw_shared");
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char*)"devraw");
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char*)"raw_shared");
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char*)"raw");
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char*)"players");
+    }
+    if (*fs_homepath->current.string && I_stricmp(fs_basepath->current.string, fs_homepath->current.string))
+    {
+        FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"devraw_shared");
+        FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"devraw");
+        FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"raw_shared");
+        FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char*)"raw");
+    }
+    if (*fs_cdpath->current.string && I_stricmp(fs_basepath->current.string, fs_cdpath->current.string))
+    {
+        FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, (char*)"devraw_shared");
+        FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, (char*)"devraw");
+        FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, (char*)"raw_shared");
+        FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, (char*)"raw");
+        FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, gameName);
+    }
+    if (*fs_basepath->current.string)
+    {
+        v2 = va("%s_shared", gameName);
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, v2);
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, gameName);
+    }
+    if (*fs_basepath->current.string && I_stricmp(fs_homepath->current.string, fs_basepath->current.string))
+    {
+        v3 = va("%s_shared", gameName);
+        FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, v3);
+        FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, gameName);
+    }
+    if (*fs_basegame->current.string
+        && !I_stricmp(gameName, "main")
+        && I_stricmp(fs_basegame->current.string, gameName))
+    {
+        if (*fs_cdpath->current.string)
+            FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, (char *)fs_basegame->current.string);
+        if (*fs_basepath->current.string)
+            FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char *)fs_basegame->current.string);
+        if (*fs_homepath->current.string && I_stricmp(fs_homepath->current.string, fs_basepath->current.string))
+            FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char *)fs_basegame->current.string);
+    }
+    if (*fs_gameDirVar->current.string
+        && !I_stricmp(gameName, "main")
+        && I_stricmp(fs_gameDirVar->current.string, gameName))
+    {
+        if (*fs_cdpath->current.string)
+            FS_AddLocalizedGameDirectory((char *)fs_cdpath->current.string, (char *)fs_gameDirVar->current.string);
+        if (*fs_basepath->current.string)
+            FS_AddLocalizedGameDirectory((char *)fs_basepath->current.string, (char *)fs_gameDirVar->current.string);
+        if (*fs_homepath->current.string && I_stricmp(fs_homepath->current.string, fs_basepath->current.string))
+            FS_AddLocalizedGameDirectory((char *)fs_homepath->current.string, (char *)fs_gameDirVar->current.string);
+    }
+#else
     if (*(_BYTE *)fs_basepath->current.integer)
     {
         FS_AddLocalizedGameDirectory((char *)fs_basepath->current.integer, (char*)"devraw_shared");
@@ -2000,6 +2168,7 @@ void __cdecl FS_Startup(char *gameName)
         if (*(_BYTE *)fs_homepath->current.integer && I_stricmp(fs_homepath->current.string, fs_basepath->current.string))
             FS_AddLocalizedGameDirectory((char *)fs_homepath->current.integer, (char *)fs_gameDirVar->current.integer);
     }
+#endif
     Com_ReadCDKey();
     FS_AddCommands();
     FS_Path_f();
@@ -2052,8 +2221,13 @@ void __cdecl FS_InitFilesystem()
             ERR_FATAL,
             "Couldn't load %s.  Make sure Call of Duty is run from the correct folder.",
             "fileSysCheck.cfg");
+#ifdef KISAK_IOS
+    I_strncpyz(lastValidBase, (char *)fs_basepath->current.string, 256); // LP64: .string, not .integer (4-byte truncation)
+    I_strncpyz(lastValidGame, (char *)fs_gameDirVar->current.string, 256);
+#else
     I_strncpyz(lastValidBase, (char *)fs_basepath->current.integer, 256);
     I_strncpyz(lastValidGame, (char *)fs_gameDirVar->current.integer, 256);
+#endif
 }
 
 uint32_t __cdecl FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode)
@@ -2656,7 +2830,11 @@ int __cdecl FS_SV_FOpenFileWrite(const char *filename)
     int f; // [esp+114h] [ebp-4h]
 
     FS_CheckFileSystemStarted();
+#ifdef KISAK_IOS
+    FS_BuildOSPath((char *)fs_homepath->current.string, (char *)filename, (char *)"", ospath); // LP64: .string, not .integer (4-byte truncation)
+#else
     FS_BuildOSPath((char *)fs_homepath->current.integer, (char *)filename, (char *)"", ospath);
+#endif
     v3 = ospath;
     v3 += strlen(v3) + 1;
     ospath[v3 - &ospath[1] - 1] = 0;

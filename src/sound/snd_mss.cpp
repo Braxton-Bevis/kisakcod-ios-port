@@ -6,7 +6,16 @@
 
 uint32_t __stdcall MSS_FileOpenCallback(const MSS_FILE *pszFilename, UINTa *phFileHandle)
 {
+#ifdef KISAK_IOS
+    // UINTa is pointer-width (8 bytes on LP64); the win32 (int *) cast would leave
+    // the upper half of *phFileHandle uninitialized. Write the whole slot.
+    int hFile;
+    uint32_t opened = (FS_FOpenFileReadStream(pszFilename, &hFile) & 0x80000000) == 0;
+    *phFileHandle = (UINTa)hFile;
+    return opened;
+#else
     return (FS_FOpenFileReadStream(pszFilename, (int *)phFileHandle) & 0x80000000) == 0;
+#endif
 }
 void __stdcall MSS_FileCloseCallback(UINTa hFileHandle)
 {
@@ -312,7 +321,13 @@ int __cdecl MSS_DigitalFormatType(int waveFormat, int bits, int channels)
 uint8_t *__cdecl MSS_Alloc(uint32_t bytes, uint32_t rate)
 {
   if ( IsFastFileLoad() )
+#ifdef KISAK_IOS
+    // the win32 build calls through an int-returning fn-ptr cast (benign on ILP32,
+    // truncates the returned pointer on LP64); call directly. 'rate' was never read.
+    return (uint8_t *)MSS_Alloc_FastFile(bytes);
+#else
     return (uint8_t *)((int (__cdecl *)(uint32_t, uint32_t))MSS_Alloc_FastFile)(bytes, rate);
+#endif
   else
     return MSS_Alloc_LoadObj(bytes, rate);
 }

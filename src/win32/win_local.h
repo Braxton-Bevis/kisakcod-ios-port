@@ -12,11 +12,20 @@
 #endif
 
 #ifndef _XBOX
+#ifdef KISAK_IOS
+// This header is a gateway: its declarations are almost all portable, but it
+// leaks DirectInput/winsock into every includer. On iOS the base Win32
+// typedefs come from DXVK's windows_base.h; input/net get replaced wholesale.
+#include <Windows.h>
+#include <ios/win32_tags.h>
+#include <mutex> // for the non-_WIN32 s_criticalSections declaration below
+#else
 #define DIRECTINPUT_VERSION 0x0800  //[ 0x0300 | 0x0500 | 0x0700 | 0x0800 ]
 #include <dinput.h>
 //#include <dsound.h>
 #include <winsock.h>
 #include <wsipx.h>
+#endif
 #endif
 #include <universal/q_shared.h>
 #include <qcommon/qcommon.h>
@@ -63,7 +72,7 @@ void	IN_Frame (void);
 bool IN_IsTalkKeyHeld();
 
 // window procedure
-#ifndef _XBOX
+#if !defined(_XBOX) && !defined(KISAK_IOS)
 LRESULT WINAPI MainWndProc (
     HWND    hWnd,
     UINT    uMsg,
@@ -74,11 +83,11 @@ LRESULT WINAPI MainWndProc (
 void Conbuf_AppendText( const char *msg );
 void Conbuf_AppendTextInMainThread(const char* msg);
 
-#ifndef _XBOX
+#if !defined(_XBOX) && !defined(KISAK_IOS) // OSVERSIONINFO has no DXVK shim; the iOS platform layer replaces g_wv
 // LWSS: Accurate to cod4
 typedef struct
 {
-	HINSTANCE		reflib_library;		// Handle to refresh DLL 
+	HINSTANCE		reflib_library;		// Handle to refresh DLL
 	qboolean		reflib_active;
 
 	HWND			hWnd;

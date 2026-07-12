@@ -15,6 +15,10 @@
 #include <Windows.h>
 #include <d3d9.h>
 
+#ifdef KISAK_IOS
+#include <ios/win32_tags.h> // HWND__/HINSTANCE__/... tags absent from DXVK's windows_base.h
+#endif
+
 enum GfxRenderer : __int32
 {                                       // ...
     GFX_RENDERER_SHADER_2 = 0x0,

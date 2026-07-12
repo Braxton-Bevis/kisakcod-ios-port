@@ -19,7 +19,7 @@
 #include <script/scr_debugger.h>
 #include <universal/profile.h>
 
-#ifdef WIN32
+#if defined(WIN32) || defined(KISAK_IOS) // win_steam.h is portable declarations; iOS gets a no-op impl
 #include <win32/win_steam.h>
 #else
 #error Steam auth for Arch(Server)

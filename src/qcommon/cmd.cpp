@@ -269,6 +269,15 @@ static void WriteWAVHeader(FILE *f, uint32_t dataSize, uint32_t sampleRate, uint
 
 void Cmd_Dumpraw_f(void)
 {
+#ifdef KISAK_IOS
+    // Dev-only fastfile dump tool (LWSS addition). Any std::format call
+    // instantiates libc++'s type-erased formatter set, whose float path needs
+    // to_chars (iOS 16.3+) — a wall at the 15.0 target — and this body also
+    // reads fs_basepath through the 4-byte .integer union member (LP64
+    // landmine, DEPENDENCY_MAP §12). Not worth porting until the fastfile
+    // pipeline itself runs on iOS.
+    Com_Printf(0, "dumpraw is not available on iOS\n");
+#else
     auto DumpFileType = [](XAssetType type) -> void
     {
 		auto rawDir = std::format("{}\\raw\\", (char*)fs_basepath->current.integer);
@@ -431,6 +440,7 @@ void Cmd_Dumpraw_f(void)
 
     //DumpFileType(ASSET_TYPE_RAWFILE);
     //DumpFileType(ASSET_TYPE_MENU);
+#endif // KISAK_IOS
 }
 // avail end
 

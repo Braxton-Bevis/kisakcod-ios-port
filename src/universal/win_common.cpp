@@ -6,17 +6,57 @@
 #include <qcommon/qcommon.h>
 #include <qcommon/threads.h>
 
+#ifdef KISAK_IOS
+// <direct.h>/<io.h> are MSVC-only; POSIX equivalents for everything below:
+#include <unistd.h>      // getcwd, rmdir
+#include <sys/stat.h>    // mkdir, stat (directory-bit checks)
+#include <dirent.h>      // opendir/readdir replace _findfirst64i32/_findnext64i32
+#include <sys/sysctl.h>  // hw.logicalcpu for Win_InitThreads
+#include <pthread.h>     // owner tracking for recursive critical sections
+#include <atomic>
+#include <ios/sys_ios.h> // Sys_iOS_BundlePath for Sys_DefaultInstallPath
+#else
 #include <direct.h>
 #include <io.h>
+#endif
 #include "com_memory.h"
 #include "profile.h"
 
 #if defined(_WIN32)
 _RTL_CRITICAL_SECTION s_criticalSections[CRITSECT_COUNT];
+#elif defined(KISAK_IOS)
+// CRITICAL_SECTION is recursive; std::mutex (the extern type win_local.h
+// publishes) is not, and the engine relies on re-entrancy (mem_track's alloc
+// lock is explicitly re-entrant — see mem_track.cpp:14). Emulate recursion
+// with an owner/depth side table so nested Sys_EnterCriticalSection calls
+// from the owning thread don't deadlock.
+std::mutex s_criticalSections[CRITSECT_COUNT];
+static std::atomic<pthread_t> s_critSectOwner[CRITSECT_COUNT];
+static uint32_t s_critSectDepth[CRITSECT_COUNT];
 #else
 #include <mutex>
 std::mutex s_criticalSections[CRITSECT_COUNT];
 uint32_t s_criticalSectionsCount[CRITSECT_COUNT] = { 0 };
+#endif
+
+#ifdef KISAK_IOS
+// Win32 InterlockedIncrement/Decrement return the NEW value; macro aliases
+// keep the FastCriticalSection call sites below untouched.
+#define InterlockedIncrement(p) __sync_add_and_fetch((p), 1)
+#define InterlockedDecrement(p) __sync_sub_and_fetch((p), 1)
+
+// _finddata attrib & 0x10 (FILE_ATTRIBUTE_DIRECTORY) equivalent for a dirent;
+// stat() fallback for filesystems that don't fill d_type.
+static bool Sys_iOS_EntryIsDir(const char *dirPath, const dirent *entry)
+{
+    struct stat st;
+    char childPath[512];
+
+    if (entry->d_type != DT_UNKNOWN)
+        return entry->d_type == DT_DIR;
+    Com_sprintf(childPath, 0x200u, "%s/%s", dirPath, entry->d_name);
+    return stat(childPath, &st) == 0 && S_ISDIR(st.st_mode);
+}
 #endif
 
 void Sys_InitializeCriticalSections()
@@ -35,6 +75,17 @@ void Sys_EnterCriticalSection(int critSect)
 	iassert(critSect >= 0 && critSect < CRITSECT_COUNT);
 #if defined(_WIN32)
 	EnterCriticalSection(&s_criticalSections[critSect]);
+#elif defined(KISAK_IOS)
+    pthread_t self = pthread_self();
+    if (s_critSectOwner[critSect].load(std::memory_order_relaxed) == self)
+    {
+        // Recursive acquire — depth is only touched by the owning thread.
+        ++s_critSectDepth[critSect];
+        return;
+    }
+    s_criticalSections[critSect].lock();
+    s_critSectOwner[critSect].store(self, std::memory_order_relaxed);
+    s_critSectDepth[critSect] = 1;
 #else
     s_criticalSections[critSect].lock();
     // This is a ghetto hack to see if this is re-entrant
@@ -48,6 +99,13 @@ void Sys_LeaveCriticalSection(int critSect)
 	iassert(critSect >= 0 && critSect < CRITSECT_COUNT);
 #if defined(_WIN32)
 	LeaveCriticalSection(&s_criticalSections[critSect]);
+#elif defined(KISAK_IOS)
+    iassert(s_critSectOwner[critSect].load(std::memory_order_relaxed) == pthread_self());
+    if (--s_critSectDepth[critSect] == 0)
+    {
+        s_critSectOwner[critSect].store((pthread_t)0, std::memory_order_relaxed);
+        s_criticalSections[critSect].unlock();
+    }
 #else
     s_criticalSectionsCount[critSect]--;
     s_criticalSections[critSect].unlock();
@@ -76,6 +134,32 @@ void Sys_UnlockWrite(FastCriticalSection* critSect)
     InterlockedDecrement(&critSect->writeCount);
 }
 
+#ifdef KISAK_IOS
+uint32_t Win_InitThreads()
+{
+    // iOS has no settable thread affinity, so the GetProcessAffinityMask walk
+    // below collapses to a logical-core query (DEPENDENCY_MAP §7): report the
+    // real core count so the engine sizes its scheduling slots correctly, and
+    // hand out identity bit masks for the (unused-on-iOS) affinity hints.
+    int cpuCount;
+    size_t size;
+    uint32_t cpu;
+
+    cpuCount = 0;
+    size = sizeof(cpuCount);
+    if (sysctlbyname("hw.logicalcpu", &cpuCount, &size, NULL, 0) != 0 || cpuCount < 1)
+        cpuCount = 1;
+    if (cpuCount > 4)
+        cpuCount = 4;   // the engine tracks at most 4 slots (s_affinityMaskForCpu)
+    s_cpuCount = cpuCount;
+    s_affinityMaskForProcess = (1u << cpuCount) - 1;
+    for (cpu = 0; cpu < (uint32_t)cpuCount; ++cpu)
+        s_affinityMaskForCpu[cpu] = 1u << cpu;
+    if (cpuCount == 1)
+        s_affinityMaskForCpu[0] = -1;
+    return s_affinityMaskForProcess;
+}
+#else
 uint32_t Win_InitThreads()
 {
     HANDLE CurrentProcess;
@@ -138,14 +222,57 @@ uint32_t Win_InitThreads()
     }
     return result;
 }
+#endif
 
 // *(_DWORD *)(*(_DWORD *)(*((_DWORD *)NtCurrentTeb()->ThreadLocalStoragePointer + _tls_index) + 4)
 
 void __cdecl Sys_Mkdir(const char *path)
 {
+#ifdef KISAK_IOS
+    mkdir(path, 0777);
+#else
     _mkdir(path);
+#endif
 }
 
+#ifdef KISAK_IOS
+BOOL __cdecl Sys_RemoveDirTree(const char *path)
+{
+    // POSIX rewrite of the _findfirst64i32 walk below; constructed child
+    // paths use '/' (DEPENDENCY_MAP §6 backslash-path site).
+    bool v2;
+    DIR *handle;
+    dirent *find;
+    char childPath[256];
+    bool hasError;
+    bool hasTrailingSeparater;
+    int length;
+
+    length = strlen(path);
+    v2 = path[length - 1] == '\\' || path[length - 1] == '/';
+    hasTrailingSeparater = v2;
+    handle = opendir(path);
+    if (!handle)
+        return rmdir(path) != -1;
+    hasError = 0;
+    while (!hasError && (find = readdir(handle)) != NULL)
+    {
+        if (find->d_name[0] != '.' || find->d_name[1] && (find->d_name[1] != '.' || find->d_name[2]))
+        {
+            if (hasTrailingSeparater)
+                Com_sprintf(childPath, 0x100u, "%s%s", path, find->d_name);
+            else
+                Com_sprintf(childPath, 0x100u, "%s/%s", path, find->d_name);
+            if (Sys_iOS_EntryIsDir(path, find))
+                hasError = !Sys_RemoveDirTree(childPath);
+            else
+                hasError = remove(childPath) == -1;
+        }
+    }
+    closedir(handle);
+    return !hasError && rmdir(path) != -1;
+}
+#else
 BOOL __cdecl Sys_RemoveDirTree(const char *path)
 {
     bool v2; // [esp+8h] [ebp-250h]
@@ -184,7 +311,53 @@ BOOL __cdecl Sys_RemoveDirTree(const char *path)
     _findclose(handle);
     return !hasError && _rmdir(path) != -1;
 }
+#endif
 
+#ifdef KISAK_IOS
+void __cdecl Sys_ListFilteredFiles(
+    HunkUser *user,
+    const char *basedir,
+    const char *subdirs,
+    const char *filter,
+    char **list,
+    int *numfiles)
+{
+    // POSIX rewrite of the "%s\\%s\\*" _findfirst64i32 scan below
+    // (DEPENDENCY_MAP §6 backslash-path site); listed names use '/'.
+    char filename[256];
+    DIR *findhandle;
+    dirent *findinfo;
+    char search[260];
+
+    if (*numfiles < 0x1FFF)
+    {
+        if (strlen(subdirs))
+            Com_sprintf(search, 0x100u, "%s/%s", basedir, subdirs);
+        else
+            Com_sprintf(search, 0x100u, "%s", basedir);
+        findhandle = opendir(search);
+        if (findhandle)
+        {
+            while ((findinfo = readdir(findhandle)) != NULL)
+            {
+                if (!Sys_iOS_EntryIsDir(search, findinfo)
+                    || I_stricmp(findinfo->d_name, ".") && I_stricmp(findinfo->d_name, "..") && I_stricmp(findinfo->d_name, "CVS"))
+                {
+                    if (*numfiles >= 0x1FFF)
+                        break;
+                    if (subdirs)
+                        Com_sprintf(filename, 0x100u, "%s/%s", subdirs, findinfo->d_name);
+                    else
+                        Com_sprintf(filename, 0x100u, "%s", findinfo->d_name);
+                    if (Com_FilterPath(filter, filename, 0))
+                        list[(*numfiles)++] = Hunk_CopyString(user, filename);
+                }
+            }
+            closedir(findhandle);
+        }
+    }
+}
+#else
 void __cdecl Sys_ListFilteredFiles(
     HunkUser *user,
     const char *basedir,
@@ -226,6 +399,7 @@ void __cdecl Sys_ListFilteredFiles(
         }
     }
 }
+#endif
 
 BOOL __cdecl HasFileExtension(const char *name, const char *extension)
 {
@@ -251,6 +425,111 @@ int __cdecl Sys_CountFileList(char **list)
     return i;
 }
 
+#ifdef KISAK_IOS
+char **__cdecl Sys_ListFiles(
+    const char *directory,
+    const char *extension,
+    const char *filter,
+    int *numfiles,
+    int wantsubs)
+{
+    // POSIX rewrite of the "%s\\*.%s" _findfirst64i32 scan below; the
+    // pattern-in-the-path trick becomes opendir + the same HasFileExtension
+    // wildcard match win32 applies. Also LP64-corrects the two 4-byte-pointer
+    // sizings of the win32 body (0x8000 list buffer, 4 * nfiles + 8 copy).
+    char *v6;
+    char **listCopy;
+    DIR *findhandle;
+    dirent *findinfo;
+    bool isDir;
+    bool wantDirs;
+    char *(*list)[8192];
+    int nfiles;
+    HunkUser *user;
+    int i;
+
+    LargeLocal list_large_local(8192 * sizeof(char *));
+    list = (char *(*)[8192])list_large_local.GetBuf();
+    if (filter)
+    {
+        user = Hunk_UserCreate(0x20000, "Sys_ListFiles", 0, 0, 3);
+        nfiles = 0;
+        Sys_ListFilteredFiles(user, directory, "", filter, (char **)list, &nfiles);
+        (*list)[nfiles] = 0;
+        *numfiles = nfiles;
+        if (nfiles)
+        {
+            listCopy = (char **)Hunk_UserAlloc(user, sizeof(char *) * (nfiles + 2), sizeof(char *));
+            *listCopy++ = (char *)user;
+            for (i = 0; i < nfiles; ++i)
+                listCopy[i] = (*list)[i];
+            listCopy[i] = 0;
+            return listCopy;
+        }
+        else
+        {
+            Hunk_UserDestroy(user);
+            return 0;
+        }
+    }
+    else
+    {
+        if (!extension)
+            extension = "";
+        if (*extension != '/' || extension[1])
+        {
+            wantDirs = 0;   // win32 flag = FILE_ATTRIBUTE_DIRECTORY: match files
+        }
+        else
+        {
+            extension = "";
+            wantDirs = 1;   // extension "/" means list directories
+        }
+        nfiles = 0;
+        findhandle = opendir(directory);
+        if (!findhandle)
+        {
+            *numfiles = 0;
+            return 0;
+        }
+        else
+        {
+            user = Hunk_UserCreate(0x20000, "Sys_ListFiles", 0, 0, 3);
+            while ((findinfo = readdir(findhandle)) != NULL)
+            {
+                isDir = Sys_iOS_EntryIsDir(directory, findinfo);
+                if ((!wantsubs && isDir == wantDirs || wantsubs && isDir)
+                    && (!isDir
+                        || I_stricmp(findinfo->d_name, ".") && I_stricmp(findinfo->d_name, "..") && I_stricmp(findinfo->d_name, "CVS"))
+                    && (!*extension || HasFileExtension(findinfo->d_name, extension)))
+                {
+                    v6 = Hunk_CopyString(user, findinfo->d_name);
+                    (*list)[nfiles++] = v6;
+                    if (nfiles == 0x1FFF)
+                        break;
+                }
+            }
+            (*list)[nfiles] = 0;
+            closedir(findhandle);
+            *numfiles = nfiles;
+            if (nfiles)
+            {
+                listCopy = (char **)Hunk_UserAlloc(user, sizeof(char *) * (nfiles + 2), sizeof(char *));
+                *listCopy++ = (char *)user;
+                for (i = 0; i < nfiles; ++i)
+                    listCopy[i] = (*list)[i];
+                listCopy[i] = 0;
+                return listCopy;
+            }
+            else
+            {
+                Hunk_UserDestroy(user);
+                return 0;
+            }
+        }
+    }
+}
+#else
 char **__cdecl Sys_ListFiles(
     const char *directory,
     const char *extension,
@@ -362,12 +641,18 @@ char **__cdecl Sys_ListFiles(
         }
     }
 }
+#endif
 
 
 char cwd[256];
 char *__cdecl Sys_Cwd()
 {
+#ifdef KISAK_IOS
+    if (!getcwd(cwd, 255))
+        cwd[0] = 0;
+#else
     _getcwd(cwd, 255);
+#endif
     cwd[255] = 0;
     return cwd;
 }
@@ -378,6 +663,18 @@ const char *__cdecl Sys_DefaultCDPath()
 }
 
 char exePath[256];
+#ifdef KISAK_IOS
+char *__cdecl Sys_DefaultInstallPath()
+{
+    // win32 derives this from the exe's directory (GetModuleFileNameA); the
+    // iOS analogue is the app bundle — the only place game data can ship
+    // (read-only, code-signed). Direct-path writers rooted here (sv_demo,
+    // actor_aim dev log) must be redirected when those subsystems land.
+    if (!exePath[0])
+        I_strncpyz(exePath, Sys_iOS_BundlePath(), 256);
+    return exePath;
+}
+#else
 char *__cdecl Sys_DefaultInstallPath()
 {
     char *v0; // eax
@@ -404,3 +701,4 @@ char *__cdecl Sys_DefaultInstallPath()
     }
     return exePath;
 }
+#endif

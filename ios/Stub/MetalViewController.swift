@@ -18,17 +18,31 @@ final class MetalView: UIView {
 final class MetalViewController: UIViewController {
     private var device: MTLDevice!
     private var commandQueue: MTLCommandQueue!
-    private var pipelineState: MTLRenderPipelineState!
+    // One pipeline state per shader-quality tier (see Shaders.metal).
+    private var pipelineStates: [MTLRenderPipelineState] = []
     private var displayLink: CADisplayLink?
     private var frameIndex: UInt64 = 0
     private var wroteFirstFrameMarker = false
     private let hudLabel = UILabel()
 
     // Graphics settings — persisted in UserDefaults (the stub-scale preview of the
-    // engine's future r_* dvar surface: r_metalfx / r_renderScale / com_maxfps).
+    // engine's future r_* dvar surface: r_metalfx / r_renderScale / com_maxfps /
+    // r_shaderQuality / r_rayTracing).
     private var fxEnabled = UserDefaults.standard.object(forKey: "kisak.fxEnabled") as? Bool ?? true
     private var renderScalePct = UserDefaults.standard.object(forKey: "kisak.renderScalePct") as? Int ?? 50
     private var frameCap = UserDefaults.standard.object(forKey: "kisak.frameCap") as? Int ?? 0   // 0 = uncapped
+    private var shaderQuality = UserDefaults.standard.object(forKey: "kisak.shaderQuality") as? Int ?? 1 // 0 low / 1 med / 2 high
+    private var rtEnabled = UserDefaults.standard.object(forKey: "kisak.rayTracing") as? Bool ?? false
+
+    // Ray tracing: an honest capability surface, not a fake feature. The toggle
+    // is enabled only where MTLDevice.supportsRaytracing is true (A13+/M1+ GPUs;
+    // the simulator reports false). The engine's TRANSLATION renderer path
+    // (D3D9→DXVK→Vulkan→MoltenVK) structurally cannot carry RT — MoltenVK
+    // implements no VK_KHR_ray_tracing (see PORT_JOURNAL M6) — so this setting
+    // is the surface for a future native-Metal experiment (RT shadows), and the
+    // status line says exactly which of those states the device is in.
+    private var rtSupported = false
+    private var rtStatus = "probe pending"
 
     // MetalFX spatial upscaling: the scene renders at renderScalePct of the drawable,
     // then MTLFXSpatialScaler upscales into the drawable. Unsupported GPUs (and the
@@ -40,6 +54,17 @@ final class MetalViewController: UIViewController {
     private var sceneColorTexture: MTLTexture?
     private var lastScalerDrawableSize: CGSize = .zero
     private var metalFXStatus = "init"
+    private var resolutionStatus = "—"
+
+    // Measured FPS (not the cap — the actual presented rate over the last window).
+    private var fpsWindowStart = CACurrentMediaTime()
+    private var fpsWindowFrames = 0
+    private var measuredFPS: Double = 0
+
+    // Real engine code executing on iOS: libkisakcod.a is linked into this
+    // app; EngineSmoke.cpp calls Vec3NormalizeTo / GetMinBitCountForNum /
+    // I_stricmpwild and this string carries the live results.
+    private let engineSmoke = String(cString: kisak_engine_smoke())
 
     // Controller state: one code path serves both the on-screen GCVirtualController
     // and any physical controller — both surface as GCController instances.
@@ -52,8 +77,11 @@ final class MetalViewController: UIViewController {
     // Settings UI
     private let settingsPanel = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
     private let fxSwitch = UISwitch()
-    private let scaleControl = UISegmentedControl(items: ["50%", "75%", "100%"])
-    private let capControl = UISegmentedControl(items: ["30", "60", "Max"])
+    private let scaleControl = UISegmentedControl(items: ["25%", "50%", "75%", "100%"])
+    private let capControl = UISegmentedControl(items: ["30", "60", "120", "Max"])
+    private let qualityControl = UISegmentedControl(items: ["Low", "Med", "High"])
+    private let rtSwitch = UISwitch()
+    private let resolutionReadout = UILabel()
     private let statusFootnote = UILabel()
 
     override func loadView() { view = MetalView() }
@@ -69,21 +97,32 @@ final class MetalViewController: UIViewController {
         self.device = device
         self.commandQueue = queue
 
+        rtSupported = device.supportsRaytracing
+        rtStatus = rtSupported
+            ? "GPU capable — native-Metal future (translation path carries no RT)"
+            : "unsupported on this GPU/simulator"
+        if !rtSupported { rtEnabled = false }
+
         let metalLayer = metalView.metalLayer
         metalLayer.device = device
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = false   // MetalFX writes the drawable as scaler output
 
         guard let library = device.makeDefaultLibrary(),
-              let vertexFn = library.makeFunction(name: "stub_vertex"),
-              let fragmentFn = library.makeFunction(name: "stub_fragment") else {
+              let vertexFn = library.makeFunction(name: "stub_vertex") else {
             fatalError("Shaders.metal did not compile into the default library")
         }
-        let desc = MTLRenderPipelineDescriptor()
-        desc.vertexFunction = vertexFn
-        desc.fragmentFunction = fragmentFn
-        desc.colorAttachments[0].pixelFormat = metalLayer.pixelFormat
-        pipelineState = try! device.makeRenderPipelineState(descriptor: desc)
+        // Quality tier order matches the segmented control: low / med / high.
+        pipelineStates = ["stub_fragment_low", "stub_fragment", "stub_fragment_high"].map { name in
+            guard let fragmentFn = library.makeFunction(name: name) else {
+                fatalError("missing fragment function \(name)")
+            }
+            let desc = MTLRenderPipelineDescriptor()
+            desc.vertexFunction = vertexFn
+            desc.fragmentFunction = fragmentFn
+            desc.colorAttachments[0].pixelFormat = metalLayer.pixelFormat
+            return try! device.makeRenderPipelineState(descriptor: desc)
+        }
 
         hudLabel.textColor = .white
         hudLabel.font = .monospacedSystemFont(ofSize: 13, weight: .semibold)
@@ -128,6 +167,21 @@ final class MetalViewController: UIViewController {
         title.textColor = .white
         title.font = .monospacedSystemFont(ofSize: 12, weight: .bold)
 
+        qualityControl.selectedSegmentIndex = min(max(shaderQuality, 0), 2)
+        qualityControl.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.shaderQuality = self.qualityControl.selectedSegmentIndex
+            UserDefaults.standard.set(self.shaderQuality, forKey: "kisak.shaderQuality")
+        }, for: .valueChanged)
+
+        rtSwitch.isOn = rtEnabled && rtSupported
+        rtSwitch.isEnabled = rtSupported
+        rtSwitch.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.rtEnabled = self.rtSwitch.isOn
+            UserDefaults.standard.set(self.rtEnabled, forKey: "kisak.rayTracing")
+        }, for: .valueChanged)
+
         fxSwitch.isOn = fxEnabled
         fxSwitch.addAction(UIAction { [weak self] _ in
             guard let self else { return }
@@ -136,21 +190,25 @@ final class MetalViewController: UIViewController {
             self.lastScalerDrawableSize = .zero   // force scaler rebuild next frame
         }, for: .valueChanged)
 
-        scaleControl.selectedSegmentIndex = [50: 0, 75: 1, 100: 2][renderScalePct] ?? 0
+        scaleControl.selectedSegmentIndex = [25: 0, 50: 1, 75: 2, 100: 3][renderScalePct] ?? 1
         scaleControl.addAction(UIAction { [weak self] _ in
             guard let self else { return }
-            self.renderScalePct = [0: 50, 1: 75, 2: 100][self.scaleControl.selectedSegmentIndex] ?? 50
+            self.renderScalePct = [0: 25, 1: 50, 2: 75, 3: 100][self.scaleControl.selectedSegmentIndex] ?? 50
             UserDefaults.standard.set(self.renderScalePct, forKey: "kisak.renderScalePct")
             self.lastScalerDrawableSize = .zero
         }, for: .valueChanged)
 
-        capControl.selectedSegmentIndex = [30: 0, 60: 1, 0: 2][frameCap] ?? 2
+        capControl.selectedSegmentIndex = [30: 0, 60: 1, 120: 2, 0: 3][frameCap] ?? 3
         capControl.addAction(UIAction { [weak self] _ in
             guard let self else { return }
-            self.frameCap = [0: 30, 1: 60, 2: 0][self.capControl.selectedSegmentIndex] ?? 0
+            self.frameCap = [0: 30, 1: 60, 2: 120, 3: 0][self.capControl.selectedSegmentIndex] ?? 0
             UserDefaults.standard.set(self.frameCap, forKey: "kisak.frameCap")
             self.applyFrameCap()
         }, for: .valueChanged)
+
+        resolutionReadout.textColor = .white
+        resolutionReadout.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        resolutionReadout.textAlignment = .right
 
         statusFootnote.textColor = .lightGray
         statusFootnote.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
@@ -158,8 +216,11 @@ final class MetalViewController: UIViewController {
 
         let stack = UIStackView(arrangedSubviews: [
             title,
+            Self.row("Shader quality", qualityControl),
+            Self.row("Ray tracing", rtSwitch),
             Self.row("MetalFX upscaling", fxSwitch),
             Self.row("Render scale", scaleControl),
+            Self.row("Resolution", resolutionReadout),
             Self.row("Frame cap", capControl),
             statusFootnote,
         ])
@@ -178,7 +239,7 @@ final class MetalViewController: UIViewController {
             gear.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
             settingsPanel.topAnchor.constraint(equalTo: gear.bottomAnchor, constant: 6),
             settingsPanel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
-            settingsPanel.widthAnchor.constraint(equalToConstant: 300),
+            settingsPanel.widthAnchor.constraint(equalToConstant: 320),
             stack.topAnchor.constraint(equalTo: settingsPanel.contentView.topAnchor, constant: 12),
             stack.bottomAnchor.constraint(equalTo: settingsPanel.contentView.bottomAnchor, constant: -12),
             stack.leadingAnchor.constraint(equalTo: settingsPanel.contentView.leadingAnchor, constant: 12),
@@ -211,7 +272,7 @@ final class MetalViewController: UIViewController {
     private func applyFrameCap() {
         guard let link = displayLink else { return }
         if frameCap > 0 {
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(frameCap),
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(min(frameCap, 30)),
                                                             maximum: Float(frameCap),
                                                             preferred: Float(frameCap))
         } else {
@@ -264,6 +325,7 @@ final class MetalViewController: UIViewController {
         guard drawableSize != lastScalerDrawableSize else { return }
         lastScalerDrawableSize = drawableSize
         sceneColorTexture = nil
+        defer { updateResolutionReadout(drawableSize: drawableSize) }
         #if !canImport(MetalFX)
         metalFXStatus = "module absent in this SDK (simulator) — direct render"
         #else
@@ -309,6 +371,18 @@ final class MetalViewController: UIViewController {
         #endif
     }
 
+    // The Resolution row shows what is actually happening, not what was asked:
+    // the true render-target pixels and the true output pixels this frame.
+    private func updateResolutionReadout(drawableSize: CGSize) {
+        let outW = Int(drawableSize.width), outH = Int(drawableSize.height)
+        if let scene = sceneColorTexture {
+            resolutionStatus = "\(scene.width)×\(scene.height) → \(outW)×\(outH)"
+        } else {
+            resolutionStatus = "\(outW)×\(outH) native"
+        }
+        resolutionReadout.text = resolutionStatus
+    }
+
     // MARK: - Frame loop
 
     @objc private func renderFrame() {
@@ -340,9 +414,14 @@ final class MetalViewController: UIViewController {
         pass.colorAttachments[0].clearColor = clear
 
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) {
-            encoder.setRenderPipelineState(pipelineState)
+            let quality = min(max(shaderQuality, 0), pipelineStates.count - 1)
+            encoder.setRenderPipelineState(pipelineStates[quality])
             var offset = triangleOffset
             encoder.setVertexBytes(&offset, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
+            if quality == 2 {
+                var time = Float(CACurrentMediaTime().truncatingRemainder(dividingBy: 10_000))
+                encoder.setFragmentBytes(&time, length: MemoryLayout<Float>.size, index: 0)
+            }
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
             encoder.endEncoding()
         }
@@ -358,6 +437,15 @@ final class MetalViewController: UIViewController {
         commandBuffer.present(drawable)
         commandBuffer.commit()
 
+        // Measured FPS over ~0.5s windows — the HUD reports reality, the cap is intent.
+        fpsWindowFrames += 1
+        let now = CACurrentMediaTime()
+        if now - fpsWindowStart >= 0.5 {
+            measuredFPS = Double(fpsWindowFrames) / (now - fpsWindowStart)
+            fpsWindowFrames = 0
+            fpsWindowStart = now
+        }
+
         // Frame 1: prove the first present. Frame 300 (~5s): rewrite with settled
         // MetalFX/controller state (virtual-controller connect is asynchronous);
         // CI pulls the marker after a 10s sleep, so it reads the enriched version.
@@ -366,12 +454,15 @@ final class MetalViewController: UIViewController {
             writeFirstFrameMarker()
         }
         if frameIndex % 30 == 0 {
-            statusFootnote.text = metalFXStatus
+            statusFootnote.text = "MetalFX: \(metalFXStatus)\nRT: \(rtStatus)"
+            let qualityName = ["low", "med", "high"][min(max(shaderQuality, 0), 2)]
             hudLabel.text = """
             KisakCOD iOS stub — Metal live
-            GPU: \(device.name)  frame \(frameIndex)
+            GPU: \(device.name)  frame \(frameIndex)  \(String(format: "%.0f", measuredFPS)) fps
+            shader: \(qualityName)  RT: \(rtEnabled ? "on (surface only)" : rtSupported ? "off" : "n/a")
             MetalFX: \(metalFXStatus)
             Controller: \(controllerStatus)  stick (\(String(format: "%.2f", stick.x)), \(String(format: "%.2f", stick.y)))
+            engine: \(engineSmoke)
             """
         }
     }
@@ -383,16 +474,22 @@ final class MetalViewController: UIViewController {
     private func writeFirstFrameMarker() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let marker = docs.appendingPathComponent("metal_first_frame.txt")
+        let qualityName = ["low", "med", "high"][min(max(shaderQuality, 0), 2)]
         let contents = """
         KisakCOD iOS stub: first Metal frame presented OK
         gpu=\(device.name)
         drawableSize=\(metalView.metalLayer.drawableSize)
+        resolution=\(resolutionStatus)
         metalfx=\(metalFXStatus)
+        raytracing=\(rtSupported ? (rtEnabled ? "enabled (surface only)" : "supported, off") : "unsupported")
+        shaderQuality=\(qualityName)
+        fps=\(String(format: "%.1f", measuredFPS))
         controller=\(controllerStatus)
         settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
+        engine=\(engineSmoke)
         date=\(ISO8601DateFormatter().string(from: Date()))
         """
         try? contents.write(to: marker, atomically: true, encoding: .utf8)
-        NSLog("KISAK_STUB_FIRST_FRAME_OK gpu=%@ metalfx=%@ controller=%@", device.name, metalFXStatus, controllerStatus)
+        NSLog("KISAK_STUB_FIRST_FRAME_OK gpu=%@ metalfx=%@ rt=%@ controller=%@", device.name, metalFXStatus, rtStatus, controllerStatus)
     }
 }

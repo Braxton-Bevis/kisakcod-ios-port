@@ -5,6 +5,90 @@
 // You can try to disable this code, but you really shouldn't since Server GUID's are set to the SteamID64
 // An added benefit of Steam is that their SteamID can't be changed without them spending another 20$
 
+#ifdef KISAK_IOS
+// Explicit no-op Steam backend (DEPENDENCY_MAP §11): no Steamworks runtime or
+// client exists on iOS — deps/steamsdk ships linux32/64, osx and win64
+// binaries only, nothing that can ever link against arm64-apple-ios. There is
+// nothing to initialize, so every entry point below is a deliberate no-op and
+// g_steamInitialized stays false forever, routing the client consumers
+// (cl_main_mp.cpp ticket flow) to their offline/LAN fallbacks. SteamID64 was
+// the player GUID; an alternate iOS identity is a separate design task and
+// deliberately NOT invented here.
+
+#include "win_steam.h"
+
+#include <qcommon/qcommon.h>
+
+bool g_steamInitialized = false;
+
+void Steam_Init()
+{
+    // No-op: no Steam client can run on iOS. Print once so a log reader knows
+    // Steam auth is compiled out rather than silently broken.
+    Com_Printf(0, "[Kisak] Steam disabled: no Steamworks runtime exists on iOS.\n");
+}
+
+// (Currently Unused)
+void Steam_Shutdown()
+{
+    // No-op: Steam_Init never initialized anything.
+}
+
+bool Steam_UpdateClientAuthTicket(netadr_t serverIpv4)
+{
+    // No Steam user, so no ticket can be minted for the getchallenge handshake.
+    return false;
+}
+
+bool Steam_GetRawClientTicket(unsigned char **pBuffer, uint32 *pSize)
+{
+    // No ticket exists; hand back an explicit empty result so a caller that
+    // ignores the false return can't read stale garbage.
+    *pBuffer = nullptr;
+    *pSize = 0;
+    return false;
+}
+
+void Steam_CancelClientTicket()
+{
+    // No-op: no ticket was ever issued.
+}
+
+uint64_t Steam_GetClientSteamID64()
+{
+    // 0 = "no Steam identity" (the win32 build iasserts this can't happen;
+    // on iOS it is the permanent truth).
+    return 0;
+}
+
+bool Steam_CheckClientTicket(const void *pAuthTicket, uint32 authTicketLen, uint64_t steamID64)
+{
+    // Permissive offline mode — accept, do NOT reject: no Steam auth
+    // authority exists on iOS, so returning false here would boot every
+    // local player at connect time with no recourse. Accepting mirrors the
+    // engine's existing LAN bypass (NET_IsLocalAddress / net_lanauthorize).
+    return true;
+}
+
+void Steam_CheckClients()
+{
+    // No-op: no auth sessions were ever begun, so there are no delayed Steam
+    // verdicts to poll and nobody to kick.
+}
+
+void Steam_OnClientDropped(uint64_t steamID64)
+{
+    // No-op: no auth session was opened for this client.
+}
+
+void Steam_SV_AddTestCommands()
+{
+    // No-op: 'steam_testkick' only makes sense against live Steam auth
+    // sessions; there are none on iOS.
+}
+
+#else
+
 #include "win_steam.h"
 
 #include <Windows.h>
@@ -294,3 +378,5 @@ void Steam_SV_AddTestCommands()
 	Cmd_AddCommandInternal("steam_testkick", Cbuf_AddServerText_f, &Steam_SV_TestSteamKick);
 	Cmd_AddServerCommandInternal("steam_testkick", Steam_SV_TestKick, &Steam_SV_TestSteamKick_SERVER);
 }
+
+#endif // KISAK_IOS

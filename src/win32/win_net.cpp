@@ -6,6 +6,9 @@
 #include "win_net.h"
 #include "win_net_debug.h"
 #include <qcommon/mem_track.h>
+#ifdef KISAK_IOS
+#include <ios/bsd_net_compat.h> // winsock 1.1 -> BSD sockets (DEPENDENCY_MAP §5); win_local.h no longer pulls winsock.h on iOS
+#endif
 
 #ifdef KISAK_MP
 #include <qcommon/net_chan_mp.h>
@@ -34,7 +37,11 @@ SOCKET	v_socket = INVALID_SOCKET;
 #endif
 static SOCKET	ip_socket = INVALID_SOCKET;
 static SOCKET	socks_socket = INVALID_SOCKET;
+#ifdef KISAK_IOS
+static SOCKET	ipx_socket = 0; // IPX is dead code on iOS; 0 = "no socket" so Sys_GetPacket/NET_Config skip it
+#else
 static SOCKET	ipx_socket = INVALID_SOCKET;
+#endif
 
 #define	MAX_IPS		16
 static	int		numIP;
@@ -48,6 +55,11 @@ NET_ErrorString
 ====================
 */
 const char *NET_ErrorString( void ) {
+#ifdef KISAK_IOS
+	// BSD sockets report through errno; strerror covers every case the
+	// winsock name table below did (several WSAE* codes alias one errno).
+	return strerror( errno );
+#else
 	int		code;
 
 	code = WSAGetLastError();
@@ -99,11 +111,16 @@ const char *NET_ErrorString( void ) {
 	case WSAEHOSTUNREACH: return "WSAEHOSTUNREACH";
 	default: return "NO ERROR";
 	}
+#endif
 }
 
 void NetadrToSockadr( netadr_t *a, struct sockaddr *s ) {
 	memset( s, 0, sizeof(*s) );
 
+#ifdef KISAK_IOS
+	// XNU validates sockaddr.sa_len on bind/connect/sendto (win32 has no such field)
+	s->sa_len = sizeof(struct sockaddr_in);
+#endif
 	if( a->type == NA_BROADCAST ) {
 		((struct sockaddr_in *)s)->sin_family = AF_INET;
 		((struct sockaddr_in *)s)->sin_port = a->port;
@@ -168,6 +185,25 @@ idnewt
 
 qboolean Sys_StringToSockaddr( const char *s, struct sockaddr *sadr )
 {
+#ifdef KISAK_IOS
+	// getaddrinfo handles both dotted-quad and hostname lookup in one call
+	// (the inet_addr/gethostbyname replacement, DEPENDENCY_MAP §5); the IPX
+	// address form ("12121212.121212121212") is dead code on iOS.
+	struct addrinfo hints;
+	struct addrinfo *res;
+
+	memset( sadr, 0, sizeof( *sadr ) );
+	memset( &hints, 0, sizeof( hints ) );
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+	if ( getaddrinfo( s, 0, &hints, &res ) || !res ) {
+		return (qboolean)0;
+	}
+	memcpy( sadr, res->ai_addr, sizeof( struct sockaddr_in ) ); // carries Darwin sin_len
+	((struct sockaddr_in *)sadr)->sin_port = 0;
+	freeaddrinfo( res );
+	return qtrue;
+#else
 #ifndef _XBOX
 	struct hostent	*h;
 	int		val;
@@ -222,6 +258,7 @@ qboolean Sys_StringToSockaddr( const char *s, struct sockaddr *sadr )
 	}
 	
 	return qtrue;
+#endif // KISAK_IOS
 }
 
 #undef DO
@@ -260,7 +297,11 @@ int __cdecl Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
 	int err; // [esp+1Ch] [ebp-14h]
 	int ret; // [esp+20h] [ebp-10h]
 	int protocol; // [esp+24h] [ebp-Ch]
+#ifdef KISAK_IOS
+	socklen_t fromlen; // BSD recvfrom takes socklen_t*, not int*
+#else
 	int fromlen; // [esp+28h] [ebp-8h] BYREF
+#endif
 	uint32_t net_socket; // [esp+2Ch] [ebp-4h]
 
 	for (protocol = 0; protocol < 2; ++protocol)
@@ -276,7 +317,11 @@ int __cdecl Sys_GetPacket(netadr_t *net_from, msg_t *net_message)
 			if (ret == -1)
 			{
 				err = WSAGetLastError();
+#ifdef KISAK_IOS
+				if (err != EWOULDBLOCK && err != ECONNRESET) // winsock 10035/10054
+#else
 				if (err != 10035 && err != 10054)
+#endif
 				{
 					Com_PrintError(16, "NET_GetPacket: %s\n", NET_ErrorString());
 				}
@@ -439,11 +484,19 @@ char __cdecl Sys_SendPacket(int length, unsigned __int8 *data, netadr_t to)
 	if (ret != -1)
 		return 1;
 	err = WSAGetLastError();
+#ifdef KISAK_IOS
+	if (err == EWOULDBLOCK) // winsock 10035
+		return 1;
+	// some PPP links do not allow broadcasts and return an error
+	if (err == EADDRNOTAVAIL && (to.type == NA_BROADCAST)) // winsock 10049
+		return 1;
+#else
 	if (err == 10035)
 		return 1;
 //	if (err == 10049 && (to.type == NA_BROADCAST || to.type == NA_BROADCAST_IPX))
 	if (err == 10049 && (to.type == NA_BROADCAST))
 		return 1;
+#endif
 	v4 = NET_ErrorString();
 	Com_PrintError(16, "Sys_SendPacket: %s\n", v4);
 	return 0;
@@ -539,7 +592,11 @@ uint32_t __cdecl NET_IPSocket(const char *net_interface, int port)
 	newsocket = socket(2, 2, 17);
 	if (newsocket == -1)
 	{
+#ifdef KISAK_IOS
+		if (WSAGetLastError() != EAFNOSUPPORT) // winsock 10047
+#else
 		if (WSAGetLastError() != 10047)
+#endif
 		{
 			v2 = NET_ErrorString();
 			Com_PrintWarning(16, "WARNING: UDP_OpenSocket: socket: %s\n", v2);
@@ -560,6 +617,23 @@ uint32_t __cdecl NET_IPSocket(const char *net_interface, int port)
 	}
 	else
 	{
+#ifdef KISAK_IOS
+		// Proper sockaddr_in field access replaces the sa_data punning
+		// (DEPENDENCY_MAP §5); Darwin sockaddr_in additionally carries sin_len,
+		// which XNU validates on bind.
+		sockaddr_in *address_in = (sockaddr_in *)&address;
+		memset(&address, 0, sizeof(address));
+		address_in->sin_len = sizeof(sockaddr_in);
+		if (net_interface && *net_interface && I_stricmp(net_interface, "localhost"))
+			Sys_StringToSockaddr(net_interface, &address);
+		else
+			address_in->sin_addr.s_addr = 0;
+		if (port == -1)
+			address_in->sin_port = 0;
+		else
+			address_in->sin_port = htons(port);
+		address_in->sin_family = AF_INET;
+#else
 		if (net_interface && *net_interface && I_stricmp(net_interface, "localhost"))
 			Sys_StringToSockaddr(net_interface, &address);
 		else
@@ -569,6 +643,7 @@ uint32_t __cdecl NET_IPSocket(const char *net_interface, int port)
 		else
 			*(_WORD*)address.sa_data = htons(port);
 		address.sa_family = 2;
+#endif
 		if (bind(newsocket, &address, 16) == -1)
 		{
 			v6 = NET_ErrorString();
@@ -628,9 +703,22 @@ void __cdecl NET_OpenSocks(u_short port)
 		Com_PrintWarning(16, "WARNING: NET_OpenSocks: gethostbyname: address type was not AF_INET\n");
 		return;
 	}
+#ifdef KISAK_IOS
+	// Proper sockaddr_in field access (the decompiled win32 line below even
+	// drops an '&'); Darwin additionally wants sin_len for connect.
+	{
+		sockaddr_in *address_in = (sockaddr_in *)&address;
+		memset(&address, 0, sizeof(address));
+		address_in->sin_len = sizeof(sockaddr_in);
+		address_in->sin_family = AF_INET;
+		memcpy(&address_in->sin_addr, h->h_addr_list[0], 4);
+		address_in->sin_port = htons(net_socksPort->current.unsignedInt);
+	}
+#else
 	address.sa_family = 2;
 	*(_DWORD*)address.sa_data[2] = **(_DWORD**)h->h_addr_list;
 	*(_WORD*)address.sa_data = htons(net_socksPort->current.unsignedInt);
+#endif
 	if (connect(socks_socket, &address, 16) == -1)
 	{
 		WSAGetLastError();
@@ -728,11 +816,23 @@ void __cdecl NET_OpenSocks(u_short port)
 	}
 	else if (buf[3] == 1)
 	{
+#ifdef KISAK_IOS
+		// Proper sockaddr_in field access; sin_len must match what recvfrom
+		// writes into 'from' so the memcmp in Sys_GetPacket still detects
+		// relay traffic.
+		sockaddr_in *relayAddr_in = (sockaddr_in *)&socksRelayAddr;
+		memset(&socksRelayAddr, 0, sizeof(socksRelayAddr));
+		relayAddr_in->sin_len = sizeof(sockaddr_in);
+		relayAddr_in->sin_family = AF_INET;
+		memcpy(&relayAddr_in->sin_addr, &buf[4], 4);
+		memcpy(&relayAddr_in->sin_port, &buf[8], 2);
+#else
 		socksRelayAddr.sa_family = 2;
 		*(_DWORD*)&socksRelayAddr.sa_data[2] = *(_DWORD*)&buf[4];
 		*(_WORD*)socksRelayAddr.sa_data = *(_WORD*)&buf[8];
 		*(_DWORD *)&socksRelayAddr.sa_data[6] = 0;
 		*(_DWORD *)&socksRelayAddr.sa_data[10] = 0;
+#endif
 		usingSocks = 1;
 	}
 	else
@@ -749,6 +849,39 @@ NET_GetLocalAddress
 */
 
 #ifndef _XBOX
+
+#ifdef KISAK_IOS
+
+// getifaddrs replaces the gethostbyname(gethostname()) walk (DEPENDENCY_MAP
+// §5): resolving one's own hostname is unreliable inside the iOS sandbox,
+// while getifaddrs enumerates the live interface addresses directly. localIP[]
+// keeps its network-byte-order layout for the Sys_IsLANAddress subnet compare.
+int NET_GetLocalAddress()
+{
+	ifaddrs *ifap; // interface list head (freed below)
+	ifaddrs *ifa;
+	char hostname[256];
+
+	if (gethostname(hostname, 256) != -1)
+		Com_Printf(16, "Hostname: %s\n", hostname);
+	if (getifaddrs(&ifap) == -1)
+		return errno;
+	numIP = 0;
+	for (ifa = ifap; ifa && numIP < MAX_IPS; ifa = ifa->ifa_next)
+	{
+		if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		if (ifa->ifa_flags & IFF_LOOPBACK) // gethostbyname never reported 127.0.0.1 either
+			continue;
+		memcpy(localIP[numIP], &((const sockaddr_in *)ifa->ifa_addr)->sin_addr, 4);
+		Com_Printf(16, "IP: %i.%i.%i.%i\n", localIP[numIP][0], localIP[numIP][1], localIP[numIP][2], localIP[numIP][3]);
+		++numIP;
+	}
+	freeifaddrs(ifap);
+	return numIP;
+}
+
+#else
 
 int NET_GetLocalAddress()
 {
@@ -792,6 +925,8 @@ int NET_GetLocalAddress()
 	}
 	return result;
 }
+
+#endif // KISAK_IOS
 
 #else
 
@@ -865,6 +1000,14 @@ NET_IPXSocket
 // NOTE(mrsteyk): who the fuck has IPX in 21st century? @Cleanup
 uint32_t __cdecl NET_IPXSocket(int port)
 {
+#ifdef KISAK_IOS
+	// Explicit no-op: no IPX stack exists on iOS (wsipx.h dead code,
+	// DEPENDENCY_MAP §5). Returning 0 = "no socket", the same result modern
+	// Windows produces via the WSAEAFNOSUPPORT path below, so NET_OpenIPX
+	// leaves ipx_socket empty and Sys_GetPacket skips the IPX protocol slot.
+	(void)port;
+	return 0;
+#else
 	const char *v1; // eax
 	const char *v3; // eax
 	const char *v4; // eax
@@ -916,6 +1059,7 @@ uint32_t __cdecl NET_IPXSocket(int port)
 			return newsocket;
 		}
 	}
+#endif // KISAK_IOS
 }
 
 
@@ -1088,7 +1232,11 @@ sleeps msec or until net socket is ready
 // LWSS: Done
 void NET_Sleep( int msec ) 
 {
+#ifdef KISAK_IOS
+	usleep(msec * 1000);
+#else
 	Sleep(msec);
+#endif
 }
 
 
@@ -1115,6 +1263,17 @@ int __cdecl NET_Select(uint32_t socket)
 	fd_set writefds; // [esp+110h] [ebp-110h] BYREF
 	timeval time; // [esp+218h] [ebp-8h] BYREF
 
+#ifdef KISAK_IOS
+	// BSD fd_set is a bitmask (no fd_count/fd_array), and nfds is maxfd+1
+	// rather than ignored as on winsock
+	FD_ZERO(&readfds);
+	FD_SET((int)socket, &readfds);
+	FD_ZERO(&writefds);
+	FD_SET((int)socket, &writefds);
+	time.tv_sec = 5;
+	time.tv_usec = 0;
+	err = select(socket + 1, &readfds, &writefds, 0, &time);
+#else
 	readfds.fd_count = 1;
 	readfds.fd_array[0] = socket;
 	writefds.fd_count = 1;
@@ -1122,6 +1281,7 @@ int __cdecl NET_Select(uint32_t socket)
 	time.tv_sec = 5;
 	time.tv_usec = 0;
 	err = select(0, &readfds, &writefds, 0, &time);
+#endif
 	if (err)
 	{
 		if (err == -1)
@@ -1161,7 +1321,11 @@ uint32_t __cdecl NET_TCPIPSocket(const char* net_interface, int port, int type)
 	newsocket = socket(2, 1, 6);
 	if (newsocket == -1)
 	{
+#ifdef KISAK_IOS
+		if (WSAGetLastError() != EAFNOSUPPORT) // winsock 10047
+#else
 		if (WSAGetLastError() != 10047)
+#endif
 		{
 			v3 = NET_ErrorString();
 			Com_PrintWarning(16, "WARNING: NET_TCPIPSocket: socket: %s\n", v3);
@@ -1176,10 +1340,21 @@ uint32_t __cdecl NET_TCPIPSocket(const char* net_interface, int port, int type)
 			Com_PrintWarning(16, "WARNING: NET_TCPIPSocket: ioctl FIONBIO: %s\n", v5);
 			return 0;
 		}
+#ifdef KISAK_IOS
+		// Darwin in_addr has no S_un union, and sockaddr_in carries sin_len
+		// which XNU validates on bind/connect
+		memset(&address, 0, sizeof(address));
+		address.sin_len = sizeof(address);
+		if (net_interface && *net_interface && I_stricmp(net_interface, "localhost"))
+			Sys_StringToSockaddr(net_interface, (sockaddr*)&address);
+		else
+			address.sin_addr.s_addr = 0;
+#else
 		if (net_interface && *net_interface && I_stricmp(net_interface, "localhost"))
 			Sys_StringToSockaddr(net_interface, (sockaddr*)&address);
 		else
 			address.sin_addr.S_un.S_addr = 0;
+#endif
 		if (port == -1)
 			address.sin_port = 0;
 		else
@@ -1190,7 +1365,11 @@ uint32_t __cdecl NET_TCPIPSocket(const char* net_interface, int port, int type)
 			if (type == 1 && connect(newsocket, (const struct sockaddr*)&address, 16) == -1)
 			{
 				err = WSAGetLastError();
+#ifdef KISAK_IOS
+				if (err != EINPROGRESS) // BSD nonblocking connect: EINPROGRESS, where winsock used WSAEWOULDBLOCK (10035)
+#else
 				if (err != 10035)
+#endif
 				{
 					v7 = NET_ErrorString();
 					Com_PrintWarning(16, "WARNING: NET_TCPIPSocket: connect: %s\n", v7);

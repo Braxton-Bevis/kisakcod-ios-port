@@ -1,6 +1,10 @@
 #pragma once
 
+#ifdef KISAK_IOS
+#include <ios/mss_ios_stub.h> // Miles is a binary-only Win32-x86 dep; pre-AVAudioEngine typed stub (DEPENDENCY_MAP §9)
+#else
 #include <msslib/mss.h>
+#endif
 #include "snd_public.h"
 
 static const char *snd_outputConfigurationStrings[6] = { "Windows default", "Mono", "Stereo", "4 speakers", "5.1 speakers", NULL }; // idb

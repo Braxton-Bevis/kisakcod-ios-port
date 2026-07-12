@@ -32,3 +32,12 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.9"
         GENERATE_INFOPLIST_FILE: false
+        # Signing: automatic with the free personal team (7-day profiles).
+        # CI's unsigned-IPA job overrides these with CODE_SIGNING_ALLOWED=NO.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NCYQDHQ93F
+        # Engine linking: libkisakcod.a is produced per-SDK by
+        # scripts/platform/ios/build-engine-lib.sh (not checked in).
+        SWIFT_OBJC_BRIDGING_HEADER: Stub/BridgingHeader.h
+        LIBRARY_SEARCH_PATHS: ["$(PROJECT_DIR)/libs/$(PLATFORM_NAME)"]
+        OTHER_LDFLAGS: ["-lkisaksmoke"]

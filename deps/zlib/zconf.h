@@ -212,6 +212,8 @@
 
 #if !defined(MACOS) && !defined(TARGET_OS_MAC)
 typedef unsigned char  Byte;  /* 8 bits */
+#elif defined(KISAK_IOS)
+typedef unsigned char  Byte;  /* Apple SDKs define TARGET_OS_MAC even on iOS; the guard above then drops the typedef */
 #endif
 typedef unsigned int   uInt;  /* 16 bits or more */
 typedef unsigned long  uLong; /* 32 bits or more */

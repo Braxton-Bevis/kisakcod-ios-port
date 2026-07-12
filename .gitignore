@@ -427,3 +427,9 @@ res/
 .idea/*
 IDA/*
 KisakCOD/.idea/*
+# iOS port build artifacts (produced by scripts/platform/ios/*.sh — not sources)
+build-ios-lib/
+ios/libs/
+ios/build/
+ios/Stub/Info.plist
+ios/KisakStub.xcodeproj/

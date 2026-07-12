@@ -31,11 +31,21 @@ int __cdecl GetMinBitCountForNum(uint32_t num)
 {
     int v2; // eax
 
+#ifdef KISAK_IOS
+    // LP64: the (unsigned long*)&v2 cast below would write 8 bytes over a
+    // 4-byte int. sse2neon declares _BitScanReverse(unsigned int*, ...).
+    unsigned int idx;
+    if (_BitScanReverse(&idx, num))
+        v2 = (int)idx;
+    else
+        v2 = 63;
+#else
     if (!_BitScanReverse((unsigned long*)&v2, num))
     {
         //v2 = `CountLeadingZeros'::`2': : notFound;
         v2 = 63;
     }
+#endif
 
     return 32 - (v2 ^ 0x1F);
 }

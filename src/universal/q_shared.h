@@ -7,6 +7,9 @@
 
 #include <climits>   // INT_MIN/INT_MAX used below; MSVC headers leak these, clang/iOS does not
 #include "kisak_layout.h"   // KISAK_LAYOUT_ASSERT — x86-32 layout asserts, relaxable on iOS
+#ifdef KISAK_IOS
+#include <ios/msvc_crt_compat.h> // MSVC CRT spellings (_stricmp, _vsnprintf, ...) → libc
+#endif
 
 #ifdef _WIN32
 #pragma warning(disable : 4018)     // signed/unsigned mismatch
