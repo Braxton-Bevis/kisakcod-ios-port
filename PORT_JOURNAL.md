@@ -495,3 +495,30 @@ To our knowledge this is the first D3D9 frame presented through DXVK on iOS.
 The engine's renderer calls (`gfx_d3d/`) now have a proven runtime target:
 `R_CreateWindow`'s `Sys_iOS_GetHostWindow()` seam hands the engine this same
 CAMetalLayer path. Next: point the engine's `dx.d3d9` initialization at it.
+
+## M12 addendum — feature-relaxation audit + the boot path opens (2026-07-11)
+
+**Audit (agent-verified against MoltenVK v1.4.1 source, not guesswork):** DXVK
+2.7.1's compatibility gate has 41 required rows + 3 hard gates; on an M5,
+MoltenVK satisfies ALL of them except exactly the four relaxed in M12
+(geometryShader, shaderCullDistance, robustBufferAccess2, nullDescriptor) plus
+VK_KHR_pipeline_library — i.e. the on-device discovery loop found the complete
+set. Two follow-ups recorded for the renderer:
+- **nullDescriptor is load-bearing beyond Clear/Present**: real SM2/SM3 content
+  binds nothing on some stages, and DXVK's legacy descriptor path writes
+  VK_NULL_HANDLE views (dxvk_context.cpp:6335ff) which is only legal under
+  robustness2. Fix scoped: extend DXVK's existing dummyResources() pattern
+  (already used for the maintenance6 index-buffer fallback) to descriptor
+  writes + vertex buffers on Apple.
+- **textureCompressionBC passes only on M-class GPUs** (MTLDevice.
+  supportsBCTextureCompression). A-series iPhones would need a BC→ASTC/RGBA
+  transcode path — deferred until iPhone is a target.
+
+**Boot path:** dvar.cpp (no changes needed), com_memory.cpp (real mmap/
+mprotect/madvise port of Z_Virtual*, 16KB-page-aware, MEM_RELEASE size
+registry), and qcommon/common.cpp — Com_Init/Com_Frame themselves — all
+census-PASS. **26/26.** common.cpp needed only: a buildnumber.h __has_include
+fallback, CPUSTRING "ios-arm64", PreFetchCacheLine→__builtin_prefetch, and
+_time64→time. Known LP64 landmines on the hunk allocator flagged in-place
+(KISAKTODO(lp64): 32-bit pointer truncation in seven hunk functions, HunkUser
+pointer-in-int fields) — these gate actually CALLING Com_Init, not compiling it.

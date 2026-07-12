@@ -27,6 +27,7 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/universal/com_math.cpp"      # math library
     "${SRC_DIR}/universal/dvar.cpp"          # dvar system (Com_Init dependency)
     "${SRC_DIR}/universal/com_memory.cpp"    # zone/hunk memory (mmap under KISAK_IOS)
+    "${SRC_DIR}/qcommon/common.cpp"          # Com_Init / Com_Frame — the boot path itself
     "${SRC_DIR}/script/scr_vm.cpp"           # GSC script VM
     "${SRC_DIR}/xanim/xmodel.cpp"            # animation/model
     "${SRC_DIR}/physics/phys_ode.cpp"        # ODE physics glue
