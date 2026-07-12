@@ -1,12 +1,15 @@
 <div align="center">
 
-# KisakCOD → iOS
+# BMK4
+
+**B**raxton · **M**etal · **K**isak · **4** — Call of Duty 4, carried over to Apple silicon.
+A Bevis Metalworks project, forged from [KisakCOD](https://github.com/SwagSoftware/KisakCOD) by LWSS.
 
 ### Porting a from-scratch Call of Duty 4 engine decompilation to `arm64-apple-ios`
 
-[![iOS Stub](https://github.com/Braxton-Bevis/kisakcod-ios-port/actions/workflows/ios-stub.yml/badge.svg)](https://github.com/Braxton-Bevis/kisakcod-ios-port/actions/workflows/ios-stub.yml)
-[![iOS Engine Compile Probe](https://github.com/Braxton-Bevis/kisakcod-ios-port/actions/workflows/ios-compile-probe.yml/badge.svg)](https://github.com/Braxton-Bevis/kisakcod-ios-port/actions/workflows/ios-compile-probe.yml)
-[![Windows Build](https://github.com/Braxton-Bevis/kisakcod-ios-port/actions/workflows/build-kisarcod-win.yaml/badge.svg)](https://github.com/Braxton-Bevis/kisakcod-ios-port/actions/workflows/build-kisarcod-win.yaml)
+[![iOS Stub](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-stub.yml/badge.svg)](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-stub.yml)
+[![iOS Engine Compile Probe](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-compile-probe.yml/badge.svg)](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-compile-probe.yml)
+[![Windows Build](https://github.com/Braxton-Bevis/bmk4/actions/workflows/build-kisarcod-win.yaml/badge.svg)](https://github.com/Braxton-Bevis/bmk4/actions/workflows/build-kisarcod-win.yaml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 <img src="docs/media/stub-metal-triangle.png" width="300" alt="Metal render loop live in the iOS Simulator" />&nbsp;&nbsp;
@@ -112,7 +115,7 @@ The renderer follows the **translation** strategy (as used by the C&C Generals i
 ### Run the stub on your iPhone (Mac)
 
 ```bash
-git clone https://github.com/Braxton-Bevis/kisakcod-ios-port
+git clone https://github.com/Braxton-Bevis/bmk4
 brew install xcodegen
 cd kisakcod-ios-port/ios && xcodegen generate && open KisakStub.xcodeproj
 ```

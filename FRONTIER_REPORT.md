@@ -1,6 +1,6 @@
 # FRONTIER REPORT — KisakCOD → arm64-apple-ios
 
-**Updated:** 2026-07-11 (Mac bring-up session) · **Repo:** `Braxton-Bevis/kisakcod-ios-port` ·
+**Updated:** 2026-07-11 (Mac bring-up session) · **Repo:** `Braxton-Bevis/bmk4` ·
 **Companion docs:** [PORT_JOURNAL.md](PORT_JOURNAL.md) (experiment log, M0–M11), [DEPENDENCY_MAP.md](DEPENDENCY_MAP.md) (API-by-API replacement table)
 
 One-sentence summary: **every objective of the original capability probe is now
