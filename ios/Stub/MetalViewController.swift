@@ -72,6 +72,10 @@ final class MetalViewController: UIViewController {
     private let d3d9Layer = CAMetalLayer()
     private var d3d9Status = "pending"
 
+    // Staged engine boot: real memory/dvar/command subsystems initializing on
+    // device (precursor to Com_Init). Guarded like the D3D9 smoke.
+    private var bootStatus = "pending"
+
     // Controller state: one code path serves both the on-screen GCVirtualController
     // and any physical controller — both surface as GCController instances.
     private var virtualController: GCVirtualController?
@@ -150,6 +154,7 @@ final class MetalViewController: UIViewController {
         applyFrameCap()
 
         setUpD3D9Smoke()
+        runBootSmoke()
     }
 
     // MARK: - D3D9-through-DXVK smoke (device only; see D3D9Smoke.mm)
@@ -184,6 +189,29 @@ final class MetalViewController: UIViewController {
             self.d3d9Status = "\(result) (\(String(format: "%.0f", (CACurrentMediaTime() - t0) * 1000))ms)"
             NSLog("KISAK_D3D9_SMOKE %@", self.d3d9Status)
             self.writeFirstFrameMarker()
+        }
+    }
+
+    // MARK: - Staged engine boot (see BootSmoke.cpp / BootScaffold.cpp)
+
+    private func runBootSmoke() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("boot_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            bootStatus = "skipped — crashed \(crashes)x"
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+            let result = String(cString: kisak_boot_smoke())
+            try? FileManager.default.removeItem(at: sentinel)
+            DispatchQueue.main.async {
+                self.bootStatus = result
+                NSLog("KISAK_BOOT_SMOKE %@", result)
+                self.writeFirstFrameMarker()
+            }
         }
     }
 
@@ -507,6 +535,7 @@ final class MetalViewController: UIViewController {
             Controller: \(controllerStatus)  stick (\(String(format: "%.2f", stick.x)), \(String(format: "%.2f", stick.y)))
             engine: \(engineSmoke)
             d3d9: \(d3d9Status)
+            boot: \(bootStatus)
             """
         }
     }
@@ -532,6 +561,7 @@ final class MetalViewController: UIViewController {
         settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
         engine=\(engineSmoke)
         d3d9=\(d3d9Status)
+        boot=\(bootStatus)
         date=\(ISO8601DateFormatter().string(from: Date()))
         """
         try? contents.write(to: marker, atomically: true, encoding: .utf8)

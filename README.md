@@ -150,6 +150,24 @@ of each script for binary-release install one-liners).
 
 Unchanged from upstream — see [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md). All iOS work is `#ifdef KISAK_IOS`-gated; the win32 build is verified green in CI on every tree that touched engine source.
 
+## Path to a complete working game
+
+Everything between today's state and *playing Call of Duty 4 on an iPad*, in
+dependency order. Checked items are machine-verified in CI or on device.
+
+- [x] **Toolchain + app shell** — Metal render loop, settings, controllers, signing, device installs
+- [x] **Engine compiles for iOS** — 26/26 census TUs (game logic, script VM, threading, FS, net, sound stub, renderer init, `Com_Init`'s own TU)
+- [x] **Renderer runtime** — D3D9→DXVK→Vulkan→MoltenVK→Metal live on device (Clear/readback/Present verified pixel-exact, journal M12)
+- [x] **First engine code executing on device** — math/bit-packing/string smoke, exact expected values
+- [ ] **Engine subsystems boot on device** — memory/dvar/command staged init (in flight: LP64 hunk fixes + 74-symbol boot scaffold)
+- [ ] **Player movement sandbox** — real `bg_pmove` physics walking on a synthetic world, thumbstick-driven (in flight)
+- [ ] **Headless `Com_Init`** — full boot-path link closure (~700 symbols across remaining TUs), filesystem rooted in the app bundle
+- [ ] **THE FASTFILE WALL** — 64-bit translation of every serialized asset struct so real game data loads; attack plan being generated into `docs/FASTFILE_PLAN.md` (the 249 relaxed layout asserts double as a machine-checkable 32-bit layout spec). *The dominant remaining cost.*
+- [ ] **Renderer content-readiness** — DXVK dummy-resources for the Apple null-descriptor gap (scoped, journal M12 addendum); engine `dx.d3d9` init through `Sys_iOS_GetHostWindow()`
+- [ ] **Input & audio** — GCController/touch → `Sys_QueEvent`; AVAudioEngine behind the landed `AIL_*` stub surface
+- [ ] **Game data** — user-supplied COD4 (2007) files into `Documents/` (never shipped with this repo); asset name case-normalization for APFS
+- [ ] **A match runs** — map loads, player spawns, walks, shoots
+
 ## Roadmap
 
 1. ~~DXVK d3d9 as an arm64-apple-ios library~~ ✅ **done** — `libdxvk_d3d9.a` builds with a [5-hunk patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch); see [build-dxvk-ios.sh](scripts/platform/ios/build-dxvk-ios.sh).
