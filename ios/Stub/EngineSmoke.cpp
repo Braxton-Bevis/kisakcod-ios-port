@@ -48,17 +48,8 @@ void Com_PrintError(int channel, const char *fmt, ...)
     va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap);
 }
 
-char *va(const char *fmt, ...) // engine's rotating printf buffer
-{
-    static char buf[4][1024];
-    static int slot;
-    char *out = buf[slot = (slot + 1) & 3];
-    va_list ap; va_start(ap, fmt); vsnprintf(out, sizeof(buf[0]), fmt, ap); va_end(ap);
-    return out;
-}
-
+// (va() and Q_fabs are NOT stubbed here — q_shared.o / com_math.o define them.)
 void Com_Memset(void *dst, int val, unsigned long len) { memset(dst, val, len); }
-float Q_fabs(float f) { return fabsf(f); }
 bool Sys_IsMainThread() { return pthread_main_np() != 0; }
 int Sys_Milliseconds()
 {

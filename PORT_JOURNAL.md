@@ -445,3 +445,53 @@ the scene renders at 50% scale and MTLFXSpatialScaler feeds the drawable at
 native 3200×2400. Wireless installs: the CoreDevice pairing tunnel
 (iPad-of-Braxton-2.coredevice.local) serves network installs automatically
 once paired — verified by devicectl after USB unplug (see README dev notes).
+
+## M12 — RENDERER LIVE: first D3D9 frame through DXVK→Vulkan→MoltenVK→Metal on iPadOS (2026-07-11) ✅
+
+**Attempted:** FRONTIER_REPORT next-step #1 — runtime bring-up of the TRANSLATION
+renderer stack on the physical iPad Pro (M5).
+
+**Concrete changes:**
+- DXVK gains a native **iOS CAMetalLayer WSI backend** (`src/wsi/ios/`, driver
+  name "iOS", selected via `DXVK_WSI_DRIVER`): the window handle IS a
+  `CAMetalLayer*`; surfaces via `VK_EXT_metal_surface`; one fake monitor
+  reporting the layer's size. SDL2 dropped entirely (no longer built or linked).
+- `vulkan_loader.cpp`: on Apple, `dlsym(RTLD_DEFAULT, "vkGetInstanceProcAddr")`
+  first — MoltenVK is statically linked into the app.
+- `env::getExePath()`: `_NSGetExecutablePath` branch (the Linux-only
+  /proc/self/exe left NO return path on Apple — clang's UB trap fired at
+  `getExeName()+0`, the first real crash of the bring-up).
+- Feature relaxations, Apple-gated, for what MoltenVK 1.4.1 cannot provide
+  (each confirmed by on-device adapter-filter logs, matching the historical
+  DXVK-on-macOS community set): `geometryShader`, `shaderCullDistance`,
+  `robustBufferAccess2` + `nullDescriptor` (no VK_EXT_robustness2 at all),
+  `VK_KHR_pipeline_library` (GPL already optional; monolithic fallbacks used).
+- App side: MoltenVK static slice **force_load**ed with `DEAD_CODE_STRIPPING=NO`
+  (dlsym-only symbols otherwise stripped — manifested as signal 5 with zero vk*
+  symbols in the binary), `ios/Stub/D3D9Smoke.mm` (one-shot Clear → GPU readback
+  → Present on a dedicated 320×240 sublayer), DXVK stderr teed into
+  `Documents/dxvk_stderr.log`, crash-guard sentinel with a 3-attempt counter.
+
+**Errors hit (all real, all fixed):** linker dropped all of MoltenVK (dlsym-only);
+`getExeName` UB trap; four adapter-filter rejections discovered one device-round
+at a time; two duplicate scaffolding symbols (va/Q_fabs — engine TUs define them).
+
+**Compiled/Ran?** ✅ **On the iPad Pro (M5), pulled from the device sandbox:**
+
+```
+d3d9=adapter=AMD Radeon RX 6700 XT clear=0xFFBA55D3 read=0x00000000 px=0xFFBA55D3 present=0x00000000 (1024ms)
+```
+
+- `CreateDevice` → **D3D_OK**; MoltenVK VkInstance/VkDevice on Vulkan 1.3.334.
+- `Clear(0xBA55D3)` → `GetRenderTargetData` → **read-back pixel 0xFFBA55D3 —
+  bit-exact**. The D3D9 command stream executed on the M5 GPU.
+- `Present` → **D3D_OK** through the new WSI + MoltenVK swapchain — the orchid
+  sublayer is visible on screen next to the stub's Metal triangle.
+- The adapter string is DXVK's stock game-compat spoofing (Apple vendor ID is
+  unknown to its lookup table); `SetupFPU: not supported on this arch` is the
+  benign x86-FPU-control path declining on arm64.
+
+To our knowledge this is the first D3D9 frame presented through DXVK on iOS.
+The engine's renderer calls (`gfx_d3d/`) now have a proven runtime target:
+`R_CreateWindow`'s `Sys_iOS_GetHostWindow()` seam hands the engine this same
+CAMetalLayer path. Next: point the engine's `dx.d3d9` initialization at it.

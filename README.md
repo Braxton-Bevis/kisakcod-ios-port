@@ -42,7 +42,7 @@ There is no macOS/Linux/ARM branch to start from. The engine assumes Windows API
 | Filesystem sandboxing (`fs_basepath` → app bundle, `fs_homepath` → `Documents/`) | ✅ landed |
 | Engine translation units compiling for `arm64-apple-ios` | ✅ **23/23 census TUs** — game logic, script VM, threading (pthreads), FS (POSIX), net (BSD sockets), sound (Miles stub), renderer init |
 | D3D9 header layer absorbed by DXVK native headers on the iOS SDK | ✅ proven |
-| DXVK d3d9 built as an iOS library (the renderer runtime) | ✅ **`libdxvk_d3d9.a` (arm64)** — 5-hunk patch + SDL2-iOS WSI, [build script](scripts/platform/ios/build-dxvk-ios.sh); runtime bring-up vs MoltenVK is the next frontier |
+| DXVK d3d9 renderer runtime on iOS | ✅ **LIVE ON DEVICE** — native CAMetalLayer WSI + static MoltenVK; `CreateDevice` D3D_OK, Clear readback bit-exact, `Present` D3D_OK on iPad Pro (M5). [Patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch) + [build script](scripts/platform/ios/build-dxvk-ios.sh) |
 | Engine linking / running on device | 🟡 **first engine code executes on iOS** — math/bit-packing/string TUs linked into the stub, verified in simulator **and on iPad Pro (M5)** with MetalFX spatial upscaling live at 120 fps |
 | win32 build unaffected by all of the above | ✅ full engine builds green (Debug + Release) |
 
@@ -154,8 +154,8 @@ Unchanged from upstream — see [docs/UPSTREAM_README.md](docs/UPSTREAM_README.m
 
 1. ~~DXVK d3d9 as an arm64-apple-ios library~~ ✅ **done** — `libdxvk_d3d9.a` builds with a [5-hunk patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch); see [build-dxvk-ios.sh](scripts/platform/ios/build-dxvk-ios.sh).
 2. ~~pthreads `threads.cpp` → BSD-sockets `win_net.cpp` → platform layer replacing `win_main.cpp`~~ ✅ **done** — all census-verified (`sys_ios_main.mm` is the entry layer).
-3. **Renderer runtime bring-up** (current frontier): DXVK + MoltenVK + SDL2-iOS linked into the stub, one D3D9 clear+present end-to-end onto the CAMetalLayer.
-4. **Engine boot**: graduate TUs toward a headless `Com_Init` (dvar, com_memory mmap port, common_mp, database).
+3. ~~Renderer runtime bring-up~~ ✅ **done — D3D9 renders on the iPad** (journal M12): native CAMetalLayer WSI, static MoltenVK, Clear+readback+Present all D3D_OK.
+4. **Engine boot** (current frontier): graduate TUs toward a headless `Com_Init` (dvar, com_memory mmap port, common_mp, database), then point the engine's `dx.d3d9` init at the proven renderer path.
 5. The 64-bit fastfile wall — load-time struct translation; gates loading real game data. Then AVAudioEngine behind the landed `AIL_*` stub surface.
 
 ## Credits & legal

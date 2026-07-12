@@ -17,7 +17,7 @@ targets:
     info:
       path: Stub/Info.plist
       properties:
-        CFBundleDisplayName: KisakStub
+        CFBundleDisplayName: BMK4
         UILaunchScreen: {}            # empty launch screen dict -> app gets full native resolution
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
@@ -44,3 +44,14 @@ targets:
         # The engine is arm64-only (sse2neon absorbs the SSE layer) — no
         # x86_64 simulator slice exists or is wanted.
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+        # Device builds additionally link the TRANSLATION renderer stack:
+        # DXVK d3d9 (+ its component libs, built by build-dxvk-ios.sh with the
+        # iOS CAMetalLayer WSI) and MoltenVK static. D3D9Smoke.mm drives it.
+        # MoltenVK must be force-loaded AND dead-stripping disabled: DXVK
+        # reaches Vulkan only via dlsym at runtime, so no link-time reference
+        # exists — the linker would drop the archive members, and -dead_strip
+        # would remove the symbols even after -force_load (learned on device:
+        # signal 5 inside Direct3DCreate9, zero vk* symbols in the binary).
+        DEAD_CODE_STRIPPING: NO
+        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisaksmoke", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]
+        "HEADER_SEARCH_PATHS[sdk=iphoneos*]": ["$(PROJECT_DIR)/libs/dxvk-include/directx", "$(PROJECT_DIR)/libs/dxvk-include/windows"]

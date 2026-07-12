@@ -66,6 +66,12 @@ final class MetalViewController: UIViewController {
     // I_stricmpwild and this string carries the live results.
     private let engineSmoke = String(cString: kisak_engine_smoke())
 
+    // Renderer bring-up: D3D9 through DXVK→Vulkan→MoltenVK→Metal onto a
+    // dedicated sublayer (the main layer belongs to the stub's own loop).
+    // If the pipeline works, this sublayer turns orchid on screen.
+    private let d3d9Layer = CAMetalLayer()
+    private var d3d9Status = "pending"
+
     // Controller state: one code path serves both the on-screen GCVirtualController
     // and any physical controller — both surface as GCController instances.
     private var virtualController: GCVirtualController?
@@ -142,6 +148,43 @@ final class MetalViewController: UIViewController {
         link.add(to: .main, forMode: .common)
         displayLink = link
         applyFrameCap()
+
+        setUpD3D9Smoke()
+    }
+
+    // MARK: - D3D9-through-DXVK smoke (device only; see D3D9Smoke.mm)
+
+    private func setUpD3D9Smoke() {
+        d3d9Layer.frame = CGRect(x: 16, y: 190, width: 320, height: 240)
+        d3d9Layer.drawableSize = CGSize(width: 640, height: 480)
+        d3d9Layer.isOpaque = true
+        view.layer.addSublayer(d3d9Layer)
+
+        // Crash guard: the sentinel carries a crash counter. Up to 3 armed
+        // attempts (so a fixed build self-retries after reinstall), then the
+        // app stays usable and just reports. Uninstalling resets it — but
+        // that also drops the developer-profile trust, so prefer letting the
+        // counter do its job.
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("d3d9_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            d3d9Status = "skipped — crashed \(crashes)x (see dxvk_stderr.log)"
+            return
+        }
+
+        // Give the app a couple of seconds to settle, then run the one-shot
+        // smoke on the main thread (MoltenVK swapchain wraps the CAMetalLayer).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self else { return }
+            try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+            let t0 = CACurrentMediaTime()
+            let result = String(cString: kisak_d3d9_smoke(Unmanaged.passUnretained(self.d3d9Layer).toOpaque()))
+            try? FileManager.default.removeItem(at: sentinel)
+            self.d3d9Status = "\(result) (\(String(format: "%.0f", (CACurrentMediaTime() - t0) * 1000))ms)"
+            NSLog("KISAK_D3D9_SMOKE %@", self.d3d9Status)
+            self.writeFirstFrameMarker()
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -457,12 +500,13 @@ final class MetalViewController: UIViewController {
             statusFootnote.text = "MetalFX: \(metalFXStatus)\nRT: \(rtStatus)"
             let qualityName = ["low", "med", "high"][min(max(shaderQuality, 0), 2)]
             hudLabel.text = """
-            KisakCOD iOS stub — Metal live
+            BMK4 — Metal live
             GPU: \(device.name)  frame \(frameIndex)  \(String(format: "%.0f", measuredFPS)) fps
             shader: \(qualityName)  RT: \(rtEnabled ? "on (surface only)" : rtSupported ? "off" : "n/a")
             MetalFX: \(metalFXStatus)
             Controller: \(controllerStatus)  stick (\(String(format: "%.2f", stick.x)), \(String(format: "%.2f", stick.y)))
             engine: \(engineSmoke)
+            d3d9: \(d3d9Status)
             """
         }
     }
@@ -476,7 +520,7 @@ final class MetalViewController: UIViewController {
         let marker = docs.appendingPathComponent("metal_first_frame.txt")
         let qualityName = ["low", "med", "high"][min(max(shaderQuality, 0), 2)]
         let contents = """
-        KisakCOD iOS stub: first Metal frame presented OK
+        BMK4 stub: first Metal frame presented OK
         gpu=\(device.name)
         drawableSize=\(metalView.metalLayer.drawableSize)
         resolution=\(resolutionStatus)
@@ -487,6 +531,7 @@ final class MetalViewController: UIViewController {
         controller=\(controllerStatus)
         settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
         engine=\(engineSmoke)
+        d3d9=\(d3d9Status)
         date=\(ISO8601DateFormatter().string(from: Date()))
         """
         try? contents.write(to: marker, atomically: true, encoding: .utf8)

@@ -1,3 +1,133 @@
+diff --git a/include/native/windows/windows_base.h b/include/native/windows/windows_base.h
+index f008a53..4dbbbe7 100644
+--- a/include/native/windows/windows_base.h
++++ b/include/native/windows/windows_base.h
+@@ -34,8 +34,15 @@ typedef unsigned char UCHAR, *PUCHAR;
+ typedef char CHAR;
+ typedef const CHAR *LPCSTR, *PCSTR;
+ 
++#ifdef __OBJC__
++// Objective-C[++] translation units get BOOL from the
++// ObjC runtime; only define the Win32 alias for it here.
++#include <objc/objc.h>
++typedef INT WINBOOL;
++#else
+ typedef INT BOOL;
+ typedef BOOL WINBOOL;
++#endif
+ 
+ typedef uint16_t UINT16;
+ typedef uint32_t UINT32;
+diff --git a/include/native/wsi/native_ios.h b/include/native/wsi/native_ios.h
+new file mode 100644
+index 0000000..f26be54
+--- /dev/null
++++ b/include/native/wsi/native_ios.h
+@@ -0,0 +1,23 @@
++#pragma once
++
++#include <windows.h>
++
++#ifdef __OBJC__
++@class CAMetalLayer;
++#else
++typedef void CAMetalLayer;
++#endif
++
++namespace dxvk::wsi {
++
++  // On iOS the HWND is a CAMetalLayer* owned by the app shell.
++
++  inline CAMetalLayer* fromHwnd(HWND hWindow) {
++    return reinterpret_cast<CAMetalLayer*>(hWindow);
++  }
++
++  inline HWND toHwnd(CAMetalLayer* pLayer) {
++    return reinterpret_cast<HWND>(pLayer);
++  }
++
++}
+diff --git a/include/native/wsi/native_wsi.h b/include/native/wsi/native_wsi.h
+index e5d7321..0a32910 100644
+--- a/include/native/wsi/native_wsi.h
++++ b/include/native/wsi/native_wsi.h
+@@ -8,6 +8,8 @@
+ #include "wsi/native_sdl2.h"
+ #elif DXVK_WSI_GLFW
+ #include "wsi/native_glfw.h"
++#elif DXVK_WSI_IOS
++#include "wsi/native_ios.h"
+ #else
+ #error Unknown wsi!
+ #endif
+\ No newline at end of file
+diff --git a/ios-arm64-cross.txt b/ios-arm64-cross.txt
+new file mode 100644
+index 0000000..74808fb
+--- /dev/null
++++ b/ios-arm64-cross.txt
+@@ -0,0 +1,29 @@
++# Meson cross file: arm64-apple-ios (device), iOS 15.0 minimum.
++# First-ever attempt to cross-build DXVK's d3d9 module for iOS —
++# KisakCOD-ios-port frontier task (FRONTIER_REPORT "what a human does next" #2).
++
++[binaries]
++c = 'clang'
++cpp = 'clang++'
++objc = 'clang'
++objcpp = 'clang++'
++ar = 'ar'
++strip = 'strip'
++sdl2-config = '/Users/tracybevis/sdl2-ios/bin/sdl2-config'
++
++[host_machine]
++system = 'darwin'
++subsystem = 'ios'
++kernel = 'xnu'
++cpu_family = 'aarch64'
++cpu = 'arm64'
++endian = 'little'
++
++[built-in options]
++c_args = ['-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=15.0']
++cpp_args = ['-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=15.0']
++objc_args = ['-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=15.0']
++objcpp_args = ['-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=15.0']
++c_link_args = ['-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=15.0']
++cpp_link_args = ['-arch', 'arm64', '-isysroot', '/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk', '-miphoneos-version-min=15.0']
++default_library = 'static'
+diff --git a/meson.build b/meson.build
+index 780d7aa..c203b9c 100644
+--- a/meson.build
++++ b/meson.build
+@@ -159,7 +159,12 @@ else
+   if lib_glfw.found()
+     compiler_args += ['-DDXVK_WSI_GLFW']
+   endif
+-  if (not lib_sdl3.found() and not lib_sdl2.found() and not lib_glfw.found())
++  if platform == 'darwin'
++    # iOS WSI backend presenting to an app-shell-owned CAMetalLayer
++    add_languages('objcpp', native: false)
++    compiler_args += ['-DDXVK_WSI_IOS']
++  endif
++  if (not lib_sdl3.found() and not lib_sdl2.found() and not lib_glfw.found() and platform != 'darwin')
+     error('SDL3, SDL2, or GLFW are required to build dxvk-native')
+   endif
+   
+@@ -179,6 +184,13 @@ add_project_arguments(cc.get_supported_arguments(compiler_args), language: 'c')
+ add_project_link_arguments(cpp.get_supported_link_arguments(link_args), language: 'cpp')
+ add_project_link_arguments(cc.get_supported_link_arguments(link_args), language: 'c')
+ 
++if platform == 'darwin'
++  objcpp = meson.get_compiler('objcpp')
++  add_project_arguments(objcpp.get_supported_arguments(compiler_args), language: 'objcpp')
++  add_project_arguments('-std=c++17', language: 'objcpp')
++  add_project_link_arguments(objcpp.get_supported_link_arguments(link_args), language: 'objcpp')
++endif
++
+ exe_ext = ''
+ def_spec_ext = '.def'
+ 
 diff --git a/src/d3d9/meson.build b/src/d3d9/meson.build
 index 2f45946..37c0023 100644
 --- a/src/d3d9/meson.build
@@ -32,11 +162,108 @@ index 2f45946..37c0023 100644
  
  d3d9_dep = declare_dependency(
    link_with           : [ d3d9_dll ],
+diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
+index 9a45f10..45796b3 100644
+--- a/src/dxvk/dxvk_device_info.cpp
++++ b/src/dxvk/dxvk_device_info.cpp
+@@ -714,7 +714,14 @@ namespace dxvk {
+       ENABLE_FEATURE(core.features, fillModeNonSolid, true),
+       ENABLE_FEATURE(core.features, fragmentStoresAndAtomics, false),
+       ENABLE_FEATURE(core.features, fullDrawIndexUint32, true),
++#ifdef __APPLE__
++      // Metal has no geometry shaders, so MoltenVK cannot expose the feature;
++      // every downstream use already branches on it. D3D9 loses nothing the
++      // Metal backend could ever provide.
++      ENABLE_FEATURE(core.features, geometryShader, false),
++#else
+       ENABLE_FEATURE(core.features, geometryShader, true),
++#endif
+       ENABLE_FEATURE(core.features, imageCubeArray, true),
+       ENABLE_FEATURE(core.features, independentBlend, true),
+       ENABLE_FEATURE(core.features, logicOp, false),
+@@ -726,7 +733,13 @@ namespace dxvk {
+       ENABLE_FEATURE(core.features, sampleRateShading, true),
+       ENABLE_FEATURE(core.features, samplerAnisotropy, false),
+       ENABLE_FEATURE(core.features, shaderClipDistance, true),
++#ifdef __APPLE__
++      // Metal exposes clip distances but no cull distances; MoltenVK reports
++      // shaderCullDistance=false. SM3 has no cull-distance concept either.
++      ENABLE_FEATURE(core.features, shaderCullDistance, false),
++#else
+       ENABLE_FEATURE(core.features, shaderCullDistance, true),
++#endif
+       ENABLE_FEATURE(core.features, shaderFloat64, false),
+       ENABLE_FEATURE(core.features, shaderImageGatherExtended, true),
+       ENABLE_FEATURE(core.features, shaderInt16, false),
+@@ -837,9 +850,22 @@ namespace dxvk {
+       ENABLE_EXT_FEATURE(extPageableDeviceLocalMemory, pageableDeviceLocalMemory, false),
+ 
+       /* Robustness, all features effectively required for correctness */
++#ifdef __APPLE__
++      // MoltenVK offers VK_EXT_robustness2 without robustBufferAccess2
++      // (Metal's OOB semantics differ); nullDescriptor is what D3D9 needs
++      // most and stays required.
++      ENABLE_EXT_FEATURE(extRobustness2, robustBufferAccess2, false),
++#else
+       ENABLE_EXT_FEATURE(extRobustness2, robustBufferAccess2, true),
++#endif
+       ENABLE_EXT_FEATURE(extRobustness2, robustImageAccess2, false),
++#ifdef __APPLE__
++      // MoltenVK 1.4.1 exposes no VK_EXT_robustness2 features on iOS-class
++      // devices; DXVK retains pre-robustness2 fallbacks for unbound resources.
++      ENABLE_EXT_FEATURE(extRobustness2, nullDescriptor, false),
++#else
+       ENABLE_EXT_FEATURE(extRobustness2, nullDescriptor, true),
++#endif
+ 
+       /* Shader module identifier, used for pipeline lifetime management in 32-bit */
+       ENABLE_EXT_FEATURE(extShaderModuleIdentifier, shaderModuleIdentifier, false),
+@@ -875,7 +901,13 @@ namespace dxvk {
+       ENABLE_EXT_FEATURE(khrMaintenance7, maintenance7, false),
+ 
+       /* Dependency for graphics pipeline library */
++#ifdef __APPLE__
++      // Metal/MoltenVK has no VK_KHR_pipeline_library; GPL itself is already
++      // optional above and DXVK keeps monolithic-pipeline fallbacks.
++      ENABLE_EXT(khrPipelineLibrary, false),
++#else
+       ENABLE_EXT(khrPipelineLibrary, true),
++#endif
+ 
+       /* Present wait, used for frame pacing and statistics */
+       ENABLE_EXT_FEATURE(khrPresentId, presentId, false),
 diff --git a/src/util/util_env.cpp b/src/util/util_env.cpp
-index c86c3ab..041d13b 100644
+index c86c3ab..2b296a1 100644
 --- a/src/util/util_env.cpp
 +++ b/src/util/util_env.cpp
-@@ -127,7 +127,11 @@ namespace dxvk::env {
+@@ -12,6 +12,10 @@
+ #include <limits.h>
+ #endif
+ 
++#ifdef __APPLE__
++#include <mach-o/dyld.h>
++#endif
++
+ #include "util_env.h"
+ 
+ #include "./com/com_include.h"
+@@ -93,6 +97,15 @@ namespace dxvk::env {
+     size_t count = readlink("/proc/self/exe", exePath.data(), exePath.size());
+ 
+     return std::string(exePath.begin(), exePath.begin() + count);
++#elif defined(__APPLE__)
++    // No /proc on Darwin; without this branch the function has no return
++    // path on Apple targets and clang's UB trap fires at first call.
++    uint32_t size = 0;
++    _NSGetExecutablePath(nullptr, &size);
++    std::vector<char> exePath(size + 1, '\0');
++    if (_NSGetExecutablePath(exePath.data(), &size) != 0)
++      return "";
++    return std::string(exePath.data());
+ #elif defined(__FreeBSD__)
+     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, getpid()};
+     char exePath[PATH_MAX] = {};
+@@ -127,7 +140,11 @@ namespace dxvk::env {
  #else
      std::array<char, 16> posixName = {};
      dxvk::str::strlcpy(posixName.data(), name.c_str(), 16);
@@ -85,3 +312,657 @@ index 5b156c6..c9b8ac1 100644
  
  #include <windows.h>
  #include <dlfcn.h>
+diff --git a/src/vulkan/vulkan_loader.cpp b/src/vulkan/vulkan_loader.cpp
+index f9d1e98..792f086 100644
+--- a/src/vulkan/vulkan_loader.cpp
++++ b/src/vulkan/vulkan_loader.cpp
+@@ -7,13 +7,33 @@
+ #include "../util/util_string.h"
+ #include "../util/util_win32_compat.h"
+ 
++#ifdef __APPLE__
++#include <dlfcn.h>
++#endif
++
+ namespace dxvk::vk {
+ 
+   static std::pair<HMODULE, PFN_vkGetInstanceProcAddr> loadVulkanLibrary() {
++#ifdef __APPLE__
++    // On iOS, MoltenVK is typically linked statically into the
++    // application, so look for vkGetInstanceProcAddr in the
++    // running process first before trying to dlopen anything.
++    auto localProc = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
++      dlsym(RTLD_DEFAULT, "vkGetInstanceProcAddr"));
++
++    if (localProc) {
++      Logger::info(str::format("Vulkan: Found vkGetInstanceProcAddr in process image @ 0x", std::hex, reinterpret_cast<uintptr_t>(localProc)));
++      return std::make_pair(HMODULE(nullptr), localProc);
++    }
++#endif
++
+     static const std::array<const char*, 2> dllNames = {{
+ #ifdef _WIN32
+       "winevulkan.dll",
+       "vulkan-1.dll",
++#elif defined(__APPLE__)
++      "libMoltenVK.dylib",
++      "@rpath/libMoltenVK.dylib",
+ #else
+       "libvulkan.so",
+       "libvulkan.so.1",
+diff --git a/src/wsi/ios/wsi_monitor_ios.mm b/src/wsi/ios/wsi_monitor_ios.mm
+new file mode 100644
+index 0000000..ae5fdd1
+--- /dev/null
++++ b/src/wsi/ios/wsi_monitor_ios.mm
+@@ -0,0 +1,108 @@
++#if defined(DXVK_WSI_IOS)
++
++#include "../wsi_monitor.h"
++
++#include "wsi_platform_ios.h"
++
++#include "../../util/log/log.h"
++
++#include <cstring>
++#include <string>
++
++namespace dxvk::wsi {
++
++  HMONITOR IosWsiDriver::getDefaultMonitor() {
++    return enumMonitors(0);
++  }
++
++
++  HMONITOR IosWsiDriver::enumMonitors(uint32_t index) {
++    return index == 0
++      ? getIosMonitor()
++      : nullptr;
++  }
++
++  HMONITOR IosWsiDriver::enumMonitors(const LUID *adapterLUID[], uint32_t numLUIDs, uint32_t index) {
++    return enumMonitors(index);
++  }
++
++  bool IosWsiDriver::getDisplayName(
++          HMONITOR         hMonitor,
++          WCHAR            (&Name)[32]) {
++    if (!isIosMonitor(hMonitor))
++      return false;
++
++    std::wstring name = L"iOS Display";
++
++    std::memset(Name, 0, sizeof(Name));
++    name.copy(Name, name.length(), 0);
++
++    return true;
++  }
++
++
++  bool IosWsiDriver::getDesktopCoordinates(
++          HMONITOR         hMonitor,
++          RECT*            pRect) {
++    if (!isIosMonitor(hMonitor))
++      return false;
++
++    uint32_t width  = 0;
++    uint32_t height = 0;
++    getMonitorSize(&width, &height);
++
++    pRect->left   = 0;
++    pRect->top    = 0;
++    pRect->right  = int32_t(width);
++    pRect->bottom = int32_t(height);
++
++    return true;
++  }
++
++
++  bool IosWsiDriver::getDisplayMode(
++          HMONITOR         hMonitor,
++          uint32_t         modeNumber,
++          WsiMode*         pMode) {
++    // The layer only ever has one mode: its current size at 60 Hz.
++    if (modeNumber != 0)
++      return false;
++
++    return getCurrentDisplayMode(hMonitor, pMode);
++  }
++
++
++  bool IosWsiDriver::getCurrentDisplayMode(
++          HMONITOR         hMonitor,
++          WsiMode*         pMode) {
++    if (!isIosMonitor(hMonitor))
++      return false;
++
++    uint32_t width  = 0;
++    uint32_t height = 0;
++    getMonitorSize(&width, &height);
++
++    pMode->width        = width;
++    pMode->height       = height;
++    pMode->refreshRate  = WsiRational{ 60 * 1000, 1000 };
++    pMode->bitsPerPixel = 32;
++    pMode->interlaced   = false;
++
++    return true;
++  }
++
++
++  bool IosWsiDriver::getDesktopDisplayMode(
++          HMONITOR         hMonitor,
++          WsiMode*         pMode) {
++    return getCurrentDisplayMode(hMonitor, pMode);
++  }
++
++  WsiEdidData IosWsiDriver::getMonitorEdid(HMONITOR hMonitor) {
++    Logger::err("getMonitorEdid not implemented on this platform.");
++    return {};
++  }
++
++}
++
++#endif
+diff --git a/src/wsi/ios/wsi_platform_ios.h b/src/wsi/ios/wsi_platform_ios.h
+new file mode 100644
+index 0000000..cfbb557
+--- /dev/null
++++ b/src/wsi/ios/wsi_platform_ios.h
+@@ -0,0 +1,146 @@
++#pragma once
++
++/*
++ * iOS WSI backend.
++ *
++ * CONTRACT: On this backend the HWND passed into every WSI entry
++ * point IS a CAMetalLayer* that is created and owned by the hosting
++ * application shell. DXVK never retains, releases or resizes the
++ * layer; the shell must guarantee that the layer stays alive for as
++ * long as any DXVK swapchain that presents to it.
++ *
++ * There is no real window system to talk to: the backend exposes a
++ * single fake monitor whose desktop coordinates and display mode are
++ * derived from the layer's current size, and all window-management
++ * operations (resize, fullscreen transitions, ...) are benign no-ops
++ * that report success.
++ */
++
++#include "wsi/native_ios.h"
++
++#include "../wsi_platform.h"
++
++namespace dxvk::wsi {
++
++  // The one fake monitor exposed by this backend. Must be
++  // non-null so it doesn't read as "no monitor" to callers.
++  inline HMONITOR getIosMonitor() {
++    return reinterpret_cast<HMONITOR>(uintptr_t(1u));
++  }
++
++  inline bool isIosMonitor(HMONITOR hMonitor) {
++    return hMonitor == getIosMonitor();
++  }
++
++  class IosWsiDriver : public WsiDriver {
++  private:
++    // Most recently seen layer (weak, owned by the app shell).
++    // Used to answer monitor queries, which only receive the
++    // fake HMONITOR and therefore cannot carry the layer.
++    CAMetalLayer* m_layer = nullptr;
++
++    // Returns the layer behind hWindow and remembers
++    // it for subsequent monitor queries.
++    CAMetalLayer* getLayer(HWND hWindow);
++
++    // Pixel size of a layer: drawableSize if set,
++    // otherwise bounds.size * contentsScale.
++    static void getLayerPixelSize(
++            CAMetalLayer*    pLayer,
++            uint32_t*        pWidth,
++            uint32_t*        pHeight);
++
++    // Size of the fake monitor: the last known layer's pixel
++    // size, or a sane default if no layer was seen yet.
++    void getMonitorSize(
++            uint32_t*        pWidth,
++            uint32_t*        pHeight);
++
++  public:
++    // Platform
++    virtual std::vector<const char *> getInstanceExtensions();
++
++    // Monitor
++    virtual HMONITOR getDefaultMonitor();
++
++    virtual HMONITOR enumMonitors(uint32_t index);
++
++    virtual HMONITOR enumMonitors(const LUID *adapterLUID[], uint32_t numLUIDs, uint32_t index);
++
++    virtual bool getDisplayName(
++            HMONITOR         hMonitor,
++            WCHAR            (&Name)[32]);
++
++    virtual bool getDesktopCoordinates(
++            HMONITOR         hMonitor,
++            RECT*            pRect);
++
++    virtual bool getDisplayMode(
++            HMONITOR         hMonitor,
++            uint32_t         modeNumber,
++            WsiMode*         pMode);
++
++    virtual bool getCurrentDisplayMode(
++            HMONITOR         hMonitor,
++            WsiMode*         pMode);
++
++    virtual bool getDesktopDisplayMode(
++            HMONITOR         hMonitor,
++            WsiMode*         pMode);
++
++    virtual WsiEdidData getMonitorEdid(HMONITOR hMonitor);
++
++    // Window
++
++    virtual void getWindowSize(
++            HWND      hWindow,
++            uint32_t* pWidth,
++            uint32_t* pWeight);
++
++    virtual void resizeWindow(
++            HWND             hWindow,
++            DxvkWindowState* pState,
++            uint32_t         width,
++            uint32_t         weight);
++
++    virtual bool setWindowMode(
++            HMONITOR         hMonitor,
++            HWND             hWindow,
++            DxvkWindowState* pState,
++      const WsiMode&         mode);
++
++    virtual bool enterFullscreenMode(
++            HMONITOR         hMonitor,
++            HWND             hWindow,
++            DxvkWindowState* pState,
++            [[maybe_unused]]
++            bool             modeSwitch);
++
++    virtual bool leaveFullscreenMode(
++            HWND             hWindow,
++            DxvkWindowState* pState,
++            bool             restoreCoordinates);
++
++    virtual bool restoreDisplayMode();
++
++    virtual HMONITOR getWindowMonitor(HWND hWindow);
++
++    virtual bool isWindow(HWND hWindow);
++
++    virtual bool isMinimized(HWND hWindow);
++
++    virtual bool isOccluded(HWND hWindow);
++
++    virtual void updateFullscreenWindow(
++            HMONITOR hMonitor,
++            HWND     hWindow,
++            bool     forceTopmost);
++
++    virtual VkResult createSurface(
++            HWND                hWindow,
++            PFN_vkGetInstanceProcAddr pfnVkGetInstanceProcAddr,
++            VkInstance          instance,
++            VkSurfaceKHR*       pSurface);
++  };
++
++}
+diff --git a/src/wsi/ios/wsi_platform_ios.mm b/src/wsi/ios/wsi_platform_ios.mm
+new file mode 100644
+index 0000000..86a5506
+--- /dev/null
++++ b/src/wsi/ios/wsi_platform_ios.mm
+@@ -0,0 +1,88 @@
++#if defined(DXVK_WSI_IOS)
++
++#include "wsi_platform_ios.h"
++
++#include "../../util/util_error.h"
++
++#include <vulkan/vulkan_metal.h>
++
++// windows_base.h defines this for the COM headers;
++// it would break @interface in Apple's frameworks.
++#undef interface
++
++#import <QuartzCore/CAMetalLayer.h>
++
++namespace dxvk::wsi {
++
++  CAMetalLayer* IosWsiDriver::getLayer(HWND hWindow) {
++    CAMetalLayer* layer = fromHwnd(hWindow);
++
++    if (layer != nullptr)
++      m_layer = layer;
++
++    return layer;
++  }
++
++
++  void IosWsiDriver::getLayerPixelSize(
++          CAMetalLayer*    pLayer,
++          uint32_t*        pWidth,
++          uint32_t*        pHeight) {
++    CGSize size = pLayer.drawableSize;
++
++    if (size.width < 1.0 || size.height < 1.0) {
++      CGSize bounds = pLayer.bounds.size;
++      CGFloat scale = pLayer.contentsScale;
++      size = CGSizeMake(bounds.width * scale, bounds.height * scale);
++    }
++
++    if (pWidth)
++      *pWidth = uint32_t(size.width);
++
++    if (pHeight)
++      *pHeight = uint32_t(size.height);
++  }
++
++
++  void IosWsiDriver::getMonitorSize(
++          uint32_t*        pWidth,
++          uint32_t*        pHeight) {
++    if (m_layer != nullptr) {
++      getLayerPixelSize(m_layer, pWidth, pHeight);
++      return;
++    }
++
++    // No layer seen yet, e.g. modes are being enumerated
++    // before device creation. Report a sane default.
++    if (pWidth)
++      *pWidth = 1920u;
++
++    if (pHeight)
++      *pHeight = 1080u;
++  }
++
++
++  std::vector<const char *> IosWsiDriver::getInstanceExtensions() {
++    return {
++      VK_KHR_SURFACE_EXTENSION_NAME,
++      VK_EXT_METAL_SURFACE_EXTENSION_NAME,
++    };
++  }
++
++  static bool createIosWsiDriver(WsiDriver **driver) {
++    try {
++      *driver = new IosWsiDriver();
++    } catch (const DxvkError& e) {
++      return false;
++    }
++    return true;
++  }
++
++  WsiBootstrap IosWSI = {
++    "iOS",
++    createIosWsiDriver
++  };
++
++}
++
++#endif
+diff --git a/src/wsi/ios/wsi_window_ios.mm b/src/wsi/ios/wsi_window_ios.mm
+new file mode 100644
+index 0000000..3782241
+--- /dev/null
++++ b/src/wsi/ios/wsi_window_ios.mm
+@@ -0,0 +1,141 @@
++#if defined(DXVK_WSI_IOS)
++
++#include "../wsi_window.h"
++
++#include "wsi_platform_ios.h"
++
++#include "../../util/log/log.h"
++
++#include <windows.h>
++
++#include <vulkan/vulkan_metal.h>
++
++// windows_base.h defines this for the COM headers;
++// it would break @interface in Apple's frameworks.
++#undef interface
++
++#import <QuartzCore/CAMetalLayer.h>
++
++namespace dxvk::wsi {
++
++  void IosWsiDriver::getWindowSize(
++        HWND      hWindow,
++        uint32_t* pWidth,
++        uint32_t* pHeight) {
++    CAMetalLayer* layer = getLayer(hWindow);
++
++    if (layer != nullptr) {
++      getLayerPixelSize(layer, pWidth, pHeight);
++      return;
++    }
++
++    if (pWidth)
++      *pWidth = 0;
++
++    if (pHeight)
++      *pHeight = 0;
++  }
++
++
++  void IosWsiDriver::resizeWindow(
++          HWND             hWindow,
++          DxvkWindowState* pState,
++          uint32_t         Width,
++          uint32_t         Height) {
++    // The app shell owns the layer and its size.
++  }
++
++
++  bool IosWsiDriver::setWindowMode(
++          HMONITOR         hMonitor,
++          HWND             hWindow,
++          DxvkWindowState* pState,
++    const WsiMode&         pMode) {
++    // There are no display modes to switch to on iOS.
++    return true;
++  }
++
++
++  bool IosWsiDriver::enterFullscreenMode(
++          HMONITOR         hMonitor,
++          HWND             hWindow,
++          DxvkWindowState* pState,
++          bool             ModeSwitch) {
++    // The layer always covers whatever the app shell gave it.
++    return true;
++  }
++
++
++  bool IosWsiDriver::leaveFullscreenMode(
++          HWND             hWindow,
++          DxvkWindowState* pState,
++          bool             restoreCoordinates) {
++    return true;
++  }
++
++
++  bool IosWsiDriver::restoreDisplayMode() {
++    return true;
++  }
++
++
++  HMONITOR IosWsiDriver::getWindowMonitor(HWND hWindow) {
++    getLayer(hWindow);
++
++    return getIosMonitor();
++  }
++
++
++  bool IosWsiDriver::isWindow(HWND hWindow) {
++    return getLayer(hWindow) != nullptr;
++  }
++
++
++  bool IosWsiDriver::isMinimized(HWND hWindow) {
++    return false;
++  }
++
++
++  bool IosWsiDriver::isOccluded(HWND hWindow) {
++    return false;
++  }
++
++
++  void IosWsiDriver::updateFullscreenWindow(
++          HMONITOR hMonitor,
++          HWND     hWindow,
++          bool     forceTopmost) {
++    // Nothing to do on iOS.
++  }
++
++
++  VkResult IosWsiDriver::createSurface(
++          HWND                      hWindow,
++          PFN_vkGetInstanceProcAddr pfnVkGetInstanceProcAddr,
++          VkInstance                instance,
++          VkSurfaceKHR*             pSurface) {
++    CAMetalLayer* layer = getLayer(hWindow);
++
++    if (layer == nullptr) {
++      Logger::err("iOS WSI: createSurface: hWindow is not a CAMetalLayer.");
++      return VK_ERROR_INITIALIZATION_FAILED;
++    }
++
++    auto pfnVkCreateMetalSurfaceEXT = reinterpret_cast<PFN_vkCreateMetalSurfaceEXT>(
++      pfnVkGetInstanceProcAddr(instance, "vkCreateMetalSurfaceEXT"));
++
++    if (pfnVkCreateMetalSurfaceEXT == nullptr) {
++      Logger::err("iOS WSI: createSurface: vkCreateMetalSurfaceEXT not found. Is VK_EXT_metal_surface enabled?");
++      return VK_ERROR_EXTENSION_NOT_PRESENT;
++    }
++
++    VkMetalSurfaceCreateInfoEXT createInfo = { };
++    createInfo.sType  = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
++    createInfo.pLayer = layer;
++
++    return pfnVkCreateMetalSurfaceEXT(instance, &createInfo, nullptr, pSurface);
++  }
++
++}
++
++#endif
+diff --git a/src/wsi/meson.build b/src/wsi/meson.build
+index 1d88e2c..dabeaa2 100644
+--- a/src/wsi/meson.build
++++ b/src/wsi/meson.build
+@@ -4,15 +4,6 @@ wsi_src = [
+   'win32/wsi_monitor_win32.cpp',
+   'win32/wsi_platform_win32.cpp',
+   'win32/wsi_window_win32.cpp',
+-  'sdl3/wsi_monitor_sdl3.cpp',
+-  'sdl3/wsi_platform_sdl3.cpp',
+-  'sdl3/wsi_window_sdl3.cpp',
+-  'sdl2/wsi_monitor_sdl2.cpp',
+-  'sdl2/wsi_platform_sdl2.cpp',
+-  'sdl2/wsi_window_sdl2.cpp',
+-  'glfw/wsi_monitor_glfw.cpp',
+-  'glfw/wsi_platform_glfw.cpp',
+-  'glfw/wsi_window_glfw.cpp',
+ ]
+ 
+ wsi_deps = [ dep_displayinfo ]
+@@ -21,11 +12,38 @@ if platform == 'windows'
+   lib_setupapi = cpp.find_library('setupapi')
+   wsi_deps += [ lib_setupapi ]
+ else
+-  wsi_deps += [
+-    lib_sdl3.partial_dependency(compile_args: true, includes: true),
+-    lib_sdl2.partial_dependency(compile_args: true, includes: true),
+-    lib_glfw.partial_dependency(compile_args: true, includes: true),
+-  ]
++  if lib_sdl3.found()
++    wsi_src += [
++      'sdl3/wsi_monitor_sdl3.cpp',
++      'sdl3/wsi_platform_sdl3.cpp',
++      'sdl3/wsi_window_sdl3.cpp',
++    ]
++    wsi_deps += [ lib_sdl3.partial_dependency(compile_args: true, includes: true) ]
++  endif
++  if lib_sdl2.found()
++    wsi_src += [
++      'sdl2/wsi_monitor_sdl2.cpp',
++      'sdl2/wsi_platform_sdl2.cpp',
++      'sdl2/wsi_window_sdl2.cpp',
++    ]
++    wsi_deps += [ lib_sdl2.partial_dependency(compile_args: true, includes: true) ]
++  endif
++  if lib_glfw.found()
++    wsi_src += [
++      'glfw/wsi_monitor_glfw.cpp',
++      'glfw/wsi_platform_glfw.cpp',
++      'glfw/wsi_window_glfw.cpp',
++    ]
++    wsi_deps += [ lib_glfw.partial_dependency(compile_args: true, includes: true) ]
++  endif
++  if platform == 'darwin'
++    wsi_src += [
++      'ios/wsi_monitor_ios.mm',
++      'ios/wsi_platform_ios.mm',
++      'ios/wsi_window_ios.mm',
++    ]
++    wsi_deps += [ dependency('appleframeworks', modules: [ 'QuartzCore', 'Metal', 'Foundation' ]) ]
++  endif
+ endif
+ 
+ wsi_lib = static_library('wsi', wsi_src,
+diff --git a/src/wsi/wsi_platform.cpp b/src/wsi/wsi_platform.cpp
+index c6f12bd..8a2b4d4 100644
+--- a/src/wsi/wsi_platform.cpp
++++ b/src/wsi/wsi_platform.cpp
+@@ -20,6 +20,9 @@ namespace dxvk::wsi {
+ #endif
+ #if defined(DXVK_WSI_GLFW)
+     &GlfwWSI,
++#endif
++#if defined(DXVK_WSI_IOS)
++    &IosWSI,
+ #endif
+   };
+ 
+diff --git a/src/wsi/wsi_platform.h b/src/wsi/wsi_platform.h
+index 80dd8c5..d459573 100644
+--- a/src/wsi/wsi_platform.h
++++ b/src/wsi/wsi_platform.h
+@@ -114,6 +114,9 @@ namespace dxvk::wsi {
+ #if defined(DXVK_WSI_GLFW)
+   extern WsiBootstrap GlfwWSI;
+ #endif
++#if defined(DXVK_WSI_IOS)
++  extern WsiBootstrap IosWSI;
++#endif
+ 
+   void init();
+   void quit();
+diff --git a/src/wsi/wsi_window.h b/src/wsi/wsi_window.h
+index 4f65fea..38e0865 100644
+--- a/src/wsi/wsi_window.h
++++ b/src/wsi/wsi_window.h
+@@ -29,6 +29,9 @@ namespace dxvk::wsi {
+ #endif
+ #if defined(DXVK_WSI_GLFW)
+     // Nothing to store
++#endif
++#if defined(DXVK_WSI_IOS)
++    // Nothing to store
+ #endif
+   };
+ 
+diff --git a/subprojects/.wraplock b/subprojects/.wraplock
+new file mode 100644
+index 0000000..e69de29

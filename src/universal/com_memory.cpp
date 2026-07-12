@@ -19,6 +19,55 @@
 
 #include <cstdint>
 
+#ifdef KISAK_IOS
+#include <sys/mman.h>   // mmap/mprotect/madvise/munmap replace the Win32 virtual-memory API
+#include <unistd.h>     // getpagesize
+#include <mutex>
+#include <map>
+
+// --- Win32 virtual-memory emulation (Z_Virtual* layer) ----------------------
+// The Z_Virtual* functions map 1:1 onto Win32 VirtualAlloc/VirtualFree:
+//   VirtualAlloc(MEM_RESERVE)  -> mmap(PROT_NONE)                 claim address space, no pages
+//   VirtualAlloc(MEM_COMMIT)   -> mprotect(PROT_READ|PROT_WRITE)  make pages usable
+//   VirtualFree(MEM_DECOMMIT)  -> madvise(MADV_FREE) + mprotect(PROT_NONE)
+//   VirtualFree(MEM_RELEASE)   -> munmap
+//
+// VirtualFree(MEM_RELEASE) takes no size (the Win32 kernel remembers the
+// reservation), but munmap needs one — so a file-local registry maps each
+// reserved base pointer to its reserved length. Z_VirtualReserve fills it,
+// Z_VirtualFreeInternal consumes it. Function-local statics avoid
+// static-init-order problems (Z_VirtualReserve runs early in Com_Init).
+static std::mutex& VM_RegistryMutex()
+{
+    static std::mutex mtx;
+    return mtx;
+}
+static std::map<void*, size_t>& VM_Registry()
+{
+    static std::map<void*, size_t> registry;
+    return registry;
+}
+
+// Page-rounding helpers. Win32 pages are 4KB and the hunk callers align their
+// ranges to 4KB themselves; arm64 iOS pages are 16KB, so a caller-supplied
+// range can straddle a page that still holds live data. Committing rounds
+// OUTWARD (matching Win32; committing extra bytes is harmless), decommitting
+// rounds INWARD so a shared 16KB boundary page is never freed or protected
+// out from under live allocations.
+static void VM_PageRangeOuter(void* ptr, int32_t size, uintptr_t* begin, uintptr_t* end)
+{
+    uintptr_t pageMask = (uintptr_t)getpagesize() - 1;
+    *begin = (uintptr_t)ptr & ~pageMask;
+    *end = ((uintptr_t)ptr + (uintptr_t)size + pageMask) & ~pageMask;
+}
+static void VM_PageRangeInner(void* ptr, int32_t size, uintptr_t* begin, uintptr_t* end)
+{
+    uintptr_t pageMask = (uintptr_t)getpagesize() - 1;
+    *begin = ((uintptr_t)ptr + pageMask) & ~pageMask;
+    *end = ((uintptr_t)ptr + (uintptr_t)size) & ~pageMask;
+}
+#endif
+
 HunkUser *g_user;
 fileData_s *com_hunkData;
 
@@ -138,7 +187,23 @@ void* __cdecl Z_VirtualReserve(int32_t size)
 
     if (size <= 0)
         MyAssertHandler(".\\universal\\com_memory.cpp", 150, 0, "%s\n\t(size) = %i", "(size > 0)", size);
+#ifdef KISAK_IOS
+    // MEM_RESERVE: PROT_NONE anonymous mapping claims address space without
+    // committing physical pages. Record the length for Z_VirtualFreeInternal
+    // (munmap needs it; Win32 MEM_RELEASE did not).
+    buf = mmap(NULL, (size_t)size, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (buf == MAP_FAILED)
+    {
+        buf = 0;
+    }
+    else
+    {
+        std::lock_guard<std::mutex> lock(VM_RegistryMutex());
+        VM_Registry()[buf] = (size_t)size;
+    }
+#else
     buf = VirtualAlloc(0, size, 0x2000u, 4u);
+#endif
     if (!buf)
         MyAssertHandler(".\\universal\\com_memory.cpp", 208, 0, "%s", "buf");
     return buf;
@@ -148,12 +213,47 @@ void __cdecl Z_VirtualDecommitInternal(void* ptr, int32_t size)
 {
     if (size < 0)
         MyAssertHandler(".\\universal\\com_memory.cpp", 325, 0, "%s\n\t(size) = %i", "(size >= 0)", size);
+#ifdef KISAK_IOS
+    // MEM_DECOMMIT: MADV_FREE lets the kernel reclaim the physical pages,
+    // PROT_NONE drops access back to the reserved state. Rounded INWARD (see
+    // VM_PageRangeInner) — only pages fully inside [ptr, ptr+size) are
+    // touched. Note MADV_FREE'd pages are not guaranteed zero on re-commit
+    // (Win32 zeroes recommitted pages); hunk allocs that need zeroed memory
+    // memset() explicitly, so this only loses a redundant zero-fill.
+    uintptr_t begin, end;
+    VM_PageRangeInner(ptr, size, &begin, &end);
+    if (end > begin)
+    {
+        madvise((void*)begin, (size_t)(end - begin), MADV_FREE);
+        mprotect((void*)begin, (size_t)(end - begin), PROT_NONE);
+    }
+#else
     VirtualFree(ptr, size, 0x4000u);
+#endif
 }
 
 void __cdecl Z_VirtualFreeInternal(void* ptr)
 {
+#ifdef KISAK_IOS
+    // MEM_RELEASE: look up (and drop) the reserved length recorded by
+    // Z_VirtualReserve. An unknown pointer is silently ignored, matching
+    // Win32 VirtualFree failing with its return value unchecked here.
+    size_t reservedLen = 0;
+    {
+        std::lock_guard<std::mutex> lock(VM_RegistryMutex());
+        std::map<void*, size_t>& registry = VM_Registry();
+        std::map<void*, size_t>::iterator it = registry.find(ptr);
+        if (it != registry.end())
+        {
+            reservedLen = it->second;
+            registry.erase(it);
+        }
+    }
+    if (reservedLen)
+        munmap(ptr, reservedLen);
+#else
     VirtualFree(ptr, 0, 0x8000u);
+#endif
 }
 
 void* __cdecl Z_TryVirtualAllocInternal(int32_t size)
@@ -170,7 +270,17 @@ void* __cdecl Z_TryVirtualAllocInternal(int32_t size)
 bool __cdecl Z_TryVirtualCommitInternal(void* ptr, int32_t size)
 {
     iassert(size >= 0);
+#ifdef KISAK_IOS
+    // MEM_COMMIT: grant R/W on every page touching [ptr, ptr+size), rounded
+    // OUTWARD like Win32 (mprotect also requires a page-aligned base).
+    // Anonymous mappings are zero-fill on first touch, matching Win32
+    // committed-page zeroing for never-before-committed pages.
+    uintptr_t begin, end;
+    VM_PageRangeOuter(ptr, size, &begin, &end);
+    return mprotect((void*)begin, (size_t)(end - begin), PROT_READ | PROT_WRITE) == 0;
+#else
     return VirtualAlloc(ptr, size, 0x1000u, 4u) != 0;
+#endif
 }
 
 void __cdecl Z_VirtualCommitInternal(void* ptr, int32_t size)
@@ -195,7 +305,7 @@ char* __cdecl Z_TryVirtualAlloc(int32_t size, const char* name, int32_t type)
 
     buf = (char*)Z_TryVirtualAllocInternal(size);
     if (buf)
-        track_z_commit((size + 4095) & 0xFFFFF000, type);
+        track_z_commit((size + 4095) & 0xFFFFF000, type); // KISAKTODO(lp64): 4KB-page rounding; stats-only (arm64 iOS pages are 16KB)
     return buf;
 }
 
@@ -420,6 +530,16 @@ void __cdecl Hunk_ClearDataFor(fileData_s** pFileData, uint8_t* low, uint8_t* hi
     }
 }
 
+// KISAKTODO(lp64): this function and the hunk commit/decommit math below
+// (Hunk_AllocAlign, Hunk_AllocateTempMemoryHigh, Hunk_ClearTempMemoryHigh,
+// Hunk_AllocLowAlign, Hunk_AllocateTempMemory, Hunk_FreeTempMemory,
+// Hunk_ClearTempMemory) compute page boundaries as
+// (uint32_t)&s_hunkData[...] & 0xFFFFF000 — truncating 64-bit pointers to 32
+// bits before casting back. Compiles under -w but produces garbage pointers
+// at runtime on arm64; needs (uintptr_t)/~(uintptr_t)0xFFF before the hunk
+// allocator can actually run on iOS. Also assumes 4KB pages (iOS: 16KB) —
+// the Z_Virtual* shims round conservatively, so 4KB-aligned caller ranges
+// stay safe, at the cost of a partially-committed boundary page.
 void __cdecl Hunk_ClearToMarkLow(int32_t mark)
 {
     uint8_t* endBuf; // [esp+0h] [ebp-Ch]
@@ -856,6 +976,10 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
         MyAssertHandler(".\\universal\\com_memory.cpp", 2834, 0, "%s\n\t(maxSize) = %i", "(!(maxSize % (4*1024)))", maxSize);
     user = (HunkUser*)Z_VirtualReserve(maxSize);
     Z_VirtualCommit(user, 32);
+    // KISAKTODO(lp64): HunkUser stores pointers in 32-bit int fields (end/pos)
+    // — see also Hunk_UserAlloc/Hunk_UserSetPos/Hunk_UserReset below. The
+    // struct (shared header) needs pointer-sized fields before user hunks can
+    // run on arm64.
     user->end = (int)user + maxSize;
     user->pos = (int)user->buf;
     if ((user->pos & 0x1F) != 0)
