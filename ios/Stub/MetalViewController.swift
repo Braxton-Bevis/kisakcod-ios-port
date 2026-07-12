@@ -202,17 +202,12 @@ final class MetalViewController: UIViewController {
             bootStatus = "skipped — crashed \(crashes)x"
             return
         }
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
-            let result = String(cString: kisak_boot_smoke())
-            try? FileManager.default.removeItem(at: sentinel)
-            DispatchQueue.main.async {
-                self.bootStatus = result
-                NSLog("KISAK_BOOT_SMOKE %@", result)
-                self.writeFirstFrameMarker()
-            }
-        }
+        // Scaffold not landed yet (docs/wip/BootSmoke-wip.cpp + NEXT_SESSION.md):
+        // when kisak_boot_smoke() exists, call it here on this queue exactly
+        // like the D3D9 smoke above (sentinel write → call → sentinel clear).
+        _ = crashes
+        _ = sentinel
+        bootStatus = "scaffold pending (docs/wip, next session)"
     }
 
     override func viewDidLayoutSubviews() {

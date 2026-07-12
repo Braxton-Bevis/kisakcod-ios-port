@@ -1,0 +1,97 @@
+diff --git a/src/universal/com_memory.cpp b/src/universal/com_memory.cpp
+index fe4a590..22061be 100644
+--- a/src/universal/com_memory.cpp
++++ b/src/universal/com_memory.cpp
+@@ -66,6 +66,25 @@ static void VM_PageRangeInner(void* ptr, int32_t size, uintptr_t* begin, uintptr
+     *begin = ((uintptr_t)ptr + pageMask) & ~pageMask;
+     *end = ((uintptr_t)ptr + (uintptr_t)size) & ~pageMask;
+ }
++
++// Hunk-side page rounding (KISAK_IOS, lp64). The win32 hunk code computes its
++// commit/decommit windows as (uint32_t)ptr & 0xFFFFF000 — a 4KB round that
++// truncates 64-bit pointers; the #else branch at each call site keeps that
++// original. These helpers reproduce the same round-down/round-up semantics in
++// uintptr_t at the native page size (16KB on arm64 iOS). Since every hunk
++// window is then page-aligned at native granularity, the low/high commit
++// frontiers stay page-consistent and the decommit windows passed to
++// Z_VirtualDecommit never include a page holding live data (its inner
++// rounding then being a no-op for these callers).
++static uintptr_t Hunk_PageFloor(uintptr_t addr)
++{
++    return addr & ~((uintptr_t)getpagesize() - 1);
++}
++static uintptr_t Hunk_PageCeil(uintptr_t addr)
++{
++    uintptr_t pageMask = (uintptr_t)getpagesize() - 1;
++    return (addr + pageMask) & ~pageMask;
++}
+ #endif
+ 
+ HunkUser *g_user;
+@@ -305,7 +324,11 @@ char* __cdecl Z_TryVirtualAlloc(int32_t size, const char* name, int32_t type)
+ 
+     buf = (char*)Z_TryVirtualAllocInternal(size);
+     if (buf)
+-        track_z_commit((size + 4095) & 0xFFFFF000, type); // KISAKTODO(lp64): 4KB-page rounding; stats-only (arm64 iOS pages are 16KB)
++#ifdef KISAK_IOS
++        track_z_commit((int)Hunk_PageCeil((uintptr_t)size), type); // stats-only: committed bytes at native (16KB) page granularity
++#else
++        track_z_commit((size + 4095) & 0xFFFFF000, type);
++#endif
+     return buf;
+ }
+ 
+diff --git a/src/universal/com_memory.h b/src/universal/com_memory.h
+index 255b449..fa3550a 100644
+--- a/src/universal/com_memory.h
++++ b/src/universal/com_memory.h
+@@ -56,19 +56,34 @@ void __cdecl FreeString(const char* str);
+ void Com_InitHunkMemory();
+ void __cdecl Com_Meminfo_f();
+ 
+-struct HunkUser // sizeof=0x24
++struct HunkUser // sizeof=0x24 (win32)
+ {
+     HunkUser* current;
+     HunkUser* next;
+     int maxSize;
++#ifdef KISAK_IOS
++    // KISAK_IOS(lp64): end/pos hold absolute addresses (see Hunk_UserCreate:
++    // end = user + maxSize, pos = &user->buf). 32-bit int fields truncate
++    // arm64 pointers, so they are pointer-sized here; win32 layout below is
++    // byte-identical to the original.
++    intptr_t end;
++    intptr_t pos;
++#else
+     int end;
+     int pos;
++#endif
+     const char* name;
+     bool fixed;
+     bool tempMem;
+     // padding byte
+     // padding byte
+     int type;
++#ifdef KISAK_IOS
++    // KISAK_IOS(lp64): with pointer-sized fields buf would land at offset 56;
++    // pad it to 64 so the Hunk_UserCreate "!(user->pos & 31)" 32-byte
++    // alignment invariant still holds (allocations are page-aligned).
++    uint8_t _lp64_pad[8];
++#endif
+     uint8_t buf[1];
+     // padding byte
+     // padding byte
+@@ -93,7 +108,13 @@ void Hunk_Clear();
+ int __cdecl Hunk_Used();
+ uint8_t* __cdecl Hunk_Alloc(uint32_t size, const char* name, int type);
+ uint8_t* __cdecl Hunk_AllocAlign(uint32_t size, int alignment, const char* name, int type);
++#ifdef KISAK_IOS
++// KISAK_IOS(lp64): this returns the allocation's address as an integer
++// (callers cast it to a pointer); uint32_t truncates it on arm64.
++uintptr_t __cdecl Hunk_AllocateTempMemoryHigh(int size, const char* name);
++#else
+ uint32_t __cdecl Hunk_AllocateTempMemoryHigh(int size, const char* name);
++#endif
+ void Hunk_ClearTempMemoryHigh();
+ uint8_t* __cdecl Hunk_AllocLow(uint32_t size, const char* name, int type);
+ uint8_t* __cdecl Hunk_AllocLowAlign(uint32_t size, int alignment, const char* name, int type);
