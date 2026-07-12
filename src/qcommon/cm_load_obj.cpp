@@ -982,7 +982,13 @@ void __cdecl CMod_PartionLeafBrushes(uint16_t *leafBrushes, int numLeafBrushes, 
     }
 }
 
+#ifdef KISAK_IOS
+// KISAK_IOS(lp64): mirror Hunk_AllocateTempMemoryHigh's pointer-sized return
+// (see com_memory.h) — uint32_t would truncate the address on arm64.
+uintptr_t __cdecl CM_Hunk_AllocateTempMemoryHigh(int size, const char *name)
+#else
 uint32_t __cdecl CM_Hunk_AllocateTempMemoryHigh(int size, const char *name)
+#endif
 {
     return Hunk_AllocateTempMemoryHigh(size, name);
 }

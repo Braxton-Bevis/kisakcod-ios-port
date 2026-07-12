@@ -56,19 +56,34 @@ void __cdecl FreeString(const char* str);
 void Com_InitHunkMemory();
 void __cdecl Com_Meminfo_f();
 
-struct HunkUser // sizeof=0x24
+struct HunkUser // sizeof=0x24 (win32)
 {
     HunkUser* current;
     HunkUser* next;
     int maxSize;
+#ifdef KISAK_IOS
+    // KISAK_IOS(lp64): end/pos hold absolute addresses (see Hunk_UserCreate:
+    // end = user + maxSize, pos = &user->buf). 32-bit int fields truncate
+    // arm64 pointers, so they are pointer-sized here; win32 layout below is
+    // byte-identical to the original.
+    intptr_t end;
+    intptr_t pos;
+#else
     int end;
     int pos;
+#endif
     const char* name;
     bool fixed;
     bool tempMem;
     // padding byte
     // padding byte
     int type;
+#ifdef KISAK_IOS
+    // KISAK_IOS(lp64): with pointer-sized fields buf would land at offset 56;
+    // pad it to 64 so the Hunk_UserCreate "!(user->pos & 31)" 32-byte
+    // alignment invariant still holds (allocations are page-aligned).
+    uint8_t _lp64_pad[8];
+#endif
     uint8_t buf[1];
     // padding byte
     // padding byte
@@ -93,7 +108,13 @@ void Hunk_Clear();
 int __cdecl Hunk_Used();
 uint8_t* __cdecl Hunk_Alloc(uint32_t size, const char* name, int type);
 uint8_t* __cdecl Hunk_AllocAlign(uint32_t size, int alignment, const char* name, int type);
+#ifdef KISAK_IOS
+// KISAK_IOS(lp64): this returns the allocation's address as an integer
+// (callers cast it to a pointer); uint32_t truncates it on arm64.
+uintptr_t __cdecl Hunk_AllocateTempMemoryHigh(int size, const char* name);
+#else
 uint32_t __cdecl Hunk_AllocateTempMemoryHigh(int size, const char* name);
+#endif
 void Hunk_ClearTempMemoryHigh();
 uint8_t* __cdecl Hunk_AllocLow(uint32_t size, const char* name, int type);
 uint8_t* __cdecl Hunk_AllocLowAlign(uint32_t size, int alignment, const char* name, int type);

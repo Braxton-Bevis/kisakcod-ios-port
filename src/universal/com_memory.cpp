@@ -66,6 +66,25 @@ static void VM_PageRangeInner(void* ptr, int32_t size, uintptr_t* begin, uintptr
     *begin = ((uintptr_t)ptr + pageMask) & ~pageMask;
     *end = ((uintptr_t)ptr + (uintptr_t)size) & ~pageMask;
 }
+
+// Hunk-side page rounding (KISAK_IOS, lp64). The win32 hunk code computes its
+// commit/decommit windows as (uint32_t)ptr & 0xFFFFF000 — a 4KB round that
+// truncates 64-bit pointers; the #else branch at each call site keeps that
+// original. These helpers reproduce the same round-down/round-up semantics in
+// uintptr_t at the native page size (16KB on arm64 iOS). Since every hunk
+// window is then page-aligned at native granularity, the low/high commit
+// frontiers stay page-consistent and the decommit windows passed to
+// Z_VirtualDecommit never include a page holding live data (its inner
+// rounding then being a no-op for these callers).
+static uintptr_t Hunk_PageFloor(uintptr_t addr)
+{
+    return addr & ~((uintptr_t)getpagesize() - 1);
+}
+static uintptr_t Hunk_PageCeil(uintptr_t addr)
+{
+    uintptr_t pageMask = (uintptr_t)getpagesize() - 1;
+    return (addr + pageMask) & ~pageMask;
+}
 #endif
 
 HunkUser *g_user;
@@ -305,7 +324,11 @@ char* __cdecl Z_TryVirtualAlloc(int32_t size, const char* name, int32_t type)
 
     buf = (char*)Z_TryVirtualAllocInternal(size);
     if (buf)
-        track_z_commit((size + 4095) & 0xFFFFF000, type); // KISAKTODO(lp64): 4KB-page rounding; stats-only (arm64 iOS pages are 16KB)
+#ifdef KISAK_IOS
+        track_z_commit((int)Hunk_PageCeil((uintptr_t)size), type); // stats-only: committed bytes at native (16KB) page granularity
+#else
+        track_z_commit((size + 4095) & 0xFFFFF000, type);
+#endif
     return buf;
 }
 
@@ -530,16 +553,14 @@ void __cdecl Hunk_ClearDataFor(fileData_s** pFileData, uint8_t* low, uint8_t* hi
     }
 }
 
-// KISAKTODO(lp64): this function and the hunk commit/decommit math below
+// KISAK_IOS(lp64): this function and the hunk commit/decommit math below
 // (Hunk_AllocAlign, Hunk_AllocateTempMemoryHigh, Hunk_ClearTempMemoryHigh,
 // Hunk_AllocLowAlign, Hunk_AllocateTempMemory, Hunk_FreeTempMemory,
-// Hunk_ClearTempMemory) compute page boundaries as
+// Hunk_ClearTempMemory) originally compute page boundaries as
 // (uint32_t)&s_hunkData[...] & 0xFFFFF000 — truncating 64-bit pointers to 32
-// bits before casting back. Compiles under -w but produces garbage pointers
-// at runtime on arm64; needs (uintptr_t)/~(uintptr_t)0xFFF before the hunk
-// allocator can actually run on iOS. Also assumes 4KB pages (iOS: 16KB) —
-// the Z_Virtual* shims round conservatively, so 4KB-aligned caller ranges
-// stay safe, at the cost of a partially-committed boundary page.
+// bits before casting back, and assuming 4KB pages (iOS: 16KB). Each site now
+// carries a KISAK_IOS branch using Hunk_PageFloor/Hunk_PageCeil (uintptr_t at
+// the native page size); the win32 originals are kept verbatim in #else.
 void __cdecl Hunk_ClearToMarkLow(int32_t mark)
 {
     uint8_t* endBuf; // [esp+0h] [ebp-Ch]
@@ -548,11 +569,19 @@ void __cdecl Hunk_ClearToMarkLow(int32_t mark)
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\universal\\com_memory.cpp", 1849, 0, "%s", "Sys_IsMainThread()");
     Hunk_CheckTempMemoryClear();
+#ifdef KISAK_IOS
+    endBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]);
+    hunk_low.temp = mark;
+    hunk_low.permanent = mark;
+    Hunk_ClearData();
+    beginBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]);
+#else
     endBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000);
     hunk_low.temp = mark;
     hunk_low.permanent = mark;
     Hunk_ClearData();
     beginBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000);
+#endif
     if (endBuf != beginBuf)
         Z_VirtualDecommit(beginBuf, endBuf - beginBuf);
     track_hunk_ClearToMarkLow(mark);
@@ -607,7 +636,11 @@ uint8_t* __cdecl Hunk_AllocAlign(uint32_t size, int32_t alignment, const char* n
     alignmenta = alignment - 1;
     Hunk_CheckTempMemoryHighClear();
     old_permanent = hunk_high.permanent;
+#ifdef KISAK_IOS
+    endBuf = (uint8_t*)Hunk_PageFloor((uintptr_t)&s_hunkData[s_hunkTotal - hunk_high.permanent]);
+#else
     endBuf = (uint8_t*)((uint32_t)&s_hunkData[s_hunkTotal - hunk_high.permanent] & 0xFFFFF000);
+#endif
     hunk_high.permanent += size;
     hunk_high.permanent = ~alignmenta & (alignmenta + hunk_high.permanent);
     hunk_high.temp = hunk_high.permanent;
@@ -617,25 +650,52 @@ uint8_t* __cdecl Hunk_AllocAlign(uint32_t size, int32_t alignment, const char* n
         Com_Error(ERR_DROP, "Hunk_AllocAlign failed on %i bytes (total %i MB, low %i MB, high %i MB)", size, s_hunkTotal / 0x100000, hunk_low.temp / 0x100000, hunk_high.temp / 0x100000);
     }
     buf = &s_hunkData[s_hunkTotal - hunk_high.permanent];
+#ifdef KISAK_IOS
+    if ((alignmenta & (uintptr_t)buf) != 0) // KISAK_IOS(lp64): alignment check on the full pointer
+#else
     if ((alignmenta & (uint32_t)buf) != 0)
+#endif
         MyAssertHandler(".\\universal\\com_memory.cpp", 2011, 0, "%s", "!(((psize_int)buf) & alignment)");
+#ifdef KISAK_IOS
+    {
+        uintptr_t lowAddr = Hunk_PageFloor((uintptr_t)buf);
+        if (endBuf != (uint8_t*)lowAddr)
+            Z_VirtualCommit((void*)lowAddr, (int)((uintptr_t)endBuf - lowAddr));
+    }
+#else
     if (endBuf != (uint8_t*)((uint32_t)buf & 0xFFFFF000))
         Z_VirtualCommit((void*)((uint32_t)buf & 0xFFFFF000), (int)&endBuf[-(int)((uint32_t)buf & 0xFFFFF000)]); // KISAKTODO: sus int32_t cast
+#endif
     track_hunk_alloc(hunk_high.permanent - old_permanent, hunk_high.temp, name, type);
     memset(buf, 0, size);
     return buf;
 }
 
+#ifdef KISAK_IOS
+// KISAK_IOS(lp64): this returns the allocation's address as an integer
+// (callers cast it to a pointer); uint32_t truncates it on arm64. Keep in
+// sync with the declaration in com_memory.h.
+uintptr_t __cdecl Hunk_AllocateTempMemoryHigh(int32_t size, const char* name)
+#else
 uint32_t __cdecl Hunk_AllocateTempMemoryHigh(int32_t size, const char* name)
+#endif
 {
+#ifdef KISAK_IOS
+    uintptr_t buf; // KISAK_IOS(lp64): holds an absolute address
+#else
     uint32_t buf; // [esp+0h] [ebp-10h]
+#endif
     uint8_t* endBuf; // [esp+4h] [ebp-Ch]
 
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\universal\\com_memory.cpp", 2050, 0, "%s", "Sys_IsMainThread()");
     if (!s_hunkData)
         MyAssertHandler(".\\universal\\com_memory.cpp", 2051, 0, "%s", "s_hunkData");
+#ifdef KISAK_IOS
+    endBuf = (uint8_t*)Hunk_PageFloor((uintptr_t)&s_hunkData[s_hunkTotal - hunk_high.temp]);
+#else
     endBuf = (uint8_t*)((uint32_t)&s_hunkData[s_hunkTotal - hunk_high.temp] & 0xFFFFF000);
+#endif
     hunk_high.temp += size;
     hunk_high.temp = (hunk_high.temp + 15) & 0xFFFFFFF0;
     if (hunk_high.temp + hunk_low.temp > s_hunkTotal)
@@ -643,11 +703,22 @@ uint32_t __cdecl Hunk_AllocateTempMemoryHigh(int32_t size, const char* name)
         track_PrintAllInfo();
         Com_Error(ERR_DROP, "Hunk_AllocateTempMemoryHigh: failed on %i bytes (total %i MB, low %i MB, high %i MB)", size, s_hunkTotal / 0x100000, hunk_low.temp / 0x100000, hunk_high.temp / 0x100000);
     }
+#ifdef KISAK_IOS
+    buf = (uintptr_t)&s_hunkData[s_hunkTotal - hunk_high.temp];
+    if ((buf & 0xF) != 0) // same intent as the decompiled low-byte check below: buf must be 16-aligned
+        MyAssertHandler(".\\universal\\com_memory.cpp", 2074, 0, "%s", "!(((psize_int)buf) & 15)");
+    {
+        uintptr_t lowAddr = Hunk_PageFloor(buf);
+        if (endBuf != (uint8_t*)lowAddr)
+            Z_VirtualCommit((void*)lowAddr, (int)((uintptr_t)endBuf - lowAddr));
+    }
+#else
     buf = (uint32_t)&s_hunkData[s_hunkTotal - hunk_high.temp];
     if ((((_BYTE)s_hunkTotal + (_BYTE)s_hunkData - LOBYTE(hunk_high.temp)) & 0xF) != 0)
         MyAssertHandler(".\\universal\\com_memory.cpp", 2074, 0, "%s", "!(((psize_int)buf) & 15)");
     if (endBuf != (uint8_t*)(buf & 0xFFFFF000))
         Z_VirtualCommit((void*)(buf & 0xFFFFF000), (int)&endBuf[-(int)(buf & 0xFFFFF000)]); // KISAKTODO: sus int32_t cast
+#endif
     track_temp_high_alloc(size, hunk_high.temp + hunk_low.temp, hunk_high.permanent, name);
     return buf;
 }
@@ -659,9 +730,18 @@ void Hunk_ClearTempMemoryHigh()
 
     if (!Sys_IsMainThread())
         MyAssertHandler(".\\universal\\com_memory.cpp", 2106, 0, "%s", "Sys_IsMainThread()");
+#ifdef KISAK_IOS
+    beginBuf = (uint8_t*)Hunk_PageFloor((uintptr_t)&s_hunkData[s_hunkTotal - hunk_high.temp]);
+    hunk_high.temp = hunk_high.permanent;
+    {
+        uintptr_t hiAddr = Hunk_PageFloor((uintptr_t)&s_hunkData[s_hunkTotal - hunk_high.permanent]);
+        commitSize = (uint32_t)(hiAddr - (uintptr_t)beginBuf);
+    }
+#else
     beginBuf = (uint8_t*)((uint32_t)&s_hunkData[s_hunkTotal - hunk_high.temp] & 0xFFFFF000);
     hunk_high.temp = hunk_high.permanent;
     commitSize = ((uint32_t)&s_hunkData[s_hunkTotal - hunk_high.permanent] & 0xFFFFF000) - (uint32_t)beginBuf;
+#endif
     if (commitSize)
         Z_VirtualDecommit(beginBuf, commitSize);
     track_temp_high_clear(hunk_high.permanent);
@@ -695,10 +775,18 @@ uint8_t* __cdecl Hunk_AllocLowAlign(uint32_t size, int32_t alignment, const char
     alignmenta = alignment - 1;
     Hunk_CheckTempMemoryClear();
     old_permanent = hunk_low.permanent;
+#ifdef KISAK_IOS
+    beginBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.permanent]);
+#else
     beginBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.permanent + 4095] & 0xFFFFF000);
+#endif
     hunk_low.permanent = ~alignmenta & (alignmenta + hunk_low.permanent);
     buf = &s_hunkData[hunk_low.permanent];
+#ifdef KISAK_IOS
+    if ((alignmenta & (uintptr_t)&s_hunkData[hunk_low.permanent]) != 0) // KISAK_IOS(lp64): alignment check on the full pointer
+#else
     if ((alignmenta & (uint32_t)&s_hunkData[hunk_low.permanent]) != 0)
+#endif
         MyAssertHandler(".\\universal\\com_memory.cpp", 2210, 0, "%s", "!(((psize_int)buf) & alignment)");
     hunk_low.permanent += size;
     hunk_low.temp = hunk_low.permanent;
@@ -707,7 +795,11 @@ uint8_t* __cdecl Hunk_AllocLowAlign(uint32_t size, int32_t alignment, const char
         track_PrintAllInfo();
         Com_Error(ERR_DROP, "Hunk_AllocLowAlign failed on %i bytes (total %i MB, low %i MB, high %i MB)", size, s_hunkTotal / 0x100000, hunk_low.temp / 0x100000, hunk_high.temp / 0x100000);
     }
+#ifdef KISAK_IOS
+    commitSize = (uint32_t)(Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.permanent]) - (uintptr_t)beginBuf);
+#else
     commitSize = ((uint32_t)&s_hunkData[hunk_low.permanent + 4095] & 0xFFFFF000) - (uint32_t)beginBuf;
+#endif
     if (commitSize)
         Z_VirtualCommit(beginBuf, commitSize);
     track_hunk_allocLow(hunk_low.permanent - old_permanent, hunk_low.permanent, name, type);
@@ -733,7 +825,11 @@ uint32_t* __cdecl Hunk_AllocateTempMemory(int32_t size, const char* name)
         return (uint32_t*)Z_Malloc(size, name, 10);
     sizea = size + 16;
     prev_temp = hunk_low.temp;
+#ifdef KISAK_IOS
+    beginBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]);
+#else
     beginBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000);
+#endif
     hunk_low.temp = (hunk_low.temp + 15) & 0xFFFFFFF0;
     buf = &s_hunkData[hunk_low.temp];
     hunk_low.temp += sizea;
@@ -751,9 +847,17 @@ uint32_t* __cdecl Hunk_AllocateTempMemory(int32_t size, const char* name)
     }
     hdr = (hunkHeader_t*)buf;
     bufa = buf + 16;
+#ifdef KISAK_IOS
+    if (((uintptr_t)bufa & 0xF) != 0) // KISAK_IOS(lp64): same low-nibble check without truncating the pointer
+#else
     if (((uint8_t)bufa & 0xF) != 0)
+#endif
         MyAssertHandler(".\\universal\\com_memory.cpp", 2303, 0, "%s", "!(((psize_int)buf) & 15)");
+#ifdef KISAK_IOS
+    commitSize = (uint32_t)(Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]) - (uintptr_t)beginBuf);
+#else
     commitSize = ((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000) - (uint32_t)beginBuf;
+#endif
     if (commitSize)
         Z_VirtualCommit(beginBuf, commitSize);
     hdr->magic = -1991018350;
@@ -788,10 +892,17 @@ void __cdecl Hunk_FreeTempMemory(char* buf)
                 0,
                 "%s",
                 "hdr == (void *)( s_hunkData + ((hunk_low.temp - hdr->size + 15) & ~15) )");
+#ifdef KISAK_IOS
+        endBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]);
+        hunk_low.temp -= hdr->size;
+        track_temp_free(hdr->size, hunk_low.permanent, hdr->name);
+        beginBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]);
+#else
         endBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000);
         hunk_low.temp -= hdr->size;
         track_temp_free(hdr->size, hunk_low.permanent, hdr->name);
         beginBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000);
+#endif
         if (endBuf != beginBuf)
             Z_VirtualDecommit(beginBuf, endBuf - beginBuf);
     }
@@ -810,9 +921,15 @@ void Hunk_ClearTempMemory()
         MyAssertHandler(".\\universal\\com_memory.cpp", 2398, 0, "%s", "Sys_IsMainThread()");
     if (!s_hunkData)
         MyAssertHandler(".\\universal\\com_memory.cpp", 2399, 0, "%s", "s_hunkData");
+#ifdef KISAK_IOS
+    endBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.temp]);
+    hunk_low.temp = hunk_low.permanent;
+    beginBuf = (uint8_t*)Hunk_PageCeil((uintptr_t)&s_hunkData[hunk_low.permanent]);
+#else
     endBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.temp + 4095] & 0xFFFFF000);
     hunk_low.temp = hunk_low.permanent;
     beginBuf = (uint8_t*)((uint32_t)&s_hunkData[hunk_low.permanent + 4095] & 0xFFFFF000);
+#endif
     if (endBuf != beginBuf)
         Z_VirtualDecommit(beginBuf, endBuf - beginBuf);
     //track_temp_clear(hunk_low.permanent);
@@ -976,12 +1093,15 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
         MyAssertHandler(".\\universal\\com_memory.cpp", 2834, 0, "%s\n\t(maxSize) = %i", "(!(maxSize % (4*1024)))", maxSize);
     user = (HunkUser*)Z_VirtualReserve(maxSize);
     Z_VirtualCommit(user, 32);
-    // KISAKTODO(lp64): HunkUser stores pointers in 32-bit int fields (end/pos)
-    // — see also Hunk_UserAlloc/Hunk_UserSetPos/Hunk_UserReset below. The
-    // struct (shared header) needs pointer-sized fields before user hunks can
-    // run on arm64.
+#ifdef KISAK_IOS
+    // KISAK_IOS(lp64): HunkUser::end/pos are pointer-sized (see com_memory.h)
+    // — they hold absolute addresses, which the win32 (int) casts truncate.
+    user->end = (intptr_t)user + maxSize;
+    user->pos = (intptr_t)user->buf;
+#else
     user->end = (int)user + maxSize;
     user->pos = (int)user->buf;
+#endif
     if ((user->pos & 0x1F) != 0)
         MyAssertHandler(".\\universal\\com_memory.cpp", 2848, 0, "%s\n\t(user->pos) = %i", "(!(user->pos & 31))", user->pos);
     user->maxSize = maxSize;
@@ -998,8 +1118,15 @@ HunkUser* __cdecl Hunk_UserCreate(int32_t maxSize, const char* name, bool fixed,
 void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
 {
     const char* v3; // eax
+#ifdef KISAK_IOS
+    // KISAK_IOS(lp64): pos/result hold absolute addresses (HunkUser::pos/end
+    // are pointer-sized); int32_t would truncate them on arm64.
+    intptr_t pos;
+    intptr_t result;
+#else
     int32_t pos; // [esp+4h] [ebp-10h]
     int32_t result; // [esp+8h] [ebp-Ch]
+#endif
     HunkUser* current; // [esp+Ch] [ebp-8h]
     HunkUser* newCurrent; // [esp+10h] [ebp-4h]
 
@@ -1014,7 +1141,11 @@ void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
     {
         pos = current->pos;
         result = ~alignment & (alignment + pos);
+#ifdef KISAK_IOS
+        if ((intptr_t)(size + result) <= current->end) // KISAK_IOS(lp64): full-width compare; (signed int) would truncate the address
+#else
         if ((signed int)(size + result) <= current->end)
+#endif
             break;
         if (user->fixed)
             Com_Error(ERR_FATAL, "Hunk_UserAlloc: out of memory");
@@ -1024,6 +1155,15 @@ void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
     }
 
     current->pos = size + (~alignment & (alignment + pos));
+#ifdef KISAK_IOS
+    pos = (intptr_t)Hunk_PageCeil((uintptr_t)pos);
+
+    if (pos != (intptr_t)Hunk_PageCeil((uintptr_t)current->pos))
+    {
+        iassert(current->pos - pos > 0);
+        Z_VirtualCommit((void*)pos, (int)(current->pos - pos));
+    }
+#else
     pos = ((pos + 4095) & 0xFFFFF000);
 
     if (pos != ((current->pos + 4095) & 0xFFFFF000))
@@ -1031,6 +1171,7 @@ void* Hunk_UserAlloc(HunkUser* user, uint32_t size, int32_t alignment)
         iassert(current->pos - pos > 0);
         Z_VirtualCommit((void*)pos, current->pos - (uint32_t)pos);
     }
+#endif
 
     return (void*)result;
 }
@@ -1046,7 +1187,11 @@ void __cdecl Hunk_UserSetPos(HunkUser* user, uint8_t* pos)
     iassert(pos >= user->buf);
     iassert((uintptr_t)pos <= user->pos); // (psize_int)pos <= user->pos
 
+#ifdef KISAK_IOS
+    user->pos = (intptr_t)pos; // KISAK_IOS(lp64): pointer-sized field; (int) would truncate
+#else
     user->pos = (int)pos;
+#endif
 }
 
 void __cdecl Hunk_UserReset(HunkUser* user)
@@ -1059,6 +1204,28 @@ void __cdecl Hunk_UserReset(HunkUser* user)
         user->current = user;
         user->next = 0;
     }
+#ifdef KISAK_IOS
+    // KISAK_IOS(lp64): the decompiled win32 expression below,
+    // ((uint32_t)&user[114].name + 3) & 0xFFFFF000, unpacks (with the win32
+    // layout: sizeof(HunkUser)=0x24, name at +20, buf at +32) to
+    // user + 114*0x24 + 20 + 3 = (uintptr_t)user->buf + 4095, rounded down to
+    // 4KB — i.e. the first page boundary at or above user->buf. Compute that
+    // intent directly from the real lp64 layout at the native page size.
+    pos = (void*)Hunk_PageCeil((uintptr_t)user->buf);
+    if (pos != (void*)Hunk_PageCeil((uintptr_t)user->pos))
+    {
+        if (user->pos - (intptr_t)pos <= 0)
+            MyAssertHandler(".\\universal\\com_memory.cpp", 3019, 0, "%s", "user->pos - pos > 0");
+        // decommit everything above the retained head page; both ends are
+        // page-aligned so Z_VirtualDecommit's inward rounding is a no-op
+        // (win32 passes pos..user->pos and VirtualFree rounds the end up)
+        Z_VirtualDecommit(pos, (int)(Hunk_PageCeil((uintptr_t)user->pos) - (uintptr_t)pos));
+    }
+    user->pos = (intptr_t)user->buf;
+    // zero the retained head page below the decommit frontier
+    // (win32's 0xFE0 = 4096 - offsetof(HunkUser, buf))
+    memset(user->buf, 0, (size_t)(Hunk_PageCeil((uintptr_t)user->buf) - (uintptr_t)user->buf));
+#else
     pos = (void*)(((uint32_t)&user[114].name + 3) & 0xFFFFF000);
     if (pos != (void*)((user->pos + 4095) & 0xFFFFF000))
     {
@@ -1068,6 +1235,7 @@ void __cdecl Hunk_UserReset(HunkUser* user)
     }
     user->pos = (int)user->buf;
     memset(user->buf, 0, 0xFE0u);
+#endif
 }
 
 void __cdecl Hunk_UserDestroy(HunkUser* user)
