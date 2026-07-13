@@ -98,18 +98,7 @@ struct fileData_s;
 // -------------------------------------------------------------------------
 
 void Dvar_AddCommands() {}
-bool Com_LogFileOpen() { return false; }
 bool Sys_IsRenderThread() { return false; }
-
-// Real owner: src/qcommon/common.cpp:360 (joins in the common-spine wave,
-// which MUST delete this definition). Not a benign default — this is the
-// complete, byte-identical behavior of the four-line engine function,
-// reached via com_shared.cpp's Com_Memset fill path.
-void _copyDWord(uint32_t *dest, const uint32_t constant, const uint32_t count)
-{
-    for (unsigned i = 0; i < count; i++)
-        dest[i] = constant;
-}
 
 // Pure-server IWD checksum state (multiplayer anticheat). com_files.cpp's
 // only boot-lane reference is the FS_Restart error-retry path, which calls
@@ -123,30 +112,12 @@ void __cdecl FS_PureServerSetLoadedIwds(char *iwdSums, char *iwdNames)
     BootScaffoldAbort("FS_PureServerSetLoadedIwds(boot-failure retry path)");
 }
 
-// The stub has no command-line ingress. FS_InitFilesystem asks common.cpp to
-// apply seven named startup overrides; validating the non-null name and doing
-// nothing is therefore the complete behavior for this entry point. The FS
-// smoke separately proves that the registered paths equal the sandbox paths.
-void Com_StartupVariable(const char *match)
-{
-    if (!match)
-        BootScaffoldAbort("Com_StartupVariable(null)");
-}
-
 // Map-load profiling is observational only. Real file I/O return values and
 // byte contents, not these counters, earn the Wave 1 marker.
 void ProfLoad_Begin(const char *) {}
 void ProfLoad_End() {}
 void ProfLoad_BeginTrackedValue(MapProfileTrackedValue) {}
 void ProfLoad_EndTrackedValue(MapProfileTrackedValue) {}
-
-void Com_PrintWarning(int, const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
 
 void NET_Sleep(int msec)
 {
@@ -234,9 +205,7 @@ void SL_RemoveRefToString(uint32_t stringValue)
     pthread_mutex_unlock(&s_stringLock);
 }
 
-static dvar_t s_useFastFile = {};
 static dvar_t s_reflectionProbeGenerate = {};
-const dvar_t *useFastFile = &s_useFastFile;
 const dvar_t *r_reflectionProbeGenerate = &s_reflectionProbeGenerate;
 
 void R_ReflectionProbeRegisterDvars()
@@ -260,10 +229,8 @@ void track_temp_high_alloc(int, int, int, const char *) {}
 void track_temp_high_clear(int) {}
 void track_z_commit(int, int) {}
 
-// Globals owned by TUs outside the current leaf archive. The smoke path only
-// requires useFastFile and r_reflectionProbeGenerate to be valid dvars.
+// Globals owned by TUs outside the current leaf archive.
 fileData_s *com_fileDataHashTable[1024] = {};
-const dvar_t *com_sv_running = nullptr;
 char info1[1024] = {};
 char info2[8192] = {};
 uint32_t s_affinityMaskForProcess = 1;
@@ -277,9 +244,15 @@ uint32_t s_affinityMaskForCpu[4] = { static_cast<uint32_t>(-1), 0, 0, 0 };
 
 void CL_ForwardCommandToServer(int32_t, const char *) BOOT_UNREACHED("CL_ForwardCommandToServer")
 const char *CL_GetUsernameForLocalClient() BOOT_UNREACHED("CL_GetUsernameForLocalClient")
+void CL_InitDedicated() BOOT_UNREACHED("CL_InitDedicated")
+void CL_InitOnceForAllClients() BOOT_UNREACHED("CL_InitOnceForAllClients")
+void CL_Init(int32_t) BOOT_UNREACHED("CL_Init")
+void CL_InitRenderer() BOOT_UNREACHED("CL_InitRenderer")
+void CL_StartHunkUsers() BOOT_UNREACHED("CL_StartHunkUsers")
 void Com_BeginParseSession(const char *) BOOT_UNREACHED("Com_BeginParseSession")
 void Com_EndParseSession() BOOT_UNREACHED("Com_EndParseSession")
-char Com_Filter(const char *, char *, int) BOOT_UNREACHED("Com_Filter")
+// Com_Filter: real owner com_shared.cpp joined the cominit archive (dupe
+// caught by coordinator audit after CI run 29283036276 flagged it).
 parseInfo_t *Com_Parse(const char **) BOOT_UNREACHED("Com_Parse")
 parseInfo_t *Com_ParseOnLine(const char **) BOOT_UNREACHED("Com_ParseOnLine")
 void Com_SkipRestOfLine(const char **) BOOT_UNREACHED("Com_SkipRestOfLine")
@@ -287,8 +260,15 @@ XAssetHeader DB_FindXAssetHeader(XAssetType, const char *) BOOT_UNREACHED("DB_Fi
 bool DB_IsMinimumFastFileLoaded() BOOT_UNREACHED("DB_IsMinimumFastFileLoaded")
 int Com_BlockChecksumKey32(const uint8_t *, uint32_t, uint32_t) BOOT_UNREACHED("Com_BlockChecksumKey32")
 int Com_SafeMode() BOOT_UNREACHED("Com_SafeMode")
+void NET_Init() BOOT_UNREACHED("NET_Init")
 void PMem_DumpMemStats() BOOT_UNREACHED("PMem_DumpMemStats")
+void R_BeginRemoteScreenUpdate() BOOT_UNREACHED("R_BeginRemoteScreenUpdate")
+void R_EndRemoteScreenUpdate() BOOT_UNREACHED("R_EndRemoteScreenUpdate")
+void R_InitThreads() BOOT_UNREACHED("R_InitThreads")
+char SND_InitDriver() BOOT_UNREACHED("SND_InitDriver")
+void SND_Init() BOOT_UNREACHED("SND_Init")
 void SND_StopSounds(snd_stopsounds_arg_t) BOOT_UNREACHED("SND_StopSounds")
+void SV_Init() BOOT_UNREACHED("SV_Init")
 int SV_GameCommand() BOOT_UNREACHED("SV_GameCommand")
 void SV_WaitServer() BOOT_UNREACHED("SV_WaitServer")
 void Scr_MonitorCommand(const char *) BOOT_UNREACHED("Scr_MonitorCommand")

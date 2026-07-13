@@ -23,9 +23,7 @@ int GetMinBitCountForNum(unsigned int num);               // qcommon/msg_mp.cpp 
 int I_stricmpwild(const char *wild, const char *s);       // universal/q_shared.cpp
 
 // --- link scaffolding: real-bodied where trivially correct ---------------
-enum errorParm_t : int {};
 struct clientActive_t;
-struct dvar_s;
 
 void MyAssertHandler(const char *file, int line, int type, const char *fmt, ...)
 {
@@ -33,25 +31,7 @@ void MyAssertHandler(const char *file, int line, int type, const char *fmt, ...)
     abort();
 }
 
-void Com_Error(errorParm_t code, const char *fmt, ...)
-{
-    fprintf(stderr, "Com_Error(%d): %s\n", (int)code, fmt);
-    abort();
-}
-
-void Com_Printf(int channel, const char *fmt, ...)
-{
-    va_list ap; va_start(ap, fmt); vprintf(fmt, ap); va_end(ap);
-}
-
-void Com_PrintError(int channel, const char *fmt, ...)
-{
-    va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap);
-}
-
 // (va() and Q_fabs are NOT stubbed here — q_shared.o / com_math.o define them.)
-void Com_Memset(void *dst, int val, unsigned long len) { memset(dst, val, len); }
-void Com_Memcpy(void *dst, const void *src, unsigned long len) { memcpy(dst, src, len); }
 bool Sys_IsMainThread() { return pthread_main_np() != 0; }
 int Sys_Milliseconds()
 {
@@ -75,14 +55,12 @@ void CL_GetPredictedOriginForServerTime(clientActive_t *cl, int time, float *o, 
 void *MSG_GetStateFieldListForEntityType(int type) UNREACHED_STUB("MSG_GetStateFieldListForEntityType")
 
 // Engine globals owned by not-yet-graduated TUs; zeroed, untouched by the smoke.
-const dvar_s *com_dedicated = nullptr;
 void *cl_shownet = nullptr;           // dvar_t*
 void *msg_dumpEnts = nullptr;         // dvar_t*
 void *msg_printEntityNums = nullptr;  // dvar_t*
 unsigned char clients[0x200000];      // server client array
 unsigned char msgHuff[0x80000];       // network huffman tables
 unsigned char orderInfo[0x20000];     // entity-order tables
-int com_errorEntered = 0;
 int g_script_error_level = 0;
 // -------------------------------------------------------------------------
 

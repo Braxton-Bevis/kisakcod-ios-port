@@ -65,9 +65,15 @@ jobs:
           set -euxo pipefail
           xcrun ar -t libs/iphonesimulator/libkisakcominit.a \
             | tee ../proof/cominit-archive-members.txt
+          grep -Fqx 'src_qcommon_common.cpp.o' ../proof/cominit-archive-members.txt
           xcrun nm -gU libs/iphonesimulator/libkisakcominit.a \
             | c++filt | tee ../proof/cominit-defined-symbols.txt
           grep -F 'FS_InitFilesystem()' ../proof/cominit-defined-symbols.txt
+          grep -F 'Com_Init(char*)' ../proof/cominit-defined-symbols.txt
+          grep -F 'Com_iOS_BootSpineReached()' ../proof/cominit-defined-symbols.txt
+          grep -F '_copyDWord(unsigned int*, unsigned int, unsigned int)' ../proof/cominit-defined-symbols.txt
+          grep -E ' [A-Za-z] (com_dedicated|com_sv_running|useFastFile|com_errorEntered)$' \
+            ../proof/cominit-defined-symbols.txt
           xcrun nm -gU libs/iphonesimulator/libkisaksmoke.a \
             | c++filt | tee ../proof/smoke-defined-symbols.txt
           for symbol in Dvar_Init Dvar_RegisterEnum Dvar_EnumToString \
@@ -82,6 +88,10 @@ jobs:
           grep -F 'kisak_boot_cominit_stage' ../proof/app-object-defined-symbols.txt
           grep -F 'kisak_boot_probe_after_init' ../proof/app-object-defined-symbols.txt
           ! grep -E ' [Tt] Dvar_(Init|RegisterEnum|EnumToString|RegisterString|SetStringFromSource|GetString)\(' \
+            ../proof/app-object-defined-symbols.txt
+          ! grep -E ' [Tt] (Com_Error|Com_Printf|Com_PrintError|Com_PrintWarning|Com_DPrintf|Com_StartupVariable|Com_LogFileOpen|Com_Memset|Com_Memcpy|_copyDWord)\(' \
+            ../proof/app-object-defined-symbols.txt
+          ! grep -E ' [A-Za-z] (com_dedicated|com_sv_running|useFastFile|com_errorEntered)$' \
             ../proof/app-object-defined-symbols.txt
           ! grep -F 'kisak_boot_smoke' Stub/*.cpp Stub/*.h Stub/*.swift
           ! grep -Eq '^(int|void|bool|const char \*\*) FS_(LoadStack|FreeFile|HashFileName|ListFiles|Printf|ReadFile)\(' \
@@ -107,6 +117,7 @@ jobs:
           CONTAINER=$(xcrun simctl get_app_container "$UDID" dev.braxton.kisakstub data)
           cat "$CONTAINER/Documents/metal_first_frame.txt" | tee proof/metal_first_frame.txt
           grep -Fqx 'cominit-preflight=dvar enum/external string OK — cold Dvar_Init path' proof/metal_first_frame.txt
+          grep -Fqx 'cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced' proof/metal_first_frame.txt
           grep -Fqx 'boot=hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up' proof/metal_first_frame.txt
           grep -Fqx 'fs=FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets' proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt

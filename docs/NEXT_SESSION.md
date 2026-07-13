@@ -1,29 +1,35 @@
-# NEXT_SESSION - BMK4 context handoff (2026-07-13, Stage B1 candidate)
+# NEXT_SESSION - BMK4 context handoff (2026-07-13, Stage B2 common-spine candidate)
 
 Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries,
 `docs/M14_PMOVE_SANDBOX_REPORT.md`, and `docs/FASTFILE_PLAN.md` before
 continuing. Re-reference this plan before each edit and refresh it whenever
 work pauses.
 
-## Active seat state — Wave 1 staging CI plus local Stage B1 candidate
+## Active seat state — Stage B2 common-spine linker slice
 
-- The coordinator audited the iOS MSVC time shim and pushed it to staging as
-  authoritative commit `d70a6c6`. Its census, simulator/device, and Windows
-  jobs are running; no hosted verdict or Wave 1 green claim exists yet.
-- A separate local tooling commit adds a path-confined `macos-15` lab workflow.
-  It runs one selected script beneath `scripts/platform/ios/lab/`, always
-  uploads `lab-out/`, and includes an SDK/simulator inventory probe. It is
-  **UNVERIFIED** until the coordinator pushes and dispatches it.
-- The local Stage B1 candidate replaces the retired staged initializer with a
-  fresh `BootComInit.cpp` entry. It calls real `Dvar_Init` exactly once, proves
-  enum registration/mutation and external-string readback using pointers with
-  nonzero upper 32 bits, then runs the already-proven interim hunk/command tail
-  so the frozen M13/FS/M14 markers remain earned.
-- Stage B1 adds no engine TU: it newly reaches the already-censused and linked
-  `dvar.cpp`, which passes the standing portability scanner. Census stays at
-  35 rather than being padded. Hosted verification must require the new exact
-  preflight marker, all prior markers, the real dvar-symbol allowlist and app-
-  scaffold denylist, unsigned device link, and Windows Debug/Release.
+- Wave 1's compile side is verified: census run `29281941827` is **35/35** and
+  Windows run `29281941785` passed Debug/Release. Stub run `29281941846`
+  correctly failed on the last `_copyDWord` undefined; the coordinator added
+  its exact four-line temporary owner. A subsequent full stub verdict has not
+  yet been reported, so do not call Wave 1 wholly green.
+- Authoritative staging commits are `d8256b7` (Mac lab) and `f5c1889` (B1).
+  Their hosted batch was still running at the last handoff; preserve the exact
+  B1, M13, filesystem, and M14 assertions until its verdict returns.
+- The local B2 candidate hard-requires real `src/qcommon/common.cpp` in the
+  exact Com_Init archive, calls real `Com_Init` from the cold orchestrator,
+  and removes the manual hunk/Cbuf/Cmd tail. An explicit iOS headless request
+  registers real `useFastFile=0` and `dedicated=2`; a temporary guarded fence
+  returns after real endian/command/dvar/hunk initialization and before the
+  script-string, filesystem, database, network, server, client, renderer, and
+  sound tails.
+- The new exact line is
+  `cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced`.
+  It is emitted only after `Com_Init` returns and the policy/fence postcondition
+  passes. The frozen B1 line and all earlier markers remain separately armed.
+- B2 deliberately lets the first hosted link expose the remaining undefined
+  owner set from `common.cpp`; preserved full xcodebuild logs define the next
+  5-10-owner closure. Do not weaken the archive membership, provenance denies,
+  or new marker assertion to get past that evidence-producing failure.
 - This Windows seat must not push or invoke `gh`; the coordination seat owns
   push and hosted-CI observation. Physical-iPad M13/M14 proof remains open and
   is not a blocker for hosted Phase 3 waves.
@@ -210,9 +216,9 @@ probes only and repeats no initializer.
 This marker deliberately does **not** claim real dvar console commands or the
 production script-string subsystem. `Dvar_AddCommands` and `SL_*` remain
 functional scaffold owners for B1 and must be replaced by their real TUs before
-M15, as the corrected contract already requires. The manual hunk/Cbuf/Cmd tail
-inside `BootComInit.cpp` exists only to retain M13/FS/M14 during B1; B2 must
-replace it with the linker-driven real `Com_Init` spine rather than run both.
+M15, as the corrected contract already requires. The B2 candidate deletes the
+manual hunk/Cbuf/Cmd tail and moves those calls behind real `Com_Init`; hosted
+link/runtime proof is still required before that replacement is accepted.
 
 ## Next actions, in order
 
@@ -223,10 +229,13 @@ replace it with the linker-driven real `Com_Init` spine rather than run both.
    is the only remaining Phase 2 boundary and does not invalidate the hosted
    proof while hardware is unavailable. It may be deferred while Phase 3
    begins, but it is mandatory before any physical-device M13/M14 claim.
-2. Coordinator: report all three staging verdicts for `d70a6c6`. If green,
-   journal Wave 1 with exact run IDs and marker evidence; if red, keep the fix
-   inside Wave 1. Then push the two local commits (Mac lab, Stage B1) to staging
-   and require the B1 gates listed above. Do not advance to B2 on a red result.
+2. Coordinator: report the pending B1/Mac-lab staging verdicts, push the local
+   B2 candidate to staging, and preserve the complete simulator/device linker
+   diagnostics. If B2 links, require both exact Com_Init lines plus unchanged
+   M13/FS/M14, the nine-member archive/provenance checks, unsigned device IPA,
+   and Windows Debug/Release. If it does not link, the undefined list defines
+   the next 5-10-owner closure; do not weaken the assertions or add benign
+   defaults.
 3. After Phase 3, follow `docs/FASTFILE_PLAN.md` FF0-FF3 with synthetic zones.
    Before hand-writing FF2 maps for pointer-bearing structs, evaluate the
    GPL-3.0 OpenAssetTools IW3 `ZoneCodeGenerator` as the translation core and

@@ -209,6 +209,9 @@ void QDECL RefreshQuitOnErrorCondition();
 
 // commandLine should not include the executable name (argv[0])
 void Com_Init(char* commandLine);
+#ifdef KISAK_IOS
+bool Com_iOS_BootSpineReached();
+#endif
 void Com_Frame(void);
 
 void __cdecl Com_ShutdownInternal(const char* finalmsg);

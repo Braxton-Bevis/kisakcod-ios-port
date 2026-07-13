@@ -102,14 +102,8 @@ const dvar_s *__cdecl Dvar_RegisterBool(
 
 #else
 
-// The combined BMK4 app already supplies the generic print/assert bodies in
-// EngineSmoke.cpp and BootScaffold.cpp, and links the real dvar registry.
-// Keep only the helpers that remain genuinely absent from that closure.
-void Com_DPrintf(int /*channel*/, const char *fmt, ...)
-{
-    va_list ap; va_start(ap, fmt); vprintf(fmt, ap); va_end(ap);
-}
-
+// common.cpp now owns the Com_* print bodies; keep only helpers that remain
+// genuinely absent from the combined archive closure.
 // Exact engine semantics from universal/win_shared.cpp: SnapFloat uses the
 // same nearest-even conversion as the original x87/SSE implementation.
 void __cdecl Sys_SnapVector(float *v)

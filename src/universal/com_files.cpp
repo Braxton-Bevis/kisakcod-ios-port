@@ -68,6 +68,11 @@ void FS_iOS_SetHeadlessNoAssets(bool enabled)
     fs_iOSHeadlessNoAssets = enabled;
 }
 
+bool FS_iOS_HeadlessNoAssetsRequested()
+{
+    return fs_iOSHeadlessNoAssets;
+}
+
 bool FS_iOS_HeadlessNoAssetsActive()
 {
     return fs_iOSHeadlessNoAssets && useFastFile && !useFastFile->current.enabled;

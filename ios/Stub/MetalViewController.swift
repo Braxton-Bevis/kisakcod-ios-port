@@ -76,6 +76,8 @@ final class MetalViewController: UIViewController {
     // the retained M13/FS/M14 probes run; the retired staged entry is absent.
     private static let comInitPreflightOK = "dvar enum/external string OK — cold Dvar_Init path"
     private var comInitPreflightStatus = "pending"
+    private static let comInitSpineOK = "Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced"
+    private var comInitSpineStatus = "pending"
 
     // Retained M13 hunk/dvar/command behavioral marker, now post-init only.
     private var bootStatus = "pending"
@@ -227,9 +229,12 @@ final class MetalViewController: UIViewController {
             guard let self else { return }
             try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
             let preflight = String(cString: kisak_boot_cominit_stage())
+            let spine = String(cString: kisak_boot_common_spine_status())
             self.comInitPreflightStatus = preflight
+            self.comInitSpineStatus = spine
             NSLog("KISAK_COMINIT_PREFLIGHT %@", preflight)
-            if preflight == Self.comInitPreflightOK {
+            NSLog("KISAK_COMINIT_SPINE %@", spine)
+            if preflight == Self.comInitPreflightOK && spine == Self.comInitSpineOK {
                 let result = String(cString: kisak_boot_probe_after_init())
                 self.bootStatus = result
                 NSLog("KISAK_BOOT_PROBE %@", result)
@@ -242,9 +247,9 @@ final class MetalViewController: UIViewController {
                 }
             } else {
                 try? FileManager.default.removeItem(at: sentinel)
-                self.bootStatus = "blocked by Com_Init preflight failure"
-                self.fsStatus = "blocked by Com_Init preflight failure"
-                self.pmoveProofStatus = "blocked by Com_Init preflight failure"
+                self.bootStatus = "blocked by Com_Init stage failure"
+                self.fsStatus = "blocked by Com_Init stage failure"
+                self.pmoveProofStatus = "blocked by Com_Init stage failure"
             }
             self.writeFirstFrameMarker()
         }
@@ -641,6 +646,7 @@ final class MetalViewController: UIViewController {
             engine: \(engineSmoke)
             d3d9: \(d3d9Status)
             Com_Init preflight: \(comInitPreflightStatus)
+            Com_Init spine: \(comInitSpineStatus)
             boot: \(bootStatus)
             filesystem: \(fsStatus)
             pmove proof: \(pmoveProofStatus)
@@ -671,6 +677,7 @@ final class MetalViewController: UIViewController {
         engine=\(engineSmoke)
         d3d9=\(d3d9Status)
         cominit-preflight=\(comInitPreflightStatus)
+        cominit-spine=\(comInitSpineStatus)
         boot=\(bootStatus)
         fs=\(fsStatus)
         pmove=\(pmoveProofStatus)

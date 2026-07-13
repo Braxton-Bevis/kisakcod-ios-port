@@ -74,7 +74,7 @@ build_one_sdk() {
   xcrun libtool -static -o "ios/libs/$sdk/libkisakpmove.a" "${pmove[@]}" 2>/dev/null
   echo "[$sdk] pmove subset (${#pmove[@]} TUs) -> ios/libs/$sdk/libkisakpmove.a"
 
-  # Phase 3 Wave 1 filesystem closure. This archive is exact and required:
+  # Phase 3 Com_Init closure. This archive is exact and required:
   # no member may be skipped, and the app links this subset in both lanes.
   local cominit=() cominit_missing=0
   local cominit_members=(
@@ -84,6 +84,7 @@ build_one_sdk() {
     src_ios_sys_ios_paths.mm.o
     src_qcommon_com_fileaccess.cpp.o
     src_qcommon_unzip.cpp.o
+    src_qcommon_common.cpp.o
     src_stringed_stringed_hooks.cpp.o
     src_stringed_stringed_ingame.cpp.o
   )

@@ -1,6 +1,6 @@
-// Phase 3 Stage B1: the fresh cold-start entry that will grow into Com_Init.
-// It owns initialization order and never enters through the retired staged
-// initializer. This wave stops before Com_Init itself.
+// Phase 3 Stage B2: fresh cold-start entry into the real Com_Init owner.
+// B1's LP64 preflight stays frozen; common.cpp now owns the temporary
+// command/dvar/hunk spine instead of a second initializer in this file.
 
 #include <cstdint>
 #include <cstdio>
@@ -23,9 +23,11 @@ const dvar_s *Dvar_RegisterString(const char *dvarName, const char *value,
                                   uint16_t flags, const char *description);
 void Dvar_SetStringFromSource(dvar_s *dvar, char *string, DvarSetSource source);
 const char *Dvar_GetString(const char *dvarName);
-void Com_InitHunkMemory();
-void Cbuf_Init();
-void Cmd_Init();
+bool Dvar_GetBool(const char *dvarName);
+int Dvar_GetInt(const char *dvarName);
+void FS_iOS_SetHeadlessNoAssets(bool enabled);
+void Com_Init(char *commandLine);
+bool Com_iOS_BootSpineReached();
 
 static_assert(sizeof(void *) == 8, "BootComInit requires the arm64 pointer model");
 
@@ -33,6 +35,7 @@ extern "C" const char *kisak_boot_cominit_stage(void)
 {
     static char status[512];
     static bool entered = false;
+    static char emptyCommandLine[] = "";
     static char enumZero[] = "zero";
     static char enumOne[] = "one";
     static const char *enumValues[] = { enumZero, enumOne, nullptr };
@@ -105,14 +108,27 @@ extern "C" const char *kisak_boot_cominit_stage(void)
         return status;
     }
 
-    // Interim B1 tail only: keep the already-frozen M13/FS/M14 gates alive.
-    // B2 replaces this manual tail with the engine's Com_Init spine; it must
-    // not survive into the final M15 orchestrator.
-    Com_InitHunkMemory();
-    Cbuf_Init();
-    Cmd_Init();
+    // Explicit headless policy: common.cpp registers useFastFile=0 and
+    // dedicated=2 from this request before its guarded B2 boundary returns.
+    FS_iOS_SetHeadlessNoAssets(true);
+    Com_Init(emptyCommandLine);
+    if (!Com_iOS_BootSpineReached() || Dvar_GetBool("useFastFile")
+        || Dvar_GetInt("dedicated") != 2)
+    {
+        snprintf(status, sizeof(status), "common spine FAIL: policy/fence postcondition");
+        return status;
+    }
 
     snprintf(status, sizeof(status),
              "dvar enum/external string OK — cold Dvar_Init path");
     return status;
+}
+
+extern "C" const char *kisak_boot_common_spine_status(void)
+{
+    if (!Com_iOS_BootSpineReached())
+        return "common spine FAIL: Com_Init did not reach B2 fence";
+    if (Dvar_GetBool("useFastFile") || Dvar_GetInt("dedicated") != 2)
+        return "common spine FAIL: headless policy drift";
+    return "Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced";
 }

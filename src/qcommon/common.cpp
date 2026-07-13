@@ -69,6 +69,16 @@ int getBuildNumberAsInt();
 #ifndef CPUSTRING
 #define CPUSTRING "ios-arm64"
 #endif
+
+// Stage B2 stops after the real early common spine has registered its policy
+// dvars and initialized the command/hunk owners. Later waves move this fence
+// toward the unmodified tail as their real owners join the exact archive.
+static bool com_iOSBootSpineReached;
+
+bool Com_iOS_BootSpineReached()
+{
+    return com_iOSBootSpineReached;
+}
 #endif
 
 int marker_common;
@@ -355,7 +365,13 @@ typedef enum
 	PRE_READ_WRITE								// prefetch assuming that buffer is used for both reading and writing
 } e_prefetch;
 
+#ifdef KISAK_IOS
+// EMMS only resets x87/MMX aliasing state. arm64 has neither, so the exact
+// platform equivalent is no work.
+#define EMMS_INSTRUCTION ((void)0)
+#else
 #define EMMS_INSTRUCTION	__asm emms
+#endif
 
 void _copyDWord(uint32_t* dest, const uint32_t constant, const uint32_t count) 
 {
@@ -1101,6 +1117,9 @@ void __cdecl Com_Init(char* commandLine)
     jmp_buf * v3; // eax
     jmp_buf * v4; // eax
 
+#ifdef KISAK_IOS
+    com_iOSBootSpineReached = false;
+#endif
     Value = (jmp_buf *)Sys_GetValue(2);
 
     if (setjmp(*Value))
@@ -1108,6 +1127,10 @@ void __cdecl Com_Init(char* commandLine)
         Sys_Error(va("Error during initialization:\n%s\n", com_errorMessage));
     }
     Com_Init_Try_Block_Function(commandLine);
+#ifdef KISAK_IOS
+    if (com_iOSBootSpineReached)
+        return;
+#endif
     v3 = (jmp_buf *)Sys_GetValue(2);
     if (!setjmp(*v3))
         Com_AddStartupCommands();
@@ -1306,6 +1329,24 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 
     Com_Printf(16, "%s %s build %s %s\n", "KisakCoD4", "1.0", CPUSTRING, __DATE__);
     Com_ParseCommandLine(commandLine);
+#ifdef KISAK_IOS
+    if (FS_iOS_HeadlessNoAssetsRequested())
+    {
+        // Explicit, temporary Stage B2 boundary. The production script-string,
+        // filesystem, server, client, renderer, sound, and database owners are
+        // outside this wave and remain forbidden at runtime. This path still
+        // enters the engine's real Com_Init function, command initialization,
+        // dvar policy registration, endian setup, and hunk initialization.
+        Swap_Init();
+        Cbuf_Init();
+        Cmd_Init();
+        Com_StartupVariable(0);
+        Com_InitDvars();
+        Com_InitHunkMemory();
+        com_iOSBootSpineReached = true;
+        return;
+    }
+#endif
     SL_Init();
     Swap_Init();
     Cbuf_Init();
@@ -1543,6 +1584,12 @@ const char *s_lockThreadNames[4] = { "none", "minimal", "all" };
 void Com_InitDvars()
 {
 #ifdef KISAK_MP
+#ifdef KISAK_IOS
+    if (FS_iOS_HeadlessNoAssetsRequested())
+        com_dedicated = Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 2, DVAR_LATCH, "True if this is a dedicated server");
+    else
+        com_dedicated = Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 0, DVAR_LATCH, "True if this is a dedicated server");
+#else
     #if !defined(DEDICATED) && !defined(KISAK_DEDICATED)
         com_dedicated = Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 0, DVAR_LATCH, "True if this is a dedicated server");
     #else
@@ -1554,13 +1601,22 @@ void Com_InitDvars()
             Dvar_RegisterEnum("dedicated", g_dedicatedEnumNames, 0, DVAR_ROM, "True if this is a dedicated server");
     #endif
 #endif
+#endif
 
     com_maxfps = Dvar_RegisterInt("com_maxfps", 85, 0, 1000, DVAR_ARCHIVE, "Cap frames per second");
+#ifdef KISAK_IOS
+    useFastFile = Dvar_RegisterBool(
+        "useFastFile",
+        !FS_iOS_HeadlessNoAssetsRequested(),
+        DVAR_INIT,
+        "Enables loading data from fast files. Only tools can run without fast files.");
+#else
     useFastFile = Dvar_RegisterBool(
         "useFastFile",
         1,
         DVAR_INIT,
         "Enables loading data from fast files. Only tools can run without fast files.");
+#endif
     sys_lockThreads = Dvar_RegisterEnum(
         "sys_lockThreads",
         s_lockThreadNames,

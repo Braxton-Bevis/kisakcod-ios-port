@@ -11,6 +11,7 @@ const char *kisak_d3d9_smoke(void *metalLayer);
 // BootComInit.cpp is the fresh cold-start path; BootSmoke.cpp re-earns the
 // existing M13 behavioral marker without repeating any initializer.
 const char *kisak_boot_cominit_stage(void);
+const char *kisak_boot_common_spine_status(void);
 const char *kisak_boot_probe_after_init(void);
 
 // BootFSSmoke.cpp runs real FS_InitFilesystem and a sandbox file round trip.

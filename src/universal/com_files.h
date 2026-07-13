@@ -130,6 +130,7 @@ void __cdecl FS_ConvertPath(char *s);
 void __cdecl FS_InitFilesystem();
 #ifdef KISAK_IOS
 void FS_iOS_SetHeadlessNoAssets(bool enabled);
+bool FS_iOS_HeadlessNoAssetsRequested();
 bool FS_iOS_HeadlessNoAssetsActive();
 #endif
 uint32_t __cdecl FS_FOpenFileByMode(char *qpath, int *f, fsMode_t mode);

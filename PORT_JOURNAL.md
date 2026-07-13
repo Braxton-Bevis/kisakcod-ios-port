@@ -843,3 +843,64 @@ included read-only example records macOS/Xcode/SDK versions and simulator
 runtime/device-type inventories. Dispatch proof and artifact contents are
 pending the coordinator; no Mac result is claimed locally.
 
+## Phase 3 Stage B2 candidate — real common.cpp spine (2026-07-13, Windows seat; CI UNVERIFIED)
+
+**Evidence received before this slice:** the Wave 1 time-shim build is
+compile-proven: census run `29281941827` passed **35/35**, and Windows run
+`29281941785` passed Debug and Release. Stub run `29281941846` stopped on the
+single remaining `_copyDWord` undefined. The coordinator supplied that
+function's complete four-line behavior as a temporary scaffold with an
+explicit common-spine deletion boundary. No later stub verdict was supplied,
+so this entry does not claim a wholly green Wave 1 or B1 run.
+
+**Attempted:** replace B1's manual hunk/Cbuf/Cmd tail with entry through the
+real `Com_Init` owner while stopping truthfully before the ungraduated heavy
+tails. `src/qcommon/common.cpp` is now a ninth hard-required member of the
+exact `libkisakcominit.a`; it was already in the monotonic 35-TU census, so the
+census was not padded. Archive provenance now requires real `Com_Init`, the
+iOS fence query, `_copyDWord`, and the four common globals, and denies their
+former app-object owners.
+
+**Runtime policy and marker:** `BootComInit.cpp` retains the frozen arm64 dvar
+preflight, then explicitly requests headless/no-assets mode and calls real
+`Com_Init`. In the iOS lane, `Com_InitDvars` registers real `useFastFile=0`
+and dedicated-internet policy (`dedicated=2`). The temporary B2 fence executes
+real endian, Cbuf, Cmd, dvar-policy, and hunk initialization, then returns
+before SL/filesystem/database/network/SV/CL/renderer/sound. The orchestrator
+requires the fence state and both dvar values before exposing the new line
+`cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced`.
+The B1, M13, FS, and M14 assertions remain armed independently.
+
+**Scaffold ownership:** fourteen app definitions were deleted as their real
+owners joined (`Com_Error`, five Com_Print/Com_Mem helpers, `Com_DPrintf`,
+`Com_LogFileOpen`, `Com_StartupVariable`, `_copyDWord`, `com_dedicated`,
+`com_sv_running`, `useFastFile`, and `com_errorEntered`). The known SV/CL,
+network, renderer, and sound tail entry points are abort-loud with named
+deletion owners; the runtime fence must keep all of them unreachable. B2 does
+not claim production `Dvar_AddCommands`, `SL_*`, `info1`, or `info2`; their
+remaining scaffolds are still forbidden at M15.
+
+**Portability audit:** the scanner's unconditional `EMMS_INSTRUCTION` finding
+is resolved by a `KISAK_IOS` no-op, which is the arm64 equivalent because
+there is no x87/MMX alias state. The other asm site is inside the existing
+`_M_X686` branch and is not compiled for arm64. Every `common.cpp` `jmp_buf`
+site points through `Sys_GetValue(2)` to `q_shared.cpp`'s native
+`jmp_buf g_com_error[THREAD_CONTEXT_COUNT]`; there is no fixed 64-byte storage
+to widen. `com_files.cpp` scanner findings (`io.h`, `_findfirst64i32`,
+`_findnext64i32`, `_findclose`) remain exclusively in the byte-identical
+Windows `#else`; its iOS lane uses POSIX headers and directory APIs.
+
+**Windows-available evidence:** `git diff --check`, Git Bash syntax checks,
+the 35-path unique/existing census assertion, exact nine-member archive list,
+marker greps, real-owner allowlists, and app-scaffold denylists pass locally.
+This seat has no compiler. Hosted census, simulator link/runtime, unsigned
+device link, and Windows regression for B2 are **UNVERIFIED**.
+
+**Required coordinator verdict:** census remains **35 PASS, 0 FAIL**; the
+archive is exactly nine members and contains the asserted real owners; the
+simulator links and emits both exact Com_Init lines plus unchanged M13/FS/M14;
+the unsigned arm64 device IPA links; and Windows Debug/Release stay green. If
+the app link is red, preserve the complete undefined-symbol output: it is the
+ratified definition of the next bounded B2 closure, not permission to add
+benign defaults or weaken any gate.
+
