@@ -29,6 +29,7 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/stringed/stringed_hooks.cpp" # language dvars/filesystem integration
     "${SRC_DIR}/stringed/stringed_ingame.cpp"# asset-free localization package startup
     "${SRC_DIR}/universal/com_files.cpp"     # filesystem layer (Objective 3 target)
+    "${SRC_DIR}/universal/com_shared.cpp"    # Com_FilterPath etc. used by FS file listing
     "${SRC_DIR}/universal/win_common.cpp"    # sys utils (POSIX under KISAK_IOS)
     "${SRC_DIR}/universal/q_shared.cpp"      # shared string/parse utilities
     "${SRC_DIR}/universal/com_math.cpp"      # math library

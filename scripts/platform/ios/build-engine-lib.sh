@@ -79,6 +79,7 @@ build_one_sdk() {
   local cominit=() cominit_missing=0
   local cominit_members=(
     src_universal_com_files.cpp.o
+    src_universal_com_shared.cpp.o
     src_universal_win_common.cpp.o
     src_ios_sys_ios_paths.mm.o
     src_qcommon_com_fileaccess.cpp.o

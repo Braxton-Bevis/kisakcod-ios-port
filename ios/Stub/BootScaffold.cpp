@@ -101,6 +101,18 @@ void Dvar_AddCommands() {}
 bool Com_LogFileOpen() { return false; }
 bool Sys_IsRenderThread() { return false; }
 
+// Pure-server IWD checksum state (multiplayer anticheat). com_files.cpp's
+// only boot-lane reference is the FS_Restart error-retry path, which calls
+// it with empty strings immediately before Com_Error aborts the boot.
+// Reaching it in the headless no-assets boot therefore means boot has
+// already failed — abort loud rather than pretend the pure state changed.
+void __cdecl FS_PureServerSetLoadedIwds(char *iwdSums, char *iwdNames)
+{
+    (void)iwdSums;
+    (void)iwdNames;
+    BootScaffoldAbort("FS_PureServerSetLoadedIwds(boot-failure retry path)");
+}
+
 // The stub has no command-line ingress. FS_InitFilesystem asks common.cpp to
 // apply seven named startup overrides; validating the non-null name and doing
 // nothing is therefore the complete behavior for this entry point. The FS
