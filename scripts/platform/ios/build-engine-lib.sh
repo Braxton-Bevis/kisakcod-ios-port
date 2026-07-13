@@ -99,8 +99,10 @@ build_one_sdk() {
   echo "[$sdk] Com_Init subset (${#cominit[@]} TUs) -> ios/libs/$sdk/libkisakcominit.a"
 
   # Prove the archive member list is neither silently smaller nor padded.
+  # libtool prepends a "__.SYMDEF SORTED" symbol-table pseudo-entry that is
+  # not a member; drop it so the diff compares real object files only.
   local actual_members
-  actual_members=$(xcrun ar -t "ios/libs/$sdk/libkisakcominit.a")
+  actual_members=$(xcrun ar -t "ios/libs/$sdk/libkisakcominit.a" | grep -v '__\.SYMDEF')
   diff -u \
     <(printf '%s\n' "${cominit_members[@]}") \
     <(printf '%s\n' "$actual_members")
