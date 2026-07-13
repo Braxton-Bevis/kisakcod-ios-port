@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <ctime>
 
 char *q_ios_strlwr(char *s)
 {
@@ -42,6 +43,31 @@ char *q_ios_itoa(int value, char *str, int radix)
         *out++ = tmp[--i];
     *out = '\0';
     return str;
+}
+
+long long q_ios_time64(long long *timer)
+{
+    const std::time_t nativeTime = std::time(nullptr);
+    const long long result = static_cast<long long>(nativeTime);
+    if (timer)
+        *timer = result;
+    return result;
+}
+
+std::tm *q_ios_localtime64(const long long *timer)
+{
+    if (!timer)
+        return nullptr;
+    const std::time_t nativeTime = static_cast<std::time_t>(*timer);
+    return std::localtime(&nativeTime);
+}
+
+char *q_ios_ctime64(const long long *timer)
+{
+    if (!timer)
+        return nullptr;
+    const std::time_t nativeTime = static_cast<std::time_t>(*timer);
+    return std::ctime(&nativeTime);
 }
 
 #endif // KISAK_IOS

@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cmath>
 #include <cerrno>
+#include <ctime>
 #include <strings.h> // strcasecmp / strncasecmp
 
 #define _stricmp   strcasecmp
@@ -25,15 +26,22 @@
 #define _strdup    strdup
 #define _isnan(x)  std::isnan(x)
 
-// No libc equivalents — implemented in ios/msvc_crt_compat.cpp
+// iOS adapters implemented in ios/msvc_crt_compat.cpp. The time wrappers also
+// bridge MSVC's long-long storage to Apple's native time_t without aliasing.
 char *q_ios_strlwr(char *s);
 char *q_ios_strupr(char *s);
 char *q_ios_itoa(int value, char *str, int radix);
+long long q_ios_time64(long long *timer);
+std::tm *q_ios_localtime64(const long long *timer);
+char *q_ios_ctime64(const long long *timer);
 #define _strlwr q_ios_strlwr
 #define strlwr  q_ios_strlwr
 #define _strupr q_ios_strupr
 #define strupr  q_ios_strupr
 #define _itoa   q_ios_itoa
+#define _time64 q_ios_time64
+#define _localtime64 q_ios_localtime64
+#define _ctime64 q_ios_ctime64
 
 // x86 timestamp counter → ARM64 virtual counter (fixed-frequency, monotonic;
 // the engine only ever uses __rdtsc deltas for profiling/jitter, never wall time)

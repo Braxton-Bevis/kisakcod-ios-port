@@ -1,23 +1,26 @@
-# NEXT_SESSION - BMK4 context handoff (2026-07-13, after M14 CI verification)
+# NEXT_SESSION - BMK4 context handoff (2026-07-13, Wave 1 red-fix loop)
 
 Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries,
 `docs/M14_PMOVE_SANDBOX_REPORT.md`, and `docs/FASTFILE_PLAN.md` before
 continuing. Re-reference this plan before each edit and refresh it whenever
 work pauses.
 
-## Active seat state — Wave 1 candidate awaiting coordinator CI
+## Active seat state — Wave 1 CRT red fix awaiting coordinator CI
 
-- Section 0 is official on `origin/main` at coordinator-verified commit
-  `53dd691`; Claude ratified the corrected Phase 3 contract. Sol's false prior
-  local-commit report is acknowledged in the review response.
-- The current local Wave 1 candidate links a hard-required seven-object
-  `libkisakcominit.a`, runs a dvar LP64 preflight, then calls the real
-  `FS_InitFilesystem` under an explicit iOS headless/no-fastfile policy and
-  requires a real Documents write/read/delete round trip.
-- Hosted verification is **UNVERIFIED** until the coordinator pushes the local
-  commit and reports all three gates: census **34/34**, exact simulator FS
-  marker while retaining M13/M14 markers plus a green unsigned-device link,
-  and Windows Debug/Release green. Do not begin Wave 2 before those verdicts.
+- `origin/main` at `004a678` contains Wave 1 candidate `bdd14f0`, three
+  evidence-driven closure fixes, the playable roadmap, and staging-branch CI
+  triggers. The exact filesystem archive now contains eight real objects and
+  the monotonic census contains 35 TUs.
+- The latest staging census reached the newly added `com_shared.cpp` owner and
+  failed only at `_time64`; simulator and device jobs consequently could not
+  build the hard-required archive. The current local fix adds `_time64`,
+  `_localtime64`, and the tree-used sibling `_ctime64` to the existing iOS CRT
+  shim. Windows source lanes are untouched.
+- Hosted verification remains **UNVERIFIED** until the coordinator pushes this
+  local commit to staging and reports all three gates: census **35/35**, exact
+  simulator FS marker while retaining M13/M14 markers plus a green unsigned-
+  device link, and Windows Debug/Release green. Do not begin Wave 2 before
+  those verdicts and run IDs are recorded.
 - This Windows seat must not push or invoke `gh`; the coordination seat owns
   push and hosted-CI observation. Physical-iPad M13/M14 proof remains open and
   is not a blocker for hosted Phase 3 waves.
@@ -195,10 +198,11 @@ but the audit remains an explicit zero-result gate.
    is the only remaining Phase 2 boundary and does not invalidate the hosted
    proof while hardware is unavailable. It may be deferred while Phase 3
    begins, but it is mandatory before any physical-device M13/M14 claim.
-2. Coordinator: push the local Wave 1 candidate and report the census,
+2. Coordinator: push the local Wave 1 CRT fix to staging and report the census,
    simulator/device-build, and Windows verdicts listed in the active state.
    Fix any red result inside Wave 1. Only after all are green, record exact run
-   evidence and begin Wave 2 parse/info/msg from preserved linker output.
+   evidence and begin Stage B1: dvar enum/external-string preflight plus the
+   fresh cold-start orchestrator skeleton required by the corrected contract.
 3. After Phase 3, follow `docs/FASTFILE_PLAN.md` FF0-FF3 with synthetic zones.
    Before hand-writing FF2 maps for pointer-bearing structs, evaluate the
    GPL-3.0 OpenAssetTools IW3 `ZoneCodeGenerator` as the translation core and

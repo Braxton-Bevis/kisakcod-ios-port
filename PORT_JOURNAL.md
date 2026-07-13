@@ -748,3 +748,43 @@ IPA link containing the exact archive, and (4) Windows Debug/Release green.
 Any red result belongs to Wave 1; do not proceed around it. No COD4 asset was
 created, read, committed, or uploaded, and no physical-device claim is made.
 
+### Wave 1 hosted red-fix addendum — MSVC time shim (2026-07-13)
+
+**Evidence received:** the coordinator pushed the original Wave 1 candidate as
+`bdd14f0`. Its first census stopped at **33/34** because
+`src/qcommon/unzip.cpp:270` could not see the Quake-lineage `LittleShort`
+no-op. Both stub lanes then stopped at the hard-required archive check because
+the failed object was correctly absent; that was gate enforcement, not a gate
+defect. Subsequent coordinator commits restored the iOS little-endian helpers,
+filtered only the archive's `__.SYMDEF` pseudo-entry from provenance comparison,
+and added real `com_shared.cpp` plus the abort-loud
+`FS_PureServerSetLoadedIwds` closure owner. No census or archive requirement
+was weakened.
+
+The resulting 35-TU hosted attempt exposed one new sole census error:
+`src/universal/com_shared.cpp:162: use of undeclared identifier '_time64'`.
+The archive and both stub builds correctly remained blocked on that missing
+required object. Run IDs and the Windows verdict were not included in the
+coordination report, so they remain **UNVERIFIED** here.
+
+**Current fix:** audited all of `com_shared.cpp`; its complete MSVC time family
+is `_time64` plus `_localtime64`. A tree-wide sibling audit also found
+`_ctime64` in `ui_shared_obj.cpp`. The `KISAK_IOS` CRT shim now implements all
+three with MSVC-compatible `long long` storage while converting through native
+64-bit Apple `time_t`; this avoids treating distinct pointer types as aliases.
+The original engine TUs and every Windows lane remain unchanged.
+
+**Windows-available checks:** `git diff --check` and Git Bash syntax checks
+pass; the census manifest is 35 unique existing paths; the Com_Init archive
+contract is eight unique required members; all three frozen simulator marker
+assertions remain present; the eight-TU Wave 1 `jmp_buf` audit is still zero;
+and every MSVC time spelling currently used in the source tree is covered by
+the iOS shim. This workstation has no iOS or Windows compiler, so these checks
+are not runtime or hosted-build evidence.
+
+**Required coordinator verdict:** census **35 PASS, 0 FAIL**; an exact
+eight-member `libkisakcominit.a` in both lanes; simulator launch retaining the
+exact M13, M14, and frozen filesystem markers; green unsigned arm64 device IPA;
+and Windows Debug/Release green. Until those hosted results and run IDs return,
+Wave 1 and its runtime marker remain **UNVERIFIED** and Stage B1 must not start.
+
