@@ -1,9 +1,8 @@
 name: iOS Engine Compile Probe
 
 # Measures the real arm64-apple-ios error surface of representative engine
-# translation units. This job is EXPECTED to report failures — its product is
-# the per-file error census artifact, not a green check. The separate
-# cmake-configure step proves the -DKISAK_PLATFORM=ios build graph is sound.
+# translation units. The established census is a monotonic closure gate: all
+# tracked files must pass, while the artifact preserves each per-file result.
 #
 # The census compiles against DXVK's native D3D9/Win32 compatibility headers
 # (the chosen TRANSLATION renderer path: D3D9 -> DXVK -> Vulkan -> MoltenVK ->
@@ -55,7 +54,7 @@ jobs:
           # TUs; caught as CI-vs-local drift on sys_ios_main.mm, run 29176446232).
           git -C dxvk-headers apply --verbose "$GITHUB_WORKSPACE/scripts/platform/ios/dxvk-v2.7.1-ios.patch"
 
-      - name: Per-file compile census (failures expected and recorded)
+      - name: Per-file compile census (all tracked files required)
         run: |
           set -uo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
@@ -80,6 +79,13 @@ jobs:
           done
           echo '=== CENSUS ==='
           column -t -s $'\t' census/census.tsv
+          total=$(awk 'END { print NR - 1 }' census/census.tsv)
+          pass=$(awk -F '\t' 'NR > 1 && $2 == "PASS" { n++ } END { print n + 0 }' census/census.tsv)
+          fail=$(awk -F '\t' 'NR > 1 && $2 == "FAIL" { n++ } END { print n + 0 }' census/census.tsv)
+          echo "CENSUS_TOTAL=$total PASS=$pass FAIL=$fail"
+          test "$total" -ge 30
+          test "$pass" -eq "$total"
+          test "$fail" -eq 0
 
       - uses: actions/upload-artifact@v4
         with:

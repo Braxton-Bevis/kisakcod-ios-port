@@ -18,7 +18,7 @@
 #include <cstring>
 #include <cmath>
 
-// Engine entry point (defined in src_bgame_bg_pmove.cpp.o):
+// Real engine entry point (defined in src_bgame_bg_pmove.cpp.o):
 //   void __cdecl Pmove(pmove_t *pm);
 void __cdecl Pmove(pmove_t *pm);
 // Dvar-seeding registrars from the real bg_jump.cpp / bg_mantle.cpp objects.
@@ -108,8 +108,8 @@ extern "C" void kisak_pmove_init(void)
 {
     // Seed the dvar-backed movement tunables owned by the real bg_jump.o /
     // bg_mantle.o (jump_height=39, jump_stepSize=18, mantle_enable, ...).
-    // Dvar_Register* is stubbed in PmoveScaffoldShared.cpp to hand back
-    // statically-seeded dvars carrying the engine's own default values.
+    // The combined app reaches the real dvar registry after kisak_boot_smoke;
+    // PMOVE_STANDALONE_SCAFFOLD provides the same defaults to the CLI harness.
     static bool dvarsDone = false;
     if (!dvarsDone)
     {
@@ -159,6 +159,11 @@ extern "C" const char *kisak_pmove_frame(
 {
     static char status[192];
 
+    if (!std::isfinite(dtMs) || dtMs <= 0.0f)
+        dtMs = 1.0f;
+    if (dtMs > 50.0f)
+        dtMs = 50.0f;
+
     s_timeMs += (double)dtMs;
     int serverTime = kStartTimeMs + (int)(s_timeMs + 0.5);
     if (serverTime <= s_ps.commandTime)
@@ -192,54 +197,82 @@ extern "C" const char *kisak_pmove_frame(
     return status;
 }
 
-// ---------------------------------------------------------------------------
-// Standalone physics-reality test (simulator): 3 s at 60 Hz.
-//   0.0-1.0 s  walk forward
-//   1.0-2.0 s  keep moving forward, jump pressed at t=1.0 s
-//   2.0-3.0 s  no input: friction must decay velocity to rest
-// ---------------------------------------------------------------------------
-#ifdef PMOVE_TEST_MAIN
-int main(void)
+static float Sandbox_Speed2D()
 {
-    kisak_pmove_init();
-    printf("pmove sandbox: real bg_pmove.cpp on flat synthetic ground\n");
+    return sqrtf(s_ps.velocity[0] * s_ps.velocity[0] +
+                 s_ps.velocity[1] * s_ps.velocity[1]);
+}
 
+static const char kPmoveProofOK[] =
+    "real bg_pmove OK: walk+jump+land+friction on synthetic z=0";
+
+extern "C" const char *kisak_pmove_proof(void)
+{
+    static char result[256];
     const float dt = 1000.0f / 60.0f;
-    float maxZ = 0.0f, landZ = 0.0f;
-    int airFrames = 0, landedFrame = -1;
+    float walkDistance = 0.0f;
+    float walkSpeed = 0.0f;
+    float maxZ = 0.0f;
+    float landZ = 9999.0f;
+    int airFrames = 0;
+    int landedFrame = -1;
 
-    for (int frame = 0; frame < 180; frame++)
+    kisak_pmove_init();
+    for (int frame = 0; frame < 240; ++frame)
     {
-        float fwd = 0.0f;
-        int jump = 0;
-        if (frame < 120)
-            fwd = 1.0f;                       // walk forward for 2 s
-        if (frame >= 60 && frame < 66)
-            jump = 1;                         // fresh press at t=1.0 s
+        const float forward = frame < 120 ? 1.0f : 0.0f;
+        const int jump = frame == 60 ? 1 : 0;
+        kisak_pmove_frame(forward, 0.0f, jump, 0, dt);
 
-        const char *st = kisak_pmove_frame(fwd, 0.0f, jump, 0, dt);
-
+        const float distance = sqrtf(s_ps.origin[0] * s_ps.origin[0] +
+                                     s_ps.origin[1] * s_ps.origin[1]);
+        if (frame == 59)
+        {
+            walkDistance = distance;
+            walkSpeed = Sandbox_Speed2D();
+        }
         if (s_ps.origin[2] > maxZ)
             maxZ = s_ps.origin[2];
-        bool grounded = s_ps.groundEntityNum != ENTITYNUM_NONE;
+
+        const bool grounded = s_ps.groundEntityNum != ENTITYNUM_NONE;
         if (!grounded)
-            airFrames++;
+            ++airFrames;
         else if (airFrames > 0 && landedFrame < 0)
         {
             landedFrame = frame;
             landZ = s_ps.origin[2];
         }
-
-        if (frame % 30 == 29 || frame == 0)
-            printf("t=%4.2fs frame=%3d %s\n",
-                   (float)(frame + 1) / 60.0f, frame, st);
     }
 
-    printf("jump apex z=%.1f  airborne frames=%d  landed at frame=%d z=%.2f\n",
-           maxZ, airFrames, landedFrame, landZ);
-    printf("final speed=%.3f (friction decay check)\n",
-           sqrtf(s_ps.velocity[0] * s_ps.velocity[0] +
-                 s_ps.velocity[1] * s_ps.velocity[1]));
-    return 0;
+    const float finalSpeed = Sandbox_Speed2D();
+    const bool finalGrounded = s_ps.groundEntityNum != ENTITYNUM_NONE;
+    const bool walked = walkDistance > 24.0f && walkSpeed > 20.0f;
+    const bool jumped = maxZ > 8.0f && airFrames >= 8;
+    const bool landed = landedFrame > 60
+        && fabsf(landZ - kGroundZ) < 0.25f
+        && fabsf(s_ps.origin[2] - kGroundZ) < 0.25f
+        && finalGrounded;
+    const bool stopped = finalSpeed < 1.0f;
+
+    if (walked && jumped && landed && stopped)
+        return kPmoveProofOK;
+
+    snprintf(result, sizeof(result),
+             "real bg_pmove FAIL: walk=%.2f/%.2f apex=%.2f air=%d land=%d/%.3f final=%.3f ground=%d",
+             walkDistance, walkSpeed, maxZ, airFrames, landedFrame, landZ,
+             finalSpeed, finalGrounded ? 1 : 0);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Standalone physics-reality test. The same invariant proof is called by the
+// app and CI; the CLI exits nonzero for any behavioral failure.
+// ---------------------------------------------------------------------------
+#ifdef PMOVE_TEST_MAIN
+int main(void)
+{
+    const char *result = kisak_pmove_proof();
+    puts(result);
+    return strcmp(result, kPmoveProofOK) == 0 ? 0 : 1;
 }
 #endif

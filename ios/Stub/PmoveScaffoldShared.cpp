@@ -21,6 +21,8 @@
 #include <ctime>
 #include <pthread.h>
 
+#if defined(PMOVE_STANDALONE_SCAFFOLD)
+
 void MyAssertHandler(const char *file, int line, int /*type*/, const char *fmt, ...)
 {
     fprintf(stderr, "ENGINE ASSERT %s:%d: ", file, line);
@@ -55,12 +57,12 @@ void Com_PrintWarning(int /*channel*/, const char *fmt, ...)
     va_list ap; va_start(ap, fmt); vfprintf(stderr, fmt, ap); va_end(ap);
 }
 
-// q_shared.h decl; Quake semantics: snap velocity components to integers.
+// Exact engine semantics: nearest-even float-to-integer snapping.
 void __cdecl Sys_SnapVector(float *v)
 {
-    v[0] = (float)(int)(v[0] + (v[0] >= 0.0f ? 0.5f : -0.5f));
-    v[1] = (float)(int)(v[1] + (v[1] >= 0.0f ? 0.5f : -0.5f));
-    v[2] = (float)(int)(v[2] + (v[2] >= 0.0f ? 0.5f : -0.5f));
+    v[0] = SnapFloat(v[0]);
+    v[1] = SnapFloat(v[1]);
+    v[2] = SnapFloat(v[2]);
 }
 
 // Minimal dvar registry: hand back a static dvar seeded with the caller's
@@ -97,3 +99,24 @@ const dvar_s *__cdecl Dvar_RegisterBool(
     d->reset.enabled = value;
     return d;
 }
+
+#else
+
+// The combined BMK4 app already supplies the generic print/assert bodies in
+// EngineSmoke.cpp and BootScaffold.cpp, and links the real dvar registry.
+// Keep only the helpers that remain genuinely absent from that closure.
+void Com_DPrintf(int /*channel*/, const char *fmt, ...)
+{
+    va_list ap; va_start(ap, fmt); vprintf(fmt, ap); va_end(ap);
+}
+
+// Exact engine semantics from universal/win_shared.cpp: SnapFloat uses the
+// same nearest-even conversion as the original x87/SSE implementation.
+void __cdecl Sys_SnapVector(float *v)
+{
+    v[0] = SnapFloat(v[0]);
+    v[1] = SnapFloat(v[1]);
+    v[2] = SnapFloat(v[2]);
+}
+
+#endif

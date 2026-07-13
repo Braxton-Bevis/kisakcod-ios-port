@@ -22,7 +22,7 @@
 #include <xanim/dobj_utils.h>
 #include <qcommon/qcommon.h>
 
-#include <cstring>
+#include <cstring> // scaffold storage initialization
 
 // ---------------------------------------------------------------------------
 // [data] statically seeded dvars (defaults lifted from BG_RegisterDvars in
@@ -45,8 +45,8 @@ static dvar_t *pmoveMakeDvar(const char *name, float v, int i, bool b)
     return d;
 }
 static dvar_t *dvF(const char *n, float v) { return pmoveMakeDvar(n, v, 0, false); }
-static dvar_t *dvI(const char *n, int v) { return pmoveMakeDvar(n, 0.0f, v, v != 0); }
-static dvar_t *dvB(const char *n, bool v) { return pmoveMakeDvar(n, 0.0f, v ? 1 : 0, v); }
+static dvar_t *dvI(const char *n, int v) { return pmoveMakeDvar(n, 0.0f, v, false); }
+static dvar_t *dvB(const char *n, bool v) { return pmoveMakeDvar(n, 0.0f, 0, v); }
 
 // owned by bg_misc.cpp (not yet on iOS)
 const dvar_t *friction = dvF("friction", 5.5f);
@@ -176,7 +176,7 @@ void __cdecl XAnimBlend(XAnim_s *, uint32_t, const char *, uint32_t, uint32_t, u
 int __cdecl XAnimGetLengthMsec(const XAnim_s *, uint32_t) { return 0; }
 void __cdecl XAnimGetAbsDelta(const XAnim_s *, uint32_t, float *rot, float *trans, float)
 {
-    if (rot) { rot[0] = rot[1] = rot[2] = 0.0f; rot[3] = 1.0f; }
+    if (rot) { rot[0] = 0.0f; rot[1] = 1.0f; }
     if (trans) { trans[0] = trans[1] = trans[2] = 0.0f; }
 }
 void __cdecl DObjSetLocalTag(DObj_s *, int *, uint32_t, const float *, const float *) {}

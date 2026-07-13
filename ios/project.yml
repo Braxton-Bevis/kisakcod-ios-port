@@ -40,7 +40,11 @@ targets:
         # scripts/platform/ios/build-engine-lib.sh (not checked in).
         SWIFT_OBJC_BRIDGING_HEADER: Stub/BridgingHeader.h
         LIBRARY_SEARCH_PATHS: ["$(PROJECT_DIR)/libs/$(PLATFORM_NAME)"]
-        OTHER_LDFLAGS: ["-lkisaksmoke"]
+        HEADER_SEARCH_PATHS: ["$(PROJECT_DIR)/../src", "$(PROJECT_DIR)/../deps", "$(PROJECT_DIR)/libs/dxvk-include/directx", "$(PROJECT_DIR)/libs/dxvk-include/windows"]
+        GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "KISAK_MP=1", "KISAK_IOS=1"]
+        CLANG_CXX_LANGUAGE_STANDARD: gnu++20
+        OTHER_CPLUSPLUSFLAGS: ["$(inherited)", "-fno-strict-aliasing", "-fwrapv", "-fms-extensions", "-fdelayed-template-parsing", "-Wno-c++11-narrowing"]
+        OTHER_LDFLAGS: ["-lkisakpmove", "-lkisaksmoke"]
         # The engine is arm64-only (sse2neon absorbs the SSE layer) — no
         # x86_64 simulator slice exists or is wanted.
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
@@ -53,5 +57,4 @@ targets:
         # would remove the symbols even after -force_load (learned on device:
         # signal 5 inside Direct3DCreate9, zero vk* symbols in the binary).
         DEAD_CODE_STRIPPING: NO
-        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisaksmoke", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]
-        "HEADER_SEARCH_PATHS[sdk=iphoneos*]": ["$(PROJECT_DIR)/libs/dxvk-include/directx", "$(PROJECT_DIR)/libs/dxvk-include/windows"]
+        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisakpmove", "-lkisaksmoke", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]

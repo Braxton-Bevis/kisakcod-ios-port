@@ -13,7 +13,10 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/ios/sys_ios_main.mm"         # iOS platform entry layer (replaces win32/win_main.cpp)
     "${SRC_DIR}/ios/msvc_crt_compat.cpp"     # MSVC CRT functions with no libc equivalent
     "${SRC_DIR}/ios/snd_ios_stub.cpp"        # no-op Miles (AIL_*) backend, pre-AVAudioEngine
-    "${SRC_DIR}/bgame/bg_pmove.cpp"          # shared game logic (expected most portable)
+    "${SRC_DIR}/bgame/bg_pmove.cpp"          # real player movement entry point
+    "${SRC_DIR}/bgame/bg_jump.cpp"           # jump mechanics used by the pmove sandbox
+    "${SRC_DIR}/bgame/bg_slidemove.cpp"      # collision slide/step solver used by pmove
+    "${SRC_DIR}/bgame/bg_mantle.cpp"         # mantle checks in the real pmove path
     "${SRC_DIR}/game_mp/g_main_mp.cpp"       # server game logic
     "${SRC_DIR}/game_mp/g_utils_mp.cpp"      # server game utilities
     "${SRC_DIR}/server_mp/sv_main_mp.cpp"    # server core
@@ -25,6 +28,7 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/universal/win_common.cpp"    # sys utils (POSIX under KISAK_IOS)
     "${SRC_DIR}/universal/q_shared.cpp"      # shared string/parse utilities
     "${SRC_DIR}/universal/com_math.cpp"      # math library
+    "${SRC_DIR}/universal/com_math_anglevectors.cpp" # real per-frame pmove basis vectors
     "${SRC_DIR}/universal/dvar.cpp"          # dvar system (Com_Init dependency)
     "${SRC_DIR}/universal/com_memory.cpp"    # zone/hunk memory (mmap under KISAK_IOS)
     "${SRC_DIR}/qcommon/common.cpp"          # Com_Init / Com_Frame — the boot path itself

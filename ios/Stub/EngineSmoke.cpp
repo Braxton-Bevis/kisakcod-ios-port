@@ -64,7 +64,6 @@ void track_static_alloc_internal(void *ptr, int size, const char *name, int type
 
 // Never on the smoke path — abort loudly rather than lie.
 #define UNREACHED_STUB(name) { fprintf(stderr, "engine stub reached: %s\n", name); abort(); }
-void AngleVectors(const float *angles, float *fwd, float *right, float *up) UNREACHED_STUB("AngleVectors")
 int FX_Register(const char *name) UNREACHED_STUB("FX_Register")
 void *R_RegisterModel(const char *name) UNREACHED_STUB("R_RegisterModel")
 void *Com_FindSoundAlias(const char *name) UNREACHED_STUB("Com_FindSoundAlias")

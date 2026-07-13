@@ -4,7 +4,7 @@
 # with a report — the archive automatically grows as the census set graduates.
 #
 # Usage: build-engine-lib.sh <dxvk-native-include-dir> [iphoneos|iphonesimulator|both]
-# Output: ios/libs/<sdk>/libkisakcod.a
+# Output: ios/libs/<sdk>/libkisakcod.a plus required smoke/pmove subsets
 set -uo pipefail
 
 DXVK_NATIVE=${1:?usage: build-engine-lib.sh <dxvk>/include/native [sdk]}
@@ -56,6 +56,23 @@ build_one_sdk() {
   [ "$missing" -eq 0 ] || return 1
   xcrun libtool -static -o "ios/libs/$sdk/libkisaksmoke.a" "${smoke[@]}" 2>/dev/null
   echo "[$sdk] smoke subset (${#smoke[@]} TUs) -> ios/libs/$sdk/libkisaksmoke.a"
+
+  # Real movement closure. Keeping it in a separate required archive makes a
+  # skipped support TU a hard failure instead of silently replacing physics.
+  local pmove=() pmove_missing=0
+  for leaf in src_bgame_bg_pmove.cpp.o src_bgame_bg_jump.cpp.o \
+              src_bgame_bg_slidemove.cpp.o src_bgame_bg_mantle.cpp.o \
+              src_universal_com_math_anglevectors.cpp.o; do
+    if [ -f "$OBJDIR/$leaf" ]; then
+      pmove+=("$OBJDIR/$leaf")
+    else
+      echo "ERROR ($sdk): required pmove object missing: $leaf" >&2
+      pmove_missing=1
+    fi
+  done
+  [ "$pmove_missing" -eq 0 ] || return 1
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakpmove.a" "${pmove[@]}" 2>/dev/null
+  echo "[$sdk] pmove subset (${#pmove[@]} TUs) -> ios/libs/$sdk/libkisakpmove.a"
 }
 
 case "$WHICH" in

@@ -11,3 +11,9 @@ const char *kisak_d3d9_smoke(void *metalLayer);
 // BootSmoke.cpp initializes and behavior-checks the real memory/dvar/command
 // subsystems linked from the engine archive.
 const char *kisak_boot_smoke(void);
+
+// PmoveSandbox.cpp drives the real bg_pmove closure in a synthetic z=0 world.
+void kisak_pmove_init(void);
+const char *kisak_pmove_proof(void);
+const char *kisak_pmove_frame(float forwardmove, float rightmove,
+                              int jump, int sprint, float dtMs);

@@ -76,6 +76,16 @@ final class MetalViewController: UIViewController {
     // device (precursor to Com_Init). Guarded like the D3D9 smoke.
     private var bootStatus = "pending"
 
+    // Real COD4 movement on the synthetic flat world. The immutable proof is
+    // CI-gated; the live string carries thumbstick-driven origin/velocity.
+    private static let pmoveProofOK = "real bg_pmove OK: walk+jump+land+friction on synthetic z=0"
+    private var pmoveProofStatus = "pending"
+    private var pmoveLiveStatus = "waiting for boot"
+    private var pmoveReady = false
+    private var lastPmoveFrameTime: CFTimeInterval?
+    private var jumpQueued = false
+    private var sprintHeld = false
+
     // Controller state: one code path serves both the on-screen GCVirtualController
     // and any physical controller — both surface as GCController instances.
     private var virtualController: GCVirtualController?
@@ -212,8 +222,40 @@ final class MetalViewController: UIViewController {
             try? FileManager.default.removeItem(at: sentinel)
             self.bootStatus = result
             NSLog("KISAK_BOOT_SMOKE %@", result)
+            if result.hasPrefix("hunk OK") {
+                self.runPmoveProof()
+            } else {
+                self.pmoveProofStatus = "blocked by boot failure"
+            }
             self.writeFirstFrameMarker()
         }
+    }
+
+    private func runPmoveProof() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("pmove_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            pmoveProofStatus = "skipped - crashed \(crashes)x"
+            pmoveLiveStatus = "proof crash guard active"
+            return
+        }
+
+        try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+        let result = String(cString: kisak_pmove_proof())
+        try? FileManager.default.removeItem(at: sentinel)
+        pmoveProofStatus = result
+        if result == Self.pmoveProofOK {
+            kisak_pmove_init()
+            pmoveReady = true
+            jumpQueued = false
+            lastPmoveFrameTime = CACurrentMediaTime()
+            pmoveLiveStatus = "ready - left stick move, A jump, B sprint"
+        } else {
+            pmoveLiveStatus = "proof failed"
+        }
+        NSLog("KISAK_PMOVE_PROOF %@", result)
+        writeFirstFrameMarker()
     }
 
     override func viewDidLayoutSubviews() {
@@ -364,6 +406,8 @@ final class MetalViewController: UIViewController {
                                                object: nil, queue: .main) { [weak self] _ in
             self?.controllerStatus = "disconnected"
             self?.stick = .zero
+            self?.jumpQueued = false
+            self?.sprintHeld = false
         }
 
         // On-screen controller (left thumbstick + A/B) — doubles as the Objective-5
@@ -384,9 +428,14 @@ final class MetalViewController: UIViewController {
             self?.stick = SIMD2<Float>(x, y)
         }
         gamepad.buttonA.pressedChangedHandler = { [weak self] _, _, pressed in
-            if pressed { self?.paletteFlash.toggle() }
+            guard let self else { return }
+            if pressed {
+                self.jumpQueued = true
+                self.paletteFlash.toggle()
+            }
         }
         gamepad.buttonB.pressedChangedHandler = { [weak self] _, _, pressed in
+            self?.sprintHeld = pressed
             if pressed { self?.triangleOffset = .zero }
         }
     }
@@ -464,6 +513,19 @@ final class MetalViewController: UIViewController {
               let commandBuffer = commandQueue.makeCommandBuffer() else { return }
 
         frameIndex += 1
+        let pmoveFrameTime = CACurrentMediaTime()
+        if pmoveReady {
+            let previous = lastPmoveFrameTime ?? pmoveFrameTime
+            let elapsedMs = min(max((pmoveFrameTime - previous) * 1000.0, 1.0), 50.0)
+            lastPmoveFrameTime = pmoveFrameTime
+            pmoveLiveStatus = String(cString: kisak_pmove_frame(
+                stick.y, stick.x, jumpQueued ? 1 : 0, sprintHeld ? 1 : 0,
+                Float(elapsedMs)))
+            jumpQueued = false
+        } else {
+            lastPmoveFrameTime = pmoveFrameTime
+        }
+
         // Integrate the thumbstick each frame (clamped to keep the triangle on screen).
         triangleOffset += stick * 0.02
         triangleOffset.x = max(-0.9, min(0.9, triangleOffset.x))
@@ -537,6 +599,8 @@ final class MetalViewController: UIViewController {
             engine: \(engineSmoke)
             d3d9: \(d3d9Status)
             boot: \(bootStatus)
+            pmove proof: \(pmoveProofStatus)
+            pmove live: \(pmoveLiveStatus)
             """
         }
     }
@@ -563,6 +627,8 @@ final class MetalViewController: UIViewController {
         engine=\(engineSmoke)
         d3d9=\(d3d9Status)
         boot=\(bootStatus)
+        pmove=\(pmoveProofStatus)
+        pmoveLive=\(pmoveLiveStatus)
         date=\(ISO8601DateFormatter().string(from: Date()))
         """
         try? contents.write(to: marker, atomically: true, encoding: .utf8)

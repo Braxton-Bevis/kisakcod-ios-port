@@ -5,6 +5,9 @@ on:
     branches: [ main ]
     paths:
       - 'ios/**'
+      - 'src/**'
+      - 'deps/**'
+      - 'scripts/**'
       - '.github/workflows/ios-stub.yml'
   workflow_dispatch:
 
@@ -24,12 +27,15 @@ jobs:
           xcodebuild -version
           xcrun simctl list runtimes
 
-      - name: Build engine archive (libkisakcod.a + libkisaksmoke.a)
+      - name: Build engine archives (census + smoke + real pmove)
         run: |
           set -euxo pipefail
           git clone --depth 1 --branch v2.7.1 --recurse-submodules=include/native/directx --shallow-submodules \
             https://github.com/doitsujin/dxvk dxvk-headers
           git -C dxvk-headers apply --verbose "$GITHUB_WORKSPACE/scripts/platform/ios/dxvk-v2.7.1-ios.patch"
+          mkdir -p ios/libs/dxvk-include
+          cp -R dxvk-headers/include/native/directx ios/libs/dxvk-include/
+          cp -R dxvk-headers/include/native/windows ios/libs/dxvk-include/
           ./scripts/platform/ios/build-engine-lib.sh "$PWD/dxvk-headers/include/native" iphonesimulator
 
       - name: Install XcodeGen
@@ -72,6 +78,7 @@ jobs:
           CONTAINER=$(xcrun simctl get_app_container "$UDID" dev.braxton.kisakstub data)
           cat "$CONTAINER/Documents/metal_first_frame.txt" | tee proof/metal_first_frame.txt
           grep -E '^boot=hunk OK .*dvar OK .*cmd OK' proof/metal_first_frame.txt
+          grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
 
       - uses: actions/upload-artifact@v4
         with:
