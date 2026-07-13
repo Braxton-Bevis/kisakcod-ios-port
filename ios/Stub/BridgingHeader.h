@@ -8,6 +8,6 @@ const char *kisak_engine_smoke(void);
 // Pass a CAMetalLayer* the D3D9 swapchain may own (NOT the stub's main layer).
 const char *kisak_d3d9_smoke(void *metalLayer);
 
-// Staged engine boot (docs/wip/BootSmoke-wip.cpp + its scaffold): restore both
-// to ios/Stub/ and re-declare kisak_boot_smoke() here when the 74-symbol
-// closure (ios/Stub/boot_closure.txt) is scaffolded. See docs/NEXT_SESSION.md.
+// BootSmoke.cpp initializes and behavior-checks the real memory/dvar/command
+// subsystems linked from the engine archive.
+const char *kisak_boot_smoke(void);

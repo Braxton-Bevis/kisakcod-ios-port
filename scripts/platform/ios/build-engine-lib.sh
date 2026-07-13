@@ -41,19 +41,26 @@ build_one_sdk() {
 
   # Leaf subset the stub app links today (see ios/Stub/EngineSmoke.cpp): TUs
   # whose engine-extern closure is small enough for the documented scaffolding.
-  local smoke=()
-  for leaf in src_universal_com_math.cpp.o src_universal_q_shared.cpp.o \
-              src_qcommon_msg_mp.cpp.o src_qcommon_huffman.cpp.o \
-              src_ios_msvc_crt_compat.cpp.o; do
-    [ -f "$OBJDIR/$leaf" ] && smoke+=("$OBJDIR/$leaf")
+  local smoke=() missing=0
+  for leaf in src_universal_com_memory.cpp.o src_universal_dvar.cpp.o \
+              src_qcommon_cmd.cpp.o src_universal_com_math.cpp.o \
+              src_universal_q_shared.cpp.o src_qcommon_msg_mp.cpp.o \
+              src_qcommon_huffman.cpp.o src_ios_msvc_crt_compat.cpp.o; do
+    if [ -f "$OBJDIR/$leaf" ]; then
+      smoke+=("$OBJDIR/$leaf")
+    else
+      echo "ERROR ($sdk): required smoke object missing: $leaf" >&2
+      missing=1
+    fi
   done
+  [ "$missing" -eq 0 ] || return 1
   xcrun libtool -static -o "ios/libs/$sdk/libkisaksmoke.a" "${smoke[@]}" 2>/dev/null
   echo "[$sdk] smoke subset (${#smoke[@]} TUs) -> ios/libs/$sdk/libkisaksmoke.a"
 }
 
 case "$WHICH" in
-  iphoneos)        build_one_sdk iphoneos        arm64-apple-ios15.0 ;;
-  iphonesimulator) build_one_sdk iphonesimulator arm64-apple-ios15.0-simulator ;;
-  both)            build_one_sdk iphoneos        arm64-apple-ios15.0
-                   build_one_sdk iphonesimulator arm64-apple-ios15.0-simulator ;;
+  iphoneos)        build_one_sdk iphoneos        arm64-apple-ios15.0 || exit 1 ;;
+  iphonesimulator) build_one_sdk iphonesimulator arm64-apple-ios15.0-simulator || exit 1 ;;
+  both)            build_one_sdk iphoneos        arm64-apple-ios15.0 || exit 1
+                   build_one_sdk iphonesimulator arm64-apple-ios15.0-simulator || exit 1 ;;
 esac

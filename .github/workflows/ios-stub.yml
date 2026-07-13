@@ -29,6 +29,7 @@ jobs:
           set -euxo pipefail
           git clone --depth 1 --branch v2.7.1 --recurse-submodules=include/native/directx --shallow-submodules \
             https://github.com/doitsujin/dxvk dxvk-headers
+          git -C dxvk-headers apply --verbose "$GITHUB_WORKSPACE/scripts/platform/ios/dxvk-v2.7.1-ios.patch"
           ./scripts/platform/ios/build-engine-lib.sh "$PWD/dxvk-headers/include/native" iphonesimulator
 
       - name: Install XcodeGen
@@ -70,6 +71,7 @@ jobs:
           # presenting a Metal frame. Missing file -> job fails.
           CONTAINER=$(xcrun simctl get_app_container "$UDID" dev.braxton.kisakstub data)
           cat "$CONTAINER/Documents/metal_first_frame.txt" | tee proof/metal_first_frame.txt
+          grep -E '^boot=hunk OK .*dvar OK .*cmd OK' proof/metal_first_frame.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -91,6 +93,7 @@ jobs:
           set -euxo pipefail
           git clone --depth 1 --branch v2.7.1 --recurse-submodules=include/native/directx --shallow-submodules \
             https://github.com/doitsujin/dxvk dxvk-headers
+          git -C dxvk-headers apply --verbose "$GITHUB_WORKSPACE/scripts/platform/ios/dxvk-v2.7.1-ios.patch"
           ./scripts/platform/ios/build-engine-lib.sh "$PWD/dxvk-headers/include/native" iphoneos
 
       - name: Install XcodeGen

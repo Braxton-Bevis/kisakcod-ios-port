@@ -1303,14 +1303,22 @@ void __cdecl Dvar_CopyString(const char *string, DvarValue *value)
 {
     if (!string)
         MyAssertHandler(".\\universal\\dvar.cpp", 203, 0, "%s", "string");
+#ifdef KISAK_IOS
+    value->string = CopyString(string); // KISAK_IOS(lp64): preserve the full pointer lane
+#else
     value->integer = (int)CopyString(string);
+#endif
 }
 
 void __cdecl Dvar_WeakCopyString(const char *string, DvarValue *value)
 {
     if (!string)
         MyAssertHandler(".\\universal\\dvar.cpp", 210, 0, "%s", "string");
+#ifdef KISAK_IOS
+    value->string = string; // KISAK_IOS(lp64): DvarValue::integer is only 32 bits
+#else
     value->integer = (int)string;
+#endif
 }
 
 void __cdecl Dvar_MakeLatchedValueCurrent(dvar_s *dvar)
@@ -2182,7 +2190,11 @@ const dvar_s *__cdecl Dvar_RegisterString(
             "%s\n\t(dvarName) = %s",
             "((flags & (1 << 14)) || CanKeepStringPointer( value ))",
             dvarName);
+#ifdef KISAK_IOS
+    v5.string = value; // KISAK_IOS(lp64): pass the complete pointer to Dvar_RegisterVariant
+#else
     v5.integer = (int)value;
+#endif
     return Dvar_RegisterVariant(dvarName, DVAR_TYPE_STRING, flags, v5, 0, description);
 }
 

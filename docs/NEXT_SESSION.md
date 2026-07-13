@@ -1,83 +1,89 @@
-# NEXT_SESSION — context handoff (written 2026-07-11, end of the Mac marathon session)
+# NEXT_SESSION - BMK4 context handoff (2026-07-13, Windows Phase 1 checkpoint)
 
-*For the next agent/session picking up BMK4. Read FRONTIER_REPORT.md and
-PORT_JOURNAL.md M7–M12 first; this file covers only the live working state
-that isn't obvious from them. Delete or refresh this file when consumed.*
+Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries, and
+`docs/FASTFILE_PLAN.md` before continuing. This file records the current live
+state and must be refreshed whenever work pauses.
 
-## Where things stand (all machine-verified)
+## Verified baseline
 
-- **Census 26/26** (`scripts/platform/ios/run-census-local.sh`, list in
-  `scripts/ios/CMakeLists.txt`) — includes `common.cpp` (Com_Init/Com_Frame),
-  `dvar.cpp`, `com_memory.cpp` (mmap port). CI green across the board,
-  including the Windows byte-identity regression.
-- **Renderer LIVE (M12)**: D3D9 Clear/readback/Present pixel-exact on the
-  iPad Pro M5 through DXVK→Vulkan→MoltenVK→Metal. The complete DXVK patch
-  (incl. the CAMetalLayer WSI backend, driver name "iOS") is
-  `scripts/platform/ios/dxvk-v2.7.1-ios.patch`; reproducer
-  `build-dxvk-ios.sh`. App must force_load MoltenVK + DEAD_CODE_STRIPPING=NO.
-- **App** (`ios/`, XcodeGen): HUD shows engine/d3d9/boot smoke lines; proof
-  marker `Documents/metal_first_frame.txt`; DXVK stderr teed to
-  `Documents/dxvk_stderr.log`; crash-guard sentinels (3-attempt counters).
+- Stream 1 LP64 hunk work is complete and already verified by macOS census run
+  `29176526294` and Windows regression run `29176449196`.
+- The iOS census remains 26 translation units. Renderer milestone M12 remains
+  the last device-verified milestone.
+- `docs/FASTFILE_PLAN.md` now exists. Do not start FF4 or asset-dependent work
+  during this Phase 1 boot-scaffold slice.
+- The current seat is Windows and has no Apple compiler, Xcode, simulator, or
+  COD4 game assets. Apple compile/runtime claims require macOS CI or the Mac.
 
-## The machine + device (local facts)
+## Current Phase 1 worktree (implemented, CI pending)
 
-- Toolchain (no Homebrew): `~/.local/bin` (gh, cmake, xcodegen, glslang),
-  `~/Library/Python/3.9/bin` (meson, ninja) — export BOTH onto PATH.
-- DXVK checkout (patched, build-ios/ configured release): `~/dxvk`.
-  MoltenVK static xcframework: `~/MoltenVK`. SDL2 (no longer needed): `~/sdl2-ios`.
-- iPad Pro 13" M5, device ID `21B43CC9-D658-522F-A4A7-72EF38CE29B8`, Developer
-  Mode on, personal team `NCYQDHQ93F` (cert: Apple Development 37brax@gmail.com).
-  **Uninstalling the app drops developer trust** → user must re-trust in
-  Settings; prefer reinstall-over-top; crash sentinels reset via the counter,
-  not via uninstall. Wireless works via the CoreDevice tunnel once USB-paired.
-- Full device iteration loop: `scripts/platform/ios/iterate-device.sh`
-  (fix paths at top — it was written against a session scratchpad).
+- Restored `ios/Stub/BootSmoke.cpp` and added
+  `ios/Stub/BootScaffold.cpp`. The scaffold contains the documented
+  real-minimal and abort-loud sections for the closure.
+- Normalized `ios/Stub/boot_closure.txt` to 74 source identifiers. All 74 are
+  unique and statically accounted for: Swift owns `main`, 16 entries are
+  supplied by `EngineSmoke.cpp`, and 57 are supplied by `BootScaffold.cpp`.
+- Boot smoke now initializes thread data before the hunk, performs a 4 KiB
+  hunk read/write check, registers and reads `bmk4_boot=ipad`, and proves
+  command registration with `Cmd_FindCommand("cmdlist")`.
+- The success marker remains:
+  `hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up`.
+- `MetalViewController.swift` calls the smoke on the main queue so
+  `Com_InitHunkMemory()` satisfies its main-thread contract, and the bridge
+  declares `kisak_boot_smoke()`.
+- The smoke archive now requires the leaf objects for `com_memory`, `dvar`,
+  `cmd`, `com_math`, `q_shared`, `msg_mp`, `huffman`, and
+  `msvc_crt_compat`. Missing members fail the archive build, including in
+  `both` mode.
+- The simulator workflow applies the canonical DXVK patch and requires a
+  proof line matching `^boot=hunk OK .*dvar OK .*cmd OK`. The device build job
+  also applies the canonical patch.
+- Three boot-used dvar string paths preserve pointers on LP64 under
+  `KISAK_IOS`; original Windows expressions remain in their `#else` branches.
 
-## In-flight work at session end (four streams; agents died with the session)
+## Evidence collected on this Windows seat
 
-1. **LP64 hunk-allocator fixes** (`src/universal/com_memory.{cpp,h}`): agent
-   was mid-edit at cutoff. If the tree contains a `docs/wip/lp64-hunk-partial.patch`,
-   it IS the partial diff (reverted from main to keep census green) — resume
-   from it. The spec: fix seven `(uint32_t)&s_hunkData[...] & 0xFFFFF000`
-   pointer-truncation sites (use uintptr_t + real page size — iOS is 16KB) and
-   give `HunkUser` (com_memory.h:59) pointer-sized end/pos fields under
-   KISAK_IOS. Gate: census stays 26/26.
-2. **Boot scaffold** (`docs/wip/BootSmoke-wip.cpp` — restore to ios/Stub/ alongside the
-   app/HUD/marker; `ios/Stub/BootScaffold.cpp` — NOT yet written): provide the
-   74 symbols in `ios/Stub/boot_closure.txt` (real-minimal vs abort-loud stub
-   split is documented in the file history / M13 plan), link BootSmoke against
-   the leaf objects (com_memory, dvar, cmd, q_shared, com_math, huffman,
-   msvc_crt_compat extracted from `ios/libs/iphonesimulator/libkisakcod.a` —
-   members are named `src_..._cpp.o`), run in the simulator until it prints
-   "hunk OK … dvar OK … cmd OK", then device. LP64 fixes (stream 1) should land
-   first or Com_InitHunkMemory may corrupt.
-3. **Pmove movement sandbox** (`docs/wip/PmoveSandbox-wip.cpp` is the WIP (moved out of ios/Stub so xcodegen does not compile it)):
-   real bg_pmove physics on a synthetic flat world (trace = z=0 plane), C ABI
-   `kisak_pmove_init` / `kisak_pmove_frame(fwd,right,jump,sprint,dtMs)` →
-   status string; standalone sim test first, then wire to the on-screen
-   thumbstick + HUD (app side NOT yet wired). Goal: "COD4 player physics
-   walking on the iPad."
-4. **Fastfile attack plan** (`docs/FASTFILE_PLAN.md` — not yet written): a
-   3-reader workflow was mapping (a) the zone-loader mechanics/seam in
-   src/database/, (b) the struct catalog from the 249 KISAK_LAYOUT_ASSERT
-   sites (they encode expected x86-32 sizeofs — a machine-checkable spec),
-   (c) precedent (iw4x/CoD4x/zonetool; also consider OFFLINE repack of the
-   user's fastfiles into a 64-bit-native format on the Mac so the device
-   loader stays simple). Re-run that scoping and write the plan.
+- `git diff --check`: clean before this handoff refresh.
+- Git Bash `bash -n scripts/platform/ios/build-engine-lib.sh`: exit 0.
+- Census manifest: 26 entries.
+- Boot closure: 74 nonblank entries, 74 unique entries, all statically
+  accounted for by the app/scaffolds.
+- Active source contains `BootSmoke.cpp` and `BootScaffold.cpp`; the parked
+  `docs/wip/BootSmoke-wip.cpp` is gone.
+- No census/layout assertion or Windows regression gate was weakened.
 
-## Path to playable (order matters — also in README checklist)
+These are static checks only. The following are explicitly **UNVERIFIED**:
 
-boot scaffold → pmove sandbox → headless Com_Init (~700-symbol closure over
-remaining TUs; graduate in census waves like M8) → **fastfile wall** (the
-dominant cost; needs the user's COD4 files for final verification) → renderer
-content-readiness (DXVK dummy-resources for null-descriptor, journal M12
-addendum; engine dx.d3d9 init via Sys_iOS_GetHostWindow) → input/audio → match.
+- iOS compilation and final archive/app linkage.
+- Simulator runtime marker and crash-sentinel behavior.
+- Post-change macOS 26/26 census and Windows regression CI.
+- Physical-device boot marker.
 
-## House rules (enforced by CI + the user's expectations)
+## Exact next actions
 
-- Every engine edit `#ifdef KISAK_IOS` with the original in `#else` — the
-  Windows regression build must stay byte-identical.
-- Every claim machine-verified (census, device marker files, CI). Journal
-  entry per milestone in PORT_JOURNAL.md.
-- Branding is **BMK4** (repo `Braxton-Bevis/bmk4`); docs keep the
-  KisakCOD/LWSS GPL-3.0 credit. Bundle ID stays `dev.braxton.kisakstub`.
+1. Review the local diff and create a local checkpoint commit that clearly
+   says the CI gate is pending.
+2. With the user's approval, push the checkpoint to `origin/main`; do not
+   dispatch workflows or change external state without that approval.
+3. Monitor the macOS census, iOS stub simulator/device-build, and Windows
+   regression workflows. Treat any red job as a blocker and fix it before
+   proceeding.
+4. Require the simulator marker line containing `hunk OK`, `dvar OK`, and
+   `cmd OK`; do not infer runtime success from a successful build.
+5. Only after all remote gates are green, append the evidence-backed M13 entry
+   to `PORT_JOURNAL.md` and refresh frontier/checklist documentation.
+6. Physical-device execution remains a later Mac-side step requiring the
+   user's taps/trust. No COD4 game assets are needed for this phase.
+
+## Guardrails
+
+- Re-reference this plan before each edit and keep this file current whenever
+  stopping.
+- Preserve the iOS-only `#ifdef KISAK_IOS` / original `#else` discipline for
+  engine edits.
+- Do not claim M13, device proof, or Phase 1 completion without marker/CI
+  evidence.
+- Do not touch the fastfile FF4 implementation or invent/download proprietary
+  game assets in this slice.
+- Branding is BMK4; preserve KisakCOD/LWSS GPL-3.0 credit and bundle ID
+  `dev.braxton.kisakstub`.

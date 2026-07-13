@@ -25,6 +25,7 @@ int I_stricmpwild(const char *wild, const char *s);       // universal/q_shared.
 // --- link scaffolding: real-bodied where trivially correct ---------------
 enum errorParm_t : int {};
 struct clientActive_t;
+struct dvar_s;
 
 void MyAssertHandler(const char *file, int line, int type, const char *fmt, ...)
 {
@@ -74,7 +75,7 @@ void CL_GetPredictedOriginForServerTime(clientActive_t *cl, int time, float *o, 
 void *MSG_GetStateFieldListForEntityType(int type) UNREACHED_STUB("MSG_GetStateFieldListForEntityType")
 
 // Engine globals owned by not-yet-graduated TUs; zeroed, untouched by the smoke.
-void *com_dedicated = nullptr;        // dvar_t*
+const dvar_s *com_dedicated = nullptr;
 void *cl_shownet = nullptr;           // dvar_t*
 void *msg_dumpEnts = nullptr;         // dvar_t*
 void *msg_printEntityNums = nullptr;  // dvar_t*
