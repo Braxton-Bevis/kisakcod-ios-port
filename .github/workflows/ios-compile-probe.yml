@@ -11,7 +11,7 @@ name: iOS Engine Compile Probe
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, staging ]
     paths:
       - 'src/**'
       - 'deps/**'

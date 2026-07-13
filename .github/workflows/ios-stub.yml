@@ -2,7 +2,7 @@ name: iOS Stub - Build, Simulator Launch Proof, Device IPA
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, staging ]
     paths:
       - 'ios/**'
       - 'src/**'
