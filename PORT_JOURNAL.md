@@ -599,3 +599,84 @@ unsigned device build proves compilation/linkage only; a signed install and a
 marker pulled from the user's iPad are the required device addendum. No COD4
 assets were used or needed.
 
+## M14 — real `bg_pmove` synthetic-world sandbox (simulator verified, 2026-07-13)
+
+**Attempted:** execute COD4's real player-movement code against an isolated,
+asset-free flat world; prove walking, jumping, landing, and friction with a
+deterministic simulator contract; then drive the same state from the existing
+thumbstick and show origin/velocity on the HUD.
+
+**Concrete changes (plain-language changelog):**
+
+- Moved all three parked pmove sources from `docs/wip/` into `ios/Stub/` so
+  XcodeGen compiles the sandbox and both scaffold layers into the app.
+- Kept `bg_pmove.cpp`, `bg_jump.cpp`, `bg_slidemove.cpp`, `bg_mantle.cpp`, and
+  `com_math_anglevectors.cpp` as real engine objects in a new, hard-required
+  `libkisakpmove.a`; a missing member now stops simulator and device builds.
+- Expanded the monotonic iOS census from 26 to 30 tracked TUs. The workflow now
+  fails on any tracked compile failure instead of merely recording a red row.
+- Added synthetic capsule traces against the solid `z <= 0` halfspace. There
+  are no COD4 assets or fabricated map data in this test world.
+- Added a 240-frame fixed-step proof that calls real `Pmove` and checks forward
+  displacement, jump apex and air time, landing near z=0, final grounded state,
+  and friction decay. The standalone entry returns nonzero on any failed
+  invariant; the app exposes the same proof string to CI.
+- Replaced the old aborting `AngleVectors` app stub with the real engine leaf,
+  and matched app compilation to the archive's iOS/MP defines, C++ mode,
+  compiler flags, source headers, and patched DXVK headers.
+- Integrated safely with M13: the real dvar system boots first, then the pmove
+  proof registers the real jump/mantle defaults, and only a passing proof
+  enables live movement.
+- Wired left-stick y/x to forward/right, A to a queued one-frame jump edge,
+  and B to held sprint. The frame loop uses measured, clamped elapsed time and
+  the HUD/marker show the live origin and velocity returned by the sandbox.
+- Added a crash sentinel for the movement proof and an exact fixed-line CI
+  assertion while preserving the existing boot marker assertion.
+- Fixed hazards in the parked scaffolds before running them: shared duplicate
+  symbols are test-gated; `Sys_SnapVector` uses the engine's nearest-even
+  `SnapFloat`; integer dvar defaults no longer overwrite their own union lane;
+  and the mantle delta stub writes the real two-float rotation ABI.
+- Broadened the iOS stub workflow trigger to cover the engine/build inputs it
+  actually consumes. Windows engine sources were not changed, and no game
+  files entered the tree, CI inputs, artifacts, or logs.
+- Refreshed the root README, frontier report, iOS runbook, and authoritative
+  handoff with exact M14 evidence and the physical-device boundary; corrected
+  the runbook's documented app deployment target from iOS 15.0 to 16.0.
+
+**Errors hit and fixed:** static closure review caught the parked abort-loud
+`AngleVectors` body on the per-frame path, missing app header/define settings,
+duplicate shared symbols, non-engine snap rounding, integer-dvar union
+corruption (`player_sprintForwardMinimum` 105 would become 1), and a four-float
+write into a two-float mantle rotation buffer. All were corrected at source;
+no assertion or proof condition was relaxed.
+
+**Compiled/Ran?** ✅ Hosted verification is green for implementation commit
+`aec0ab9`:
+
+- iOS census run `29267514080`: artifact verified **30 PASS, 0 FAIL**,
+  including all five real movement/math members.
+- iOS stub run `29267514067`: simulator and unsigned arm64 device jobs both
+  green. The simulator artifact retained the M13 boot proof and produced:
+
+```
+pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0
+pmoveLive=org=(0.0,0.0,0.0) vel=(0.0,0.0,0.0) speed=0 ground=1
+```
+
+- The same run built hard-required five-object pmove archives for simulator
+  and device, linked both apps, and uploaded an arm64, iOS-minimum-16.0
+  unsigned IPA. This proves device compilation/linkage, not device runtime.
+- Windows run `29267514051`: Debug and Release green for SP, MP, and
+  dedicated-server targets.
+- Final source-level audit found no alternate `Pmove`, false-positive proof,
+  bridge ABI mismatch, trace-consumption mismatch, or archive/link-order
+  escape. Local `git diff --check`, workflow/script syntax, census-path, exact
+  marker, required-object, and archive-order checks also stayed green.
+
+**Evidence boundary / next hypothesis:** cloud-verifiable Phase 2 is complete.
+The remaining Phase 2 addendum is a signed install and human feel-test on the
+physical iPad: pull `metal_first_frame.txt`, require both exact M13/M14 lines,
+and exercise left-stick movement, A jump, and B sprint. No such device marker
+was pulled in M14, so physical runtime and feel are explicitly unverified.
+Phase 3 and fastfile work did not begin, and no proprietary assets were used.
+

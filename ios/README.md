@@ -10,11 +10,12 @@ never hand-edited: [project.yml](project.yml) is the source of truth.
   one triangle via a compiled `.metal` shader library. After the first successfully
   presented frame it writes `Documents/metal_first_frame.txt` inside its own sandbox
   (proof-of-run, and the seed of the Objective-3 filesystem-sandbox design).
-- `project.yml` — XcodeGen spec. Bundle ID `dev.braxton.kisakstub`, deployment target iOS 15.0.
+- `project.yml` — XcodeGen spec. Bundle ID `dev.braxton.kisakstub`, deployment target iOS 16.0.
 - `.github/workflows/ios-stub.yml` — CI on a macOS runner:
   - **simulator-launch-proof**: builds for `iphonesimulator`, boots a simulator, installs,
     launches, takes two screenshots seconds apart (animated clear color ⇒ they differ ⇒ live
-    render loop), and fails the job unless the in-sandbox marker file exists.
+    render loop), and fails unless the in-sandbox marker contains the exact
+    staged-boot and real-pmove behavioral proof lines.
   - **device-ipa-unsigned**: builds the real `arm64-apple-ios` binary with
     `CODE_SIGNING_ALLOWED=NO`, verifies the slice with `lipo`/`otool`, zips `Payload/` into
     `KisakStub-unsigned.ipa`, uploads as artifact.
@@ -65,10 +66,27 @@ Expected on screen: dark blue slowly color-shifting background, an RGB-gradient 
 a system **virtual game controller overlay** (left thumbstick + A/B buttons —
 GCVirtualController), and a white HUD reporting GPU, frame counter, **MetalFX status**
 (`spatial WxH → WxH` on supported hardware, `unsupported — direct render` on the
-simulator), and controller name + live stick values. The left stick moves the triangle
-(physical controllers work identically via GCController), A switches the background
-palette, B recenters. The scene renders at 0.5× resolution and MetalFX spatial-upscales
-it to native when the GPU supports it (iOS 16+, `MTLFXSpatialScalerDescriptor.supportsDevice`).
+simulator), controller name + live stick values, and the real pmove sandbox's
+origin/velocity. The left stick moves both the triangle and the synthetic-world
+player (physical controllers work identically via GCController). A queues a
+one-frame jump and switches the background palette; B holds sprint and recenters.
+The scene renders at 0.5× resolution and MetalFX spatial-upscales it to native
+when the GPU supports it (iOS 16+, `MTLFXSpatialScalerDescriptor.supportsDevice`).
+
+M14 hosted run `29267514067` built, launched, and captured this exact movement
+proof while retaining the M13 staged-boot line:
+
+```
+pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0
+pmoveLive=org=(0.0,0.0,0.0) vel=(0.0,0.0,0.0) speed=0 ground=1
+```
+
+That is simulator runtime evidence. The unsigned arm64 build from the same run
+is compilation/linkage evidence only. For the pending physical M13/M14
+addendum, install a signed build, pull `metal_first_frame.txt` with the command
+below, require both exact boot and pmove proof lines, then feel-test left-stick
+movement, A jump, and held-B sprint. Do not record physical proof from an IPA
+artifact alone.
 
 ---
 
