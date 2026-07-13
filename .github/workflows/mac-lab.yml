@@ -1,0 +1,52 @@
+name: macOS Lab - On-Demand Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Script path under scripts/platform/ios/lab/
+        required: true
+        default: scripts/platform/ios/lab/probe-sdk.sh
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  run-probe:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      LAB_SCRIPT: ${{ inputs.script }}
+      BMK4_LAB_OUT: ${{ github.workspace }}/lab-out
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate and run lab script
+        run: |
+          set -euo pipefail
+          mkdir -p "$BMK4_LAB_OUT"
+
+          case "$LAB_SCRIPT" in
+            scripts/platform/ios/lab/*.sh) ;;
+            *) echo "error: script must be a .sh file under scripts/platform/ios/lab/" >&2; exit 2 ;;
+          esac
+
+          lab_root=$(python3 -c 'import os; print(os.path.realpath("scripts/platform/ios/lab"))')
+          script_real=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$LAB_SCRIPT")
+          case "$script_real" in
+            "$lab_root"/*.sh) ;;
+            *) echo "error: resolved script escapes $lab_root" >&2; exit 2 ;;
+          esac
+          test -f "$script_real"
+
+          bash "$script_real"
+
+      - name: Upload lab output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-lab-${{ github.run_id }}-${{ github.run_attempt }}
+          path: lab-out/
+          if-no-files-found: warn
+          retention-days: 14
