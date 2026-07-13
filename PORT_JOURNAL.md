@@ -548,3 +548,54 @@ pointer-sized under KISAK_IOS, page math at native 16KB granularity. Gates:
 Stream 2 (boot scaffold) is unblocked. FASTFILE_PLAN.md + struct catalog also landed
 this session (see FF-prep entry).
 
+## M13 — staged engine boot: hunk + dvar + command simulator-verified (2026-07-13)
+
+**Attempted:** move beyond leaf-function smoke and execute three real engine
+subsystems in order without game assets: hunk memory, dvars, and commands.
+
+**Concrete changes:**
+
+- Restored `ios/Stub/BootSmoke.cpp`; it initializes main-thread scratch data,
+  performs a 4 KiB hunk allocation/readback/free, registers and reads
+  `bmk4_boot=ipad`, and requires `Cmd_FindCommand("cmdlist")` after command init.
+- Added `BootScaffold.cpp` with an explicit real-minimal versus abort-loud
+  split. Closure accounting is 16 definitions in `EngineSmoke.cpp`, 57 in the
+  new scaffold, and Swift-owned `main`: all 74 normalized manifest entries.
+- Expanded `libkisaksmoke.a` to require eight real leaves: `com_memory`,
+  `dvar`, `cmd`, `com_math`, `q_shared`, `msg_mp`, `huffman`, and
+  `msvc_crt_compat`. Missing leaves now fail every build mode.
+- Fixed three boot-used iOS LP64 string-pointer lanes in `dvar.cpp`; original
+  Windows expressions remain byte-for-byte in `#else`.
+- Swift runs the smoke on the main queue with a crash sentinel and writes the
+  result to the HUD/proof file. CI hard-requires hunk/dvar/cmd marker text.
+- Device CI now reproduces the real renderer stack from pinned open-source
+  inputs (patched DXVK 2.7.1 and hash-verified MoltenVK 1.4.1) instead of
+  relying on untracked Mac-local archives. Windows CI now follows `main`.
+
+**Errors hit and fixed:** the raw closure contained eight Mach-O spellings;
+the parked smoke omitted `Com_InitThreadData`; a background call violated the
+hunk main-thread assertion; dvar string values truncated pointers through the
+32-bit integer union lane; the first device CI build lacked DXVK headers and
+archives. Each was fixed at its source without weakening a gate.
+
+**Compiled/Ran?** ✅ Remote gates are green:
+
+- iOS census run `29263799350`: **26 PASS, 0 FAIL**.
+- iOS stub run `29264276000`: simulator build/launch/proof and arm64 unsigned
+  device IPA both green. Exact simulator marker:
+
+```
+boot=hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up
+```
+
+- The same run's device executable is arm64, iOS platform, minimum iOS 16.0,
+  with the real DXVK/MoltenVK archives linked; artifact
+  `KisakStub-unsigned-ipa` uploaded.
+- Windows run `29264559274`: Debug and Release green for SP, MP, and dedicated
+  server.
+
+**Evidence boundary:** M13 physical-iPad runtime is **not yet verified**. The
+unsigned device build proves compilation/linkage only; a signed install and a
+marker pulled from the user's iPad are the required device addendum. No COD4
+assets were used or needed.
+

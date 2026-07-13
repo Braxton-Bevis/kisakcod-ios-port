@@ -40,10 +40,11 @@ There is no macOS/Linux/ARM branch to start from. The engine assumes Windows API
 | Build retarget: `cmake -DKISAK_PLATFORM=ios` + per-file compile census in CI | ✅ complete |
 | Windows→iOS dependency map (every API family → concrete replacement) | ✅ [DEPENDENCY_MAP.md](DEPENDENCY_MAP.md) |
 | Filesystem sandboxing (`fs_basepath` → app bundle, `fs_homepath` → `Documents/`) | ✅ landed |
-| Engine translation units compiling for `arm64-apple-ios` | ✅ **23/23 census TUs** — game logic, script VM, threading (pthreads), FS (POSIX), net (BSD sockets), sound (Miles stub), renderer init |
+| Engine translation units compiling for `arm64-apple-ios` | ✅ **26/26 census TUs** — including dvars, hunk memory, and the `Com_Init`/`Com_Frame` TU |
 | D3D9 header layer absorbed by DXVK native headers on the iOS SDK | ✅ proven |
 | DXVK d3d9 renderer runtime on iOS | ✅ **LIVE ON DEVICE** — native CAMetalLayer WSI + static MoltenVK; `CreateDevice` D3D_OK, Clear readback bit-exact, `Present` D3D_OK on iPad Pro (M5). [Patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch) + [build script](scripts/platform/ios/build-dxvk-ios.sh) |
 | Engine linking / running on device | 🟡 **first engine code executes on iOS** — math/bit-packing/string TUs linked into the stub, verified in simulator **and on iPad Pro (M5)** with MetalFX spatial upscaling live at 120 fps |
+| Staged memory/dvar/command boot | ✅ simulator marker verified; real arm64 device app builds, physical-device M13 runtime still pending |
 | win32 build unaffected by all of the above | ✅ full engine builds green (Debug + Release) |
 
 ## The experiment
@@ -61,12 +62,11 @@ Eight rounds of a CI **compile census** — representative engine files compiled
 | 7 | ODE dependency fixes | zero platform headers left in 10 TUs' error paths |
 | 8 | `-fdelayed-template-parsing` | **`bg_pmove.cpp` compiles clean for `arm64-apple-ios`** |
 
-The Mac bring-up session (journal M7–M11) then swept the census from 2/14 to
-**23/23** — pthreads threading, POSIX filesystem, BSD-socket networking, a
-typed Miles stub, a no-op Steam backend, the iOS platform entry layer, and the
-renderer-init windowing seam — built **DXVK's d3d9 module as an
-arm64-apple-ios static library** (the previous "next frontier"), and linked
-the first engine code into the app, **verified executing on an iPad Pro (M5)**.
+The Mac bring-up session (journal M7–M11) swept the census from 2/14 to
+23/23, built **DXVK's d3d9 module as an arm64-apple-ios static library**, and
+verified the first linked engine code on an iPad Pro (M5). M13 now tracks
+**26/26** TUs and simulator-verifies the real hunk-memory, dvar, and command
+subsystems while preserving the Windows build.
 
 Full blow-by-blow log with exact compiler errors: **[PORT_JOURNAL.md](PORT_JOURNAL.md)** · Current status & next steps: **[FRONTIER_REPORT.md](FRONTIER_REPORT.md)**
 
@@ -159,10 +159,11 @@ dependency order. Checked items are machine-verified in CI or on device.
 - [x] **Engine compiles for iOS** — 26/26 census TUs (game logic, script VM, threading, FS, net, sound stub, renderer init, `Com_Init`'s own TU)
 - [x] **Renderer runtime** — D3D9→DXVK→Vulkan→MoltenVK→Metal live on device (Clear/readback/Present verified pixel-exact, journal M12)
 - [x] **First engine code executing on device** — math/bit-packing/string smoke, exact expected values
-- [ ] **Engine subsystems boot on device** — memory/dvar/command staged init (in flight: LP64 hunk fixes + 74-symbol boot scaffold)
+- [x] **Engine subsystems boot in simulator** — real memory/dvar/command staged init, 74/74 closure, behavioral marker (journal M13)
+- [ ] **Physical-device M13 proof** — install the verified arm64 build and pull the same hunk/dvar/cmd marker from the iPad
 - [ ] **Player movement sandbox** — real `bg_pmove` physics walking on a synthetic world, thumbstick-driven (in flight)
 - [ ] **Headless `Com_Init`** — full boot-path link closure (~700 symbols across remaining TUs), filesystem rooted in the app bundle
-- [ ] **THE FASTFILE WALL** — 64-bit translation of every serialized asset struct so real game data loads; attack plan being generated into `docs/FASTFILE_PLAN.md` (the 249 relaxed layout asserts double as a machine-checkable 32-bit layout spec). *The dominant remaining cost.*
+- [ ] **THE FASTFILE WALL** — 64-bit translation of every serialized asset struct so real game data loads; staged plan is in `docs/FASTFILE_PLAN.md` (the relaxed layout asserts double as a machine-checkable 32-bit layout spec). *The dominant remaining cost.*
 - [ ] **Renderer content-readiness** — DXVK dummy-resources for the Apple null-descriptor gap (scoped, journal M12 addendum); engine `dx.d3d9` init through `Sys_iOS_GetHostWindow()`
 - [ ] **Input & audio** — GCController/touch → `Sys_QueEvent`; AVAudioEngine behind the landed `AIL_*` stub surface
 - [ ] **Game data** — user-supplied COD4 (2007) files into `Documents/` (never shipped with this repo); asset name case-normalization for APFS
@@ -173,7 +174,7 @@ dependency order. Checked items are machine-verified in CI or on device.
 1. ~~DXVK d3d9 as an arm64-apple-ios library~~ ✅ **done** — `libdxvk_d3d9.a` builds with a [5-hunk patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch); see [build-dxvk-ios.sh](scripts/platform/ios/build-dxvk-ios.sh).
 2. ~~pthreads `threads.cpp` → BSD-sockets `win_net.cpp` → platform layer replacing `win_main.cpp`~~ ✅ **done** — all census-verified (`sys_ios_main.mm` is the entry layer).
 3. ~~Renderer runtime bring-up~~ ✅ **done — D3D9 renders on the iPad** (journal M12): native CAMetalLayer WSI, static MoltenVK, Clear+readback+Present all D3D_OK.
-4. **Engine boot** (current frontier): graduate TUs toward a headless `Com_Init` (dvar, com_memory mmap port, common_mp, database), then point the engine's `dx.d3d9` init at the proven renderer path.
+4. **Engine boot** (current frontier): staged memory/dvar/cmd is simulator-green; next finish the `bg_pmove` sandbox, then close the headless `Com_Init` runtime/link frontier.
 5. The 64-bit fastfile wall — load-time struct translation; gates loading real game data. Then AVAudioEngine behind the landed `AIL_*` stub surface.
 
 ## Credits & legal
