@@ -7,19 +7,6 @@
 
 #include <ios/sys_ios.h>
 
-struct dvar_s;
-enum DvarSetSource : int
-{
-    DVAR_SOURCE_EXTERNAL = 1,
-};
-
-const dvar_s *Dvar_RegisterEnum(const char *dvarName, const char **valueList,
-                                int defaultIndex, uint16_t flags,
-                                const char *description);
-const char *Dvar_EnumToString(const dvar_s *dvar);
-const dvar_s *Dvar_RegisterString(const char *dvarName, const char *value,
-                                  uint16_t flags, const char *description);
-void Dvar_SetStringFromSource(dvar_s *dvar, char *string, DvarSetSource source);
 const char *Dvar_GetString(const char *dvarName);
 
 void FS_iOS_SetHeadlessNoAssets(bool enabled);
@@ -34,38 +21,9 @@ bool FS_Delete(const char *filename);
 extern "C" const char *kisak_fs_smoke(void)
 {
     static char status[512];
-    static const char *enumValues[] = { "zero", "one", nullptr };
-    static char externalValue[] = "full-pointer-ok";
     static char filename[] = "bmk4_wave1_fs.tmp";
     static char payload[] = "BMK4 Wave 1 filesystem round trip";
     void *readBuffer = nullptr;
-
-    // Newly reached dvar lanes: both operations retain pointers whose upper
-    // 32 bits are significant on arm64. Filesystem startup is not attempted
-    // unless the behavioral readbacks prove those lanes first.
-    const dvar_s *enumDvar = Dvar_RegisterEnum(
-        "bmk4_fs_enum", enumValues, 1, 0, "Wave 1 arm64 enum preflight");
-    if (!enumDvar || strcmp(Dvar_EnumToString(enumDvar), "one") != 0)
-    {
-        snprintf(status, sizeof(status), "dvar preflight FAIL: enum pointer lane");
-        return status;
-    }
-
-    const dvar_s *externalDvar = Dvar_RegisterString(
-        "bmk4_fs_external", "before", 0x4000, "Wave 1 arm64 external-string preflight");
-    if (!externalDvar)
-    {
-        snprintf(status, sizeof(status), "dvar preflight FAIL: external registration");
-        return status;
-    }
-    Dvar_SetStringFromSource(
-        const_cast<dvar_s *>(externalDvar), externalValue, DVAR_SOURCE_EXTERNAL);
-    const char *externalReadback = Dvar_GetString("bmk4_fs_external");
-    if (!externalReadback || strcmp(externalReadback, externalValue) != 0)
-    {
-        snprintf(status, sizeof(status), "dvar preflight FAIL: external string pointer lane");
-        return status;
-    }
 
     // This opt-in is deliberately separate from an empty sandbox. The real
     // FS validation bypass is active only while useFastFile is also disabled.

@@ -1,7 +1,6 @@
-// Staged engine boot on iOS: initialize the real subsystems that have
-// graduated into libkisakcod.a — memory, dvars, commands, filesystem — and
-// prove each with a behavioral check. This is the precursor to Com_Init:
-// same subsystems, explicit order, verifiable one at a time.
+// Post-initialization M13 behavioral probes. BootComInit.cpp owns the fresh
+// initialization order; this file only re-earns the frozen hunk/dvar/command
+// marker after those subsystems are already up.
 //
 // Called from Swift (BridgingHeader.h). Returns a status string for the HUD
 // and the proof-marker file.
@@ -10,36 +9,24 @@
 #include <cstdint>
 #include <cstring>
 
-extern "C" const char *kisak_boot_smoke(void);
-
 // --- engine declarations (ABI-exact spellings) ----------------------------
 // memory
-void Com_InitThreadData(int threadContext);
-void Com_InitHunkMemory(void);
 uint32_t *Hunk_AllocateTempMemory(int size, const char *name);
 void Hunk_FreeTempMemory(char *buffer);
 // dvar
-void Dvar_Init(void);
 struct dvar_s;
 const dvar_s *Dvar_RegisterString(const char *dvarName, const char *value, uint16_t flags, const char *description);
 const char *Dvar_GetString(const char *dvarName);
 // cmd
 struct cmd_function_s;
-void Cbuf_Init(void);
-void Cmd_Init(void);
 cmd_function_s *Cmd_FindCommand(const char *cmdName);
 
-extern "C" const char *kisak_boot_smoke(void)
+extern "C" const char *kisak_boot_probe_after_init(void)
 {
     static char buf[512];
     int stage = 0;
 
-    // The full engine normally does this from Sys_InitMainThread. q_shared's
-    // dvar/va helpers require the main thread's slots before boot continues.
-    Com_InitThreadData(0);
-
-    // Stage 1: hunk memory (mmap-backed Z_Virtual* under KISAK_IOS)
-    Com_InitHunkMemory();
+    // Stage 1: hunk memory (already initialized, mmap-backed on KISAK_IOS)
     stage = 1;
     uint32_t *tmp = Hunk_AllocateTempMemory(4096, "boot_smoke");
     if (!tmp) {
@@ -54,8 +41,7 @@ extern "C" const char *kisak_boot_smoke(void)
         return buf;
     }
 
-    // Stage 2: dvar system
-    Dvar_Init();
+    // Stage 2: dvar system (already initialized by the cold entry)
     stage = 2;
     Dvar_RegisterString("bmk4_boot", "ipad", 0, "boot smoke marker dvar");
     const char *val = Dvar_GetString("bmk4_boot");
@@ -64,9 +50,7 @@ extern "C" const char *kisak_boot_smoke(void)
         return buf;
     }
 
-    // Stage 3: command system
-    Cbuf_Init();
-    Cmd_Init();
+    // Stage 3: command system (already initialized by the cold entry)
     stage = 3;
     if (!Cmd_FindCommand("cmdlist")) {
         snprintf(buf, sizeof(buf), "stage%d FAIL: cmdlist not registered", stage);

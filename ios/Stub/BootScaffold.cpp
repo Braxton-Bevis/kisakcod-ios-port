@@ -101,6 +101,16 @@ void Dvar_AddCommands() {}
 bool Com_LogFileOpen() { return false; }
 bool Sys_IsRenderThread() { return false; }
 
+// Real owner: src/qcommon/common.cpp:360 (joins in the common-spine wave,
+// which MUST delete this definition). Not a benign default — this is the
+// complete, byte-identical behavior of the four-line engine function,
+// reached via com_shared.cpp's Com_Memset fill path.
+void _copyDWord(uint32_t *dest, const uint32_t constant, const uint32_t count)
+{
+    for (unsigned i = 0; i < count; i++)
+        dest[i] = constant;
+}
+
 // Pure-server IWD checksum state (multiplayer anticheat). com_files.cpp's
 // only boot-lane reference is the FS_Restart error-retry path, which calls
 // it with empty strings immediately before Com_Error aborts the boot.

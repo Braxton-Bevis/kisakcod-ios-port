@@ -108,7 +108,7 @@ extern "C" void kisak_pmove_init(void)
 {
     // Seed the dvar-backed movement tunables owned by the real bg_jump.o /
     // bg_mantle.o (jump_height=39, jump_stepSize=18, mantle_enable, ...).
-    // The combined app reaches the real dvar registry after kisak_boot_smoke;
+    // The combined app reaches the real dvar registry through BootComInit;
     // PMOVE_STANDALONE_SCAFFOLD provides the same defaults to the CLI harness.
     static bool dvarsDone = false;
     if (!dvarsDone)

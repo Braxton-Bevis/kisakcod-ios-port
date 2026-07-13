@@ -1,26 +1,29 @@
-# NEXT_SESSION - BMK4 context handoff (2026-07-13, Wave 1 red-fix loop)
+# NEXT_SESSION - BMK4 context handoff (2026-07-13, Stage B1 candidate)
 
 Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries,
 `docs/M14_PMOVE_SANDBOX_REPORT.md`, and `docs/FASTFILE_PLAN.md` before
 continuing. Re-reference this plan before each edit and refresh it whenever
 work pauses.
 
-## Active seat state — Wave 1 CRT red fix awaiting coordinator CI
+## Active seat state — Wave 1 staging CI plus local Stage B1 candidate
 
-- `origin/main` at `004a678` contains Wave 1 candidate `bdd14f0`, three
-  evidence-driven closure fixes, the playable roadmap, and staging-branch CI
-  triggers. The exact filesystem archive now contains eight real objects and
-  the monotonic census contains 35 TUs.
-- The latest staging census reached the newly added `com_shared.cpp` owner and
-  failed only at `_time64`; simulator and device jobs consequently could not
-  build the hard-required archive. The current local fix adds `_time64`,
-  `_localtime64`, and the tree-used sibling `_ctime64` to the existing iOS CRT
-  shim. Windows source lanes are untouched.
-- Hosted verification remains **UNVERIFIED** until the coordinator pushes this
-  local commit to staging and reports all three gates: census **35/35**, exact
-  simulator FS marker while retaining M13/M14 markers plus a green unsigned-
-  device link, and Windows Debug/Release green. Do not begin Wave 2 before
-  those verdicts and run IDs are recorded.
+- The coordinator audited the iOS MSVC time shim and pushed it to staging as
+  authoritative commit `d70a6c6`. Its census, simulator/device, and Windows
+  jobs are running; no hosted verdict or Wave 1 green claim exists yet.
+- A separate local tooling commit adds a path-confined `macos-15` lab workflow.
+  It runs one selected script beneath `scripts/platform/ios/lab/`, always
+  uploads `lab-out/`, and includes an SDK/simulator inventory probe. It is
+  **UNVERIFIED** until the coordinator pushes and dispatches it.
+- The local Stage B1 candidate replaces the retired staged initializer with a
+  fresh `BootComInit.cpp` entry. It calls real `Dvar_Init` exactly once, proves
+  enum registration/mutation and external-string readback using pointers with
+  nonzero upper 32 bits, then runs the already-proven interim hunk/command tail
+  so the frozen M13/FS/M14 markers remain earned.
+- Stage B1 adds no engine TU: it newly reaches the already-censused and linked
+  `dvar.cpp`, which passes the standing portability scanner. Census stays at
+  35 rather than being padded. Hosted verification must require the new exact
+  preflight marker, all prior markers, the real dvar-symbol allowlist and app-
+  scaffold denylist, unsigned device link, and Windows Debug/Release.
 - This Windows seat must not push or invoke `gh`; the coordination seat owns
   push and hosted-CI observation. Physical-iPad M13/M14 proof remains open and
   is not a blocker for hosted Phase 3 waves.
@@ -189,6 +192,28 @@ remaining `fs_homepath->current.integer` pointer uses, and any language-hook
 pointer storage. There are no `jmp_buf` sites in the predicted Wave 1 set,
 but the audit remains an explicit zero-result gate.
 
+### Stage B1 — cold dvar preflight candidate
+
+The frozen B1 simulator line is:
+
+```text
+cominit-preflight=dvar enum/external string OK — cold Dvar_Init path
+```
+
+It is emitted only after the app enters through `BootComInit.cpp` on the main
+thread, initializes thread-local engine state, calls real `Dvar_Init` once,
+proves both enum read/mutate/restore and external string readback, and verifies
+that the tested pointers actually use upper arm64 address bits. The old
+`kisak_boot_smoke` symbol is removed; `BootSmoke.cpp` now contains behavioral
+probes only and repeats no initializer.
+
+This marker deliberately does **not** claim real dvar console commands or the
+production script-string subsystem. `Dvar_AddCommands` and `SL_*` remain
+functional scaffold owners for B1 and must be replaced by their real TUs before
+M15, as the corrected contract already requires. The manual hunk/Cbuf/Cmd tail
+inside `BootComInit.cpp` exists only to retain M13/FS/M14 during B1; B2 must
+replace it with the linker-driven real `Com_Init` spine rather than run both.
+
 ## Next actions, in order
 
 1. When the personal Mac/iPad is available, install a signed M14 build, pull
@@ -198,11 +223,10 @@ but the audit remains an explicit zero-result gate.
    is the only remaining Phase 2 boundary and does not invalidate the hosted
    proof while hardware is unavailable. It may be deferred while Phase 3
    begins, but it is mandatory before any physical-device M13/M14 claim.
-2. Coordinator: push the local Wave 1 CRT fix to staging and report the census,
-   simulator/device-build, and Windows verdicts listed in the active state.
-   Fix any red result inside Wave 1. Only after all are green, record exact run
-   evidence and begin Stage B1: dvar enum/external-string preflight plus the
-   fresh cold-start orchestrator skeleton required by the corrected contract.
+2. Coordinator: report all three staging verdicts for `d70a6c6`. If green,
+   journal Wave 1 with exact run IDs and marker evidence; if red, keep the fix
+   inside Wave 1. Then push the two local commits (Mac lab, Stage B1) to staging
+   and require the B1 gates listed above. Do not advance to B2 on a red result.
 3. After Phase 3, follow `docs/FASTFILE_PLAN.md` FF0-FF3 with synthetic zones.
    Before hand-writing FF2 maps for pointer-bearing structs, evaluate the
    GPL-3.0 OpenAssetTools IW3 `ZoneCodeGenerator` as the translation core and

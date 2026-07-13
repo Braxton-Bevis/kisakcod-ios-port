@@ -788,3 +788,58 @@ exact M13, M14, and frozen filesystem markers; green unsigned arm64 device IPA;
 and Windows Debug/Release green. Until those hosted results and run IDs return,
 Wave 1 and its runtime marker remain **UNVERIFIED** and Stage B1 must not start.
 
+## Phase 3 Stage B1 candidate — fresh cold dvar preflight (2026-07-13, Windows seat; CI UNVERIFIED)
+
+**Attempted:** establish the cold WinMain-equivalent entry required by the
+corrected M15 contract and move the existing dvar LP64 check out of the
+post-M13 filesystem probe. This slice intentionally stops before `Com_Init`.
+A later coordination directive explicitly authorized authoring B1 while the
+Wave 1 staging run is active; it did not authorize a Wave 1 green claim or B2.
+
+**Changes:** added `BootComInit.cpp` as the only cold entry. It rejects repeat
+entry and non-main-thread execution, initializes engine thread data, calls real
+`Dvar_Init` exactly once, and behaviorally proves enum registration,
+readback, external mutation, restore, and external-string readback. Both source
+pointers and the stored external-string pointer must have nonzero upper 32
+bits, so a truncated 32-bit lane cannot earn the marker. The old
+`kisak_boot_smoke` symbol was removed; `BootSmoke.cpp` now re-earns the exact
+M13 line using post-init probes only. The Wave 1 FS probe no longer duplicates
+the dvar preflight.
+
+Swift now enters the cold orchestrator first and records the separately frozen
+line `cominit-preflight=dvar enum/external string OK — cold Dvar_Init path` in
+the HUD/marker before allowing the retained M13, FS, and M14 chain. CI requires
+that exact line, requires all six real dvar functions in `libkisaksmoke.a`,
+denies app-object definitions of those functions, requires both new app entry
+symbols, and forbids the retired entry name. Existing marker assertions were
+not changed or removed.
+
+**Ownership boundary:** B1 adds no engine TU and does not pad the 35-entry
+census; it newly reaches the already-real `dvar.cpp`. `Dvar_AddCommands` and
+`SL_*` remain functional app scaffolds during this slice. The B1 marker claims
+only registry and pointer-lane behavior, not dvar console commands or the real
+script-string subsystem. Both scaffold groups remain forbidden for M15. The
+manual hunk/Cbuf/Cmd tail in the new orchestrator is explicitly temporary and
+must be replaced, not combined with, the real `Com_Init` spine in B2.
+
+**Windows-available evidence:** the standing portability scanner reports
+`preflight: no known-class findings` for `src/universal/dvar.cpp`; no new
+census TU was added. Hosted compilation, simulator execution, unsigned-device
+linkage, and Windows regression remain **UNVERIFIED** on this compilerless
+seat.
+
+**Required coordinator verdict:** Wave 1 must first receive its pending green
+run IDs. For B1 require census **35 PASS, 0 FAIL**; the exact new preflight line
+plus unchanged M13/FS/M14 lines from the simulator marker; real-symbol
+allowlist and scaffold-denylist checks green; unsigned arm64 IPA green; and
+Windows Debug/Release green. Any failure remains inside B1; B2 must not start.
+
+### Tooling addendum — on-demand macOS lab (CI UNVERIFIED)
+
+Added a `workflow_dispatch` macOS-15 lab runner with one script-path input. It
+realpath-confines execution beneath `scripts/platform/ios/lab/`, supplies a
+dedicated `lab-out/`, and uploads partial output even after probe failure. The
+included read-only example records macOS/Xcode/SDK versions and simulator
+runtime/device-type inventories. Dispatch proof and artifact contents are
+pending the coordinator; no Mac result is claimed locally.
+

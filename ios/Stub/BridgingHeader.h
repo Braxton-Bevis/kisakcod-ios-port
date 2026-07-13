@@ -8,9 +8,10 @@ const char *kisak_engine_smoke(void);
 // Pass a CAMetalLayer* the D3D9 swapchain may own (NOT the stub's main layer).
 const char *kisak_d3d9_smoke(void *metalLayer);
 
-// BootSmoke.cpp initializes and behavior-checks the real memory/dvar/command
-// subsystems linked from the engine archive.
-const char *kisak_boot_smoke(void);
+// BootComInit.cpp is the fresh cold-start path; BootSmoke.cpp re-earns the
+// existing M13 behavioral marker without repeating any initializer.
+const char *kisak_boot_cominit_stage(void);
+const char *kisak_boot_probe_after_init(void);
 
 // BootFSSmoke.cpp runs real FS_InitFilesystem and a sandbox file round trip.
 const char *kisak_fs_smoke(void);

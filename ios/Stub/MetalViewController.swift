@@ -72,8 +72,12 @@ final class MetalViewController: UIViewController {
     private let d3d9Layer = CAMetalLayer()
     private var d3d9Status = "pending"
 
-    // Staged engine boot: real memory/dvar/command subsystems initializing on
-    // device (precursor to Com_Init). Guarded like the D3D9 smoke.
+    // Phase 3 fresh cold-start path. This exact B1 preflight is earned before
+    // the retained M13/FS/M14 probes run; the retired staged entry is absent.
+    private static let comInitPreflightOK = "dvar enum/external string OK — cold Dvar_Init path"
+    private var comInitPreflightStatus = "pending"
+
+    // Retained M13 hunk/dvar/command behavioral marker, now post-init only.
     private var bootStatus = "pending"
 
     // Phase 3 Wave 1: real FS_InitFilesystem plus a Documents round trip.
@@ -168,7 +172,7 @@ final class MetalViewController: UIViewController {
         applyFrameCap()
 
         setUpD3D9Smoke()
-        runBootSmoke()
+        runBootComInit()
     }
 
     // MARK: - D3D9-through-DXVK smoke (device only; see D3D9Smoke.mm)
@@ -206,9 +210,9 @@ final class MetalViewController: UIViewController {
         }
     }
 
-    // MARK: - Staged engine boot (see BootSmoke.cpp / BootScaffold.cpp)
+    // MARK: - Fresh Com_Init path (see BootComInit.cpp / BootSmoke.cpp)
 
-    private func runBootSmoke() {
+    private func runBootComInit() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let sentinel = docs.appendingPathComponent("boot_attempt_in_flight")
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
@@ -222,15 +226,25 @@ final class MetalViewController: UIViewController {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
-            let result = String(cString: kisak_boot_smoke())
-            try? FileManager.default.removeItem(at: sentinel)
-            self.bootStatus = result
-            NSLog("KISAK_BOOT_SMOKE %@", result)
-            if result.hasPrefix("hunk OK") {
-                self.runFSSmoke()
+            let preflight = String(cString: kisak_boot_cominit_stage())
+            self.comInitPreflightStatus = preflight
+            NSLog("KISAK_COMINIT_PREFLIGHT %@", preflight)
+            if preflight == Self.comInitPreflightOK {
+                let result = String(cString: kisak_boot_probe_after_init())
+                self.bootStatus = result
+                NSLog("KISAK_BOOT_PROBE %@", result)
+                try? FileManager.default.removeItem(at: sentinel)
+                if result.hasPrefix("hunk OK") {
+                    self.runFSSmoke()
+                } else {
+                    self.fsStatus = "blocked by boot probe failure"
+                    self.pmoveProofStatus = "blocked by boot probe failure"
+                }
             } else {
-                self.fsStatus = "blocked by boot failure"
-                self.pmoveProofStatus = "blocked by boot failure"
+                try? FileManager.default.removeItem(at: sentinel)
+                self.bootStatus = "blocked by Com_Init preflight failure"
+                self.fsStatus = "blocked by Com_Init preflight failure"
+                self.pmoveProofStatus = "blocked by Com_Init preflight failure"
             }
             self.writeFirstFrameMarker()
         }
@@ -626,6 +640,7 @@ final class MetalViewController: UIViewController {
             Controller: \(controllerStatus)  stick (\(String(format: "%.2f", stick.x)), \(String(format: "%.2f", stick.y)))
             engine: \(engineSmoke)
             d3d9: \(d3d9Status)
+            Com_Init preflight: \(comInitPreflightStatus)
             boot: \(bootStatus)
             filesystem: \(fsStatus)
             pmove proof: \(pmoveProofStatus)
@@ -655,6 +670,7 @@ final class MetalViewController: UIViewController {
         settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
         engine=\(engineSmoke)
         d3d9=\(d3d9Status)
+        cominit-preflight=\(comInitPreflightStatus)
         boot=\(bootStatus)
         fs=\(fsStatus)
         pmove=\(pmoveProofStatus)

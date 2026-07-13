@@ -59,7 +59,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build | tee ../proof/xcodebuild-simulator.log
 
-      - name: Record Wave 1 archive and scaffold ownership
+      - name: Record Phase 3 archive and scaffold ownership
         working-directory: ios
         run: |
           set -euxo pipefail
@@ -68,11 +68,22 @@ jobs:
           xcrun nm -gU libs/iphonesimulator/libkisakcominit.a \
             | c++filt | tee ../proof/cominit-defined-symbols.txt
           grep -F 'FS_InitFilesystem()' ../proof/cominit-defined-symbols.txt
+          xcrun nm -gU libs/iphonesimulator/libkisaksmoke.a \
+            | c++filt | tee ../proof/smoke-defined-symbols.txt
+          for symbol in Dvar_Init Dvar_RegisterEnum Dvar_EnumToString \
+                        Dvar_RegisterString Dvar_SetStringFromSource Dvar_GetString; do
+            grep -F "$symbol(" ../proof/smoke-defined-symbols.txt
+          done
           find dd/Build/Intermediates.noindex -path '*Objects-normal/arm64/*.o' -print0 \
             | while IFS= read -r -d '' object; do
                 echo "=== $object ==="
                 xcrun nm -gU "$object" || true
               done | c++filt | tee ../proof/app-object-defined-symbols.txt
+          grep -F 'kisak_boot_cominit_stage' ../proof/app-object-defined-symbols.txt
+          grep -F 'kisak_boot_probe_after_init' ../proof/app-object-defined-symbols.txt
+          ! grep -E ' [Tt] Dvar_(Init|RegisterEnum|EnumToString|RegisterString|SetStringFromSource|GetString)\(' \
+            ../proof/app-object-defined-symbols.txt
+          ! grep -F 'kisak_boot_smoke' Stub/*.cpp Stub/*.h Stub/*.swift
           ! grep -Eq '^(int|void|bool|const char \*\*) FS_(LoadStack|FreeFile|HashFileName|ListFiles|Printf|ReadFile)\(' \
             Stub/BootScaffold.cpp
 
@@ -95,6 +106,7 @@ jobs:
           # presenting a Metal frame. Missing file -> job fails.
           CONTAINER=$(xcrun simctl get_app_container "$UDID" dev.braxton.kisakstub data)
           cat "$CONTAINER/Documents/metal_first_frame.txt" | tee proof/metal_first_frame.txt
+          grep -Fqx 'cominit-preflight=dvar enum/external string OK — cold Dvar_Init path' proof/metal_first_frame.txt
           grep -Fqx 'boot=hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up' proof/metal_first_frame.txt
           grep -Fqx 'fs=FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets' proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
