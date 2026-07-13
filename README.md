@@ -43,6 +43,13 @@ There is no macOS/Linux/ARM branch to start from. The engine assumes Windows API
 | Engine translation units compiling for `arm64-apple-ios` | ✅ **30/30 census TUs** — including the real pmove/jump/slide/mantle closure and `Com_Init`/`Com_Frame` TU |
 | D3D9 header layer absorbed by DXVK native headers on the iOS SDK | ✅ proven |
 | DXVK d3d9 renderer runtime on iOS | ✅ **LIVE ON DEVICE** — native CAMetalLayer WSI + static MoltenVK; `CreateDevice` D3D_OK, Clear readback bit-exact, `Present` D3D_OK on iPad Pro (M5). [Patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch) + [build script](scripts/platform/ios/build-dxvk-ios.sh) |
+
+> **As far as we can tell, this is the first D3D9 frame ever rendered through DXVK on iOS.**
+> DXVK's own tracker [called iOS impossible](https://github.com/doitsujin/dxvk/issues/4886) — in the
+> Wine/x86/JIT framing, correctly. Statically linking DXVK + MoltenVK into a *native arm64 app built
+> from engine source* sidesteps every listed objection; the pixel-exact readback proof above is the
+> receipt. (Claim per our search of DXVK issues/forks — happy to be shown prior art:
+> [research notes](docs/knowledge/RENDERER_INIT_NOTES.md).)
 | Engine linking / running on device | 🟡 **first engine code executes on iOS** — math/bit-packing/string TUs linked into the stub, verified in simulator **and on iPad Pro (M5)** with MetalFX spatial upscaling live at 120 fps |
 | Staged memory/dvar/command boot | ✅ simulator marker verified; real arm64 device app builds, physical-device M13 runtime still pending |
 | Real player-movement sandbox | ✅ simulator-proven walk + jump + land + friction on a synthetic flat world; thumbstick/HUD live, physical-iPad feel test pending |
