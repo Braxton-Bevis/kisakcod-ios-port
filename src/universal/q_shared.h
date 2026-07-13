@@ -102,6 +102,16 @@ static ID_INLINE int BigLong(int l) { return LongSwap(l); }
 
 #endif // WIN32
 
+//======================= KISAK_IOS DEFINES =============================
+#ifdef KISAK_IOS
+// arm64-apple-ios is little-endian like x86: the Little* byte-order helpers
+// are the same no-ops the WIN32 block defines above (uses in unzip.cpp read
+// LittleShort(v) -> (v)).
+#define LittleShort
+#define LittleLong
+#define LittleFloat
+#endif // KISAK_IOS
+
 #define PI_DIV_180		0.017453292519943295769236907684886
 #define INV_PI_DIV_180	57.295779513082320876798154814105
 
