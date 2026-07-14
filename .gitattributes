@@ -1,0 +1,6 @@
+# Files whose bytes must survive Windows<->macOS round-trips verbatim.
+# Patches are applied with git apply on the Mac lane; layout manifests are
+# SHA-compared in the conformance gate; shell scripts run on POSIX runners.
+*.patch text eol=lf
+*.sh text eol=lf
+*.layout text eol=lf
