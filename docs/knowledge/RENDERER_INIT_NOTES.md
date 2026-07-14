@@ -109,3 +109,19 @@ github.com/KhronosGroup/MoltenVK/blob/main/Docs/MoltenVK_Configuration_Parameter
 1. 2D draw-command internals (StretchPic/DrawText sites) untraced.
 2. swvp dxvk.conf keys unverified for the pinned fork.
 3. "First DXVK d3d9 frame on iOS" claim from non-exhaustive search.
+
+## ADDENDUM (2026-07-14): prior-art fact-check outcome
+
+A dedicated adversarial search REFUTED the broad "first D3D9 frame through
+DXVK on iOS" claim: Ammaar Reshi's Command & Conquer: Generals — Zero Hour
+native iOS port (github.com/ammaarreshi/Generals-Mac-iOS-iPad, announced
+2026-07-04, one week before M12) rendered D3D8 gameplay on iPhone/iPad
+through DXVK — and DXVK's D3D8 frontend delegates to its D3D9
+implementation (d3d8_device.cpp holds an IDirect3DDevice9; Present
+delegates), so frames had traversed DXVK's D3D9-backed code on iOS first.
+What survives: BMK4/M12 is the first publicly documented application
+calling DXVK's D3D9 FRONTEND directly on a physical iOS/iPadOS device,
+as a smoke-test frame (Clear/readback/Present), not a game scene.
+README and repo description were corrected accordingly (commit 70498f1).
+Search coverage and links are in the fact-check transcript; UTM's Neptune
+D3D11/Venus work is a macOS-path near-miss worth watching.
