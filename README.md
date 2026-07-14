@@ -2,10 +2,9 @@
 
 # BMK4
 
-**B**raxton · **M**etal · **K**isak · **4** — Call of Duty 4, carried over to Apple silicon.
-Forged from [KisakCOD](https://github.com/SwagSoftware/KisakCOD) by LWSS.
-
-### Porting a from-scratch Call of Duty 4 engine decompilation to `arm64-apple-ios`
+**BMK4 (Braxton · Metal · Kisak · 4)** is a work-in-progress native `arm64-apple-ios` port of
+[LWSS's KisakCOD](https://github.com/SwagSoftware/KisakCOD), a from-scratch Call of Duty 4
+engine decompilation.
 
 [![iOS Stub](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-stub.yml/badge.svg)](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-stub.yml)
 [![iOS Engine Compile Probe](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-compile-probe.yml/badge.svg)](https://github.com/Braxton-Bevis/bmk4/actions/workflows/ios-compile-probe.yml)
@@ -15,7 +14,7 @@ Forged from [KisakCOD](https://github.com/SwagSoftware/KisakCOD) by LWSS.
 <img src="docs/media/stub-metal-triangle.png" width="300" alt="Metal render loop live in the iOS Simulator" />&nbsp;&nbsp;
 <img src="docs/media/stub-settings-controller.png" width="300" alt="Graphics settings menu, MetalFX controls, and virtual game controller" />
 
-*Both screenshots were captured automatically by CI from a booted iOS Simulator — every claim in this repo is machine-verified.*
+*CI captured both screenshots from a booted iOS Simulator. Every claim in this repository is machine-verified.*
 
 </div>
 
@@ -23,9 +22,9 @@ Forged from [KisakCOD](https://github.com/SwagSoftware/KisakCOD) by LWSS.
 
 ## What is this?
 
-An engineering experiment: **how far can [KisakCOD](https://github.com/SwagSoftware/KisakCOD) — a GPL-3.0, Win32/x86-32/DirectX 9 reimplementation of the Call of Duty 4 multiplayer engine — be pushed toward running natively on iPhone?**
+This repository tests how far [KisakCOD](https://github.com/SwagSoftware/KisakCOD), a GPL-3.0 Win32/x86-32/DirectX 9 reimplementation of the Call of Duty 4 multiplayer engine, can be ported to native iOS.
 
-There is no macOS/Linux/ARM branch to start from. The engine assumes Windows APIs, 32-bit x86 struct layouts, and a D3D9 renderer throughout. This repo documents the platform lift honestly, milestone by milestone, with every compile and launch verified on GitHub Actions macOS runners (Xcode 16.4, iOS 18.5 SDK) — the entire experiment was driven from a Windows laptop with **no local compiler at all**.
+There is no macOS/Linux/ARM branch to start from. The engine assumes Windows APIs, 32-bit x86 struct layouts, and a D3D9 renderer throughout. The port is documented milestone by milestone, with every compile and launch verified on GitHub Actions macOS runners (Xcode 16.4, iOS 18.5 SDK). The work is driven from a Windows laptop with no local compiler.
 
 > This is a research/porting project. It contains **no game assets** and never will — you must own Call of Duty 4 (2007). It is not affiliated with Activision or Infinity Ward.
 
@@ -48,30 +47,47 @@ There is no macOS/Linux/ARM branch to start from. The engine assumes Windows API
 | Real player-movement sandbox | ✅ simulator-proven walk + jump + land + friction on a synthetic flat world; thumbstick/HUD live, physical-iPad feel test pending |
 | win32 build unaffected by all of the above | ✅ full engine builds green (Debug + Release) |
 
-## The first D3D9 frames ever rendered on iOS
+### Remaining before the game runs
 
-**As far as we can tell, no one had ever rendered a Direct3D 9 frame through DXVK on iOS
-before this project — and the prevailing engineering consensus was that it couldn't be done.**
-When asked directly, DXVK's own tracker [ruled iOS out](https://github.com/doitsujin/dxvk/issues/4886):
-no Vulkan on iOS, MoltenVK "not capable of running DXVK," no JIT, no multi-process — all true
-in the frame the question was asked in, which assumed running unmodified Windows software
-through Wine and emulation.
+| Objective | Status |
+|---|---|
+| Headless `Com_Init`: full engine boot with no game data | 🟡 in progress — real `Com_Init` entered on a cold path; client/server tails being fenced ([roadmap](docs/ROADMAP_TO_PLAYABLE.md)) |
+| Fastfile deserialization: translate 32-bit serialized asset structs for 64-bit loading | ⬜ largest remaining task — staged plan in [FASTFILE_PLAN.md](docs/FASTFILE_PLAN.md), tooling evaluation in [OAT_EVALUATION.md](docs/OAT_EVALUATION.md) |
+| Renderer content path: `R_Init` end to end, materials/shaders from real zones | ⬜ blocked on fastfiles; shader path is precompiled bytecode, no runtime D3DX needed ([notes](docs/knowledge/RENDERER_INIT_NOTES.md)) |
+| Input: touch/controller events into the engine event queue | ⬜ menu-navigation subset first |
+| Full client link: cgame/ui/client translation units, zero undefined symbols | ⬜ heaviest remaining census work (73 inline-asm sites) |
+| Real game data on device: menu renders from user-owned COD4 files | ⬜ files stay on the user's devices; never in this repo or CI |
+| A playable match: spawn, move, shoot in mp_killhouse | ⬜ |
+| Audio, Bink video, frame pacing, persistence | ⬜ deferred until after first playable |
 
-BMK4 sits at a rare intersection that dissolves every one of those objections: the *engine
-source* is available (GPL-3.0), so the game itself compiles as a **native arm64 iOS app** that
-emits D3D9 calls directly — no Wine, no x86 emulation, no JIT, one process. From there the
-translation chain is: engine → **DXVK d3d9** (cross-compiled for iOS with a
-[small patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch), including a new `CAMetalLayer`
-WSI backend) → Vulkan → **static MoltenVK** → **Metal** → the iPad's GPU.
+Based on our search of DXVK issues and forks, BMK4 is the first known project to render
+Direct3D 9 frames through DXVK on iOS. Prior-art reports are welcome; our search notes are in
+[RENDERER_INIT_NOTES.md](docs/knowledge/RENDERER_INIT_NOTES.md).
 
-The proof is deliberately unfakeable: on an iPad Pro (M5), `CreateDevice` returns `D3D_OK`,
-a `Clear` to a known color is **read back pixel-by-pixel and compared bit-exact** against what
-D3D9 semantics require, and `Present` completes — receipts in
-[`PORT_JOURNAL.md`](PORT_JOURNAL.md) (M12) and the CI artifacts. Beyond COD4, this is an
-existence proof with reach: **any D3D9-era game with available source** can now take the same
-staircase to Apple's most locked-down devices. (Claim per our search of DXVK issues and forks —
-we'd genuinely like to hear about prior art:
-[research notes](docs/knowledge/RENDERER_INIT_NOTES.md).)
+The prevailing view was that this was not feasible. DXVK issue
+[#4886](https://github.com/doitsujin/dxvk/issues/4886) ruled out iOS because iOS has no
+native Vulkan support, MoltenVK was "not capable of running DXVK," and the platform lacked
+the JIT and multi-process support required by the proposed approach. Those constraints were
+correct for the scenario discussed there: running unmodified Windows software through Wine
+and emulation.
+
+BMK4 uses a different setup because the GPL-3.0 engine source is available. The engine is
+compiled as a native arm64 iOS application and emits D3D9 calls directly. It runs as one
+process and does not require Wine, x86 emulation, or JIT compilation. The rendering path is:
+
+engine → DXVK d3d9 → Vulkan → static MoltenVK → Metal → iPad GPU
+
+DXVK d3d9 is cross-compiled for iOS with a
+[small patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch) that includes a new
+`CAMetalLayer` WSI backend.
+
+The device test ran on an iPad Pro (M5). `CreateDevice` returned `D3D_OK`. A `Clear` to a
+known color was read back pixel by pixel and compared bit-exact against the value required
+by D3D9 semantics. `Present` completed successfully. The results are recorded in
+[`PORT_JOURNAL.md`](PORT_JOURNAL.md) milestone M12 and in the CI artifacts.
+
+This path is not specific to COD4. Any D3D9-era game with available source can use the same
+native application, DXVK, MoltenVK, and Metal arrangement on iOS.
 
 ## The experiment
 
