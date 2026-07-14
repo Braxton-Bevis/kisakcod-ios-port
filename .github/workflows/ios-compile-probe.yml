@@ -91,7 +91,7 @@ jobs:
           pass=$(awk -F '\t' 'NR > 1 && $2 == "PASS" { n++ } END { print n + 0 }' census/census.tsv)
           fail=$(awk -F '\t' 'NR > 1 && $2 == "FAIL" { n++ } END { print n + 0 }' census/census.tsv)
           echo "CENSUS_TOTAL=$total PASS=$pass FAIL=$fail"
-          test "$total" -ge 36
+          test "$total" -ge 37
           test "$pass" -eq "$total"
           test "$fail" -eq 0
 

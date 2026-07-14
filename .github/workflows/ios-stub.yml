@@ -172,6 +172,7 @@ jobs:
           grep -Fqx 'cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced' proof/metal_first_frame.txt
           grep -Fqx 'boot=hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up' proof/metal_first_frame.txt
           grep -Fqx 'fs=FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets' proof/metal_first_frame.txt
+          grep -Fqx 'net=Netchan+NET_Init OK — loopback only, 1 sockets, msg subsystem up' proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
 
       - id: upload_proof
