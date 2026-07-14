@@ -116,6 +116,29 @@ struct XZoneInfo;
 void Dvar_AddCommands() {}
 bool Sys_IsRenderThread() { return false; }
 
+// Real owner: src/ios/sys_ios_main.mm:136 (joins when the platform entry
+// layer enters the link; that wave MUST delete this). Same observable
+// behavior as the real one for the fatal path: format, print, abort.
+void Sys_Error(const char *error, ...)
+{
+    va_list args;
+    va_start(args, error);
+    fprintf(stderr, "Sys_Error: ");
+    vfprintf(stderr, error, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+    abort();
+}
+
+// Real owner: src/qcommon/com_playerprofile.cpp:79 — whole-TU pull drags
+// Win32 UI/LiveStorage, deferred to the profile wave. Only reachable via
+// Com_WriteConfiguration / Com_Frame tails, both beyond the B2 fence; the
+// real function fatal-errors without a profile anyway.
+int Com_BuildPlayerProfilePath(char *, int, const char *, ...)
+{
+    BootScaffoldAbort("Com_BuildPlayerProfilePath(beyond B2 fence)");
+}
+
 // Pure-server IWD checksum state (multiplayer anticheat). com_files.cpp's
 // only boot-lane reference is the FS_Restart error-retry path, which calls
 // it with empty strings immediately before Com_Error aborts the boot.
