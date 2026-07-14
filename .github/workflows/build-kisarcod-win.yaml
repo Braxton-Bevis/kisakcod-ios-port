@@ -11,6 +11,7 @@ jobs:
   build:
     name: Build with DirectX SDK
     runs-on: windows-2022
+    continue-on-error: ${{ github.ref == 'refs/heads/staging' }}
 
     strategy:
       matrix:
@@ -23,19 +24,23 @@ jobs:
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@v4
 
       - name: Install .NET SDK (for nuget usage)
+        id: setup_dotnet
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.x'
 
       - name: Install Python (synthetic FF0a fixture generator)
+        id: setup_python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Restore DXSDK NuGet package
+        id: restore_dxsdk
         run: |
           dotnet new classlib -o dxsdk-temp
           cd dxsdk-temp
@@ -60,9 +65,11 @@ jobs:
           Write-Host $sdkDir
 
       - name: Install latest CMake
+        id: install_cmake
         uses: lukka/get-cmake@latest
 
       - name: Configure CMake ${{ matrix.config }}
+        id: configure
         run: |
           pushd
           mkdir build-${{ matrix.config }}
@@ -71,6 +78,7 @@ jobs:
           popd
 
       - name: Build ${{ matrix.config }}
+        id: build_targets
         run: |
           pushd
           cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --target "KisakCOD-sp"
@@ -80,6 +88,7 @@ jobs:
           popd
 
       - name: FF0a synthetic dump, byte-stability, and fixture allowlist gate
+        id: ff0a_gate
         shell: powershell
         run: |
           $fixtureDir = Join-Path "${{ github.workspace }}" "build-${{ matrix.config }}\ff-oracle-fixtures"
@@ -161,7 +170,8 @@ jobs:
           if (Test-Path $outsideOutput) { throw "refused outside output was created" }
           $ErrorActionPreference = $savedEap
 
-      - uses: actions/upload-artifact@v4
+      - id: upload_binaries
+        uses: actions/upload-artifact@v4
         with:
           name: KisakCOD-${{ matrix.config }}
           path: ${{ github.workspace }}/bin
@@ -169,6 +179,7 @@ jobs:
           retention-days: 1
 
       - name: Upload FF0a synthetic oracle dump only
+        id: upload_oracle_dump
         uses: actions/upload-artifact@v4
         with:
           name: ff-oracle-${{ matrix.config }}
@@ -182,9 +193,53 @@ jobs:
       # evidence locally with this exe; raw real-zone dumps never leave that
       # machine.
       - name: Upload FF0a oracle tool binary
+        id: upload_oracle_tool
         uses: actions/upload-artifact@v4
         with:
           name: ff-oracle-tool-${{ matrix.config }}
           path: ${{ github.workspace }}/bin/${{ matrix.config }}/bmk4-ff-oracle.exe
           if-no-files-found: error
           retention-days: 7
+
+      - name: Verdict for coordinator
+        if: github.ref == 'refs/heads/staging' && always()
+        shell: powershell
+        env:
+          OUTCOME_CHECKOUT: ${{ steps.checkout.outcome }}
+          OUTCOME_SETUP_DOTNET: ${{ steps.setup_dotnet.outcome }}
+          OUTCOME_SETUP_PYTHON: ${{ steps.setup_python.outcome }}
+          OUTCOME_RESTORE_DXSDK: ${{ steps.restore_dxsdk.outcome }}
+          OUTCOME_EXTRACT_DXSDK: ${{ steps.dxsdk.outcome }}
+          OUTCOME_INSTALL_CMAKE: ${{ steps.install_cmake.outcome }}
+          OUTCOME_CONFIGURE: ${{ steps.configure.outcome }}
+          OUTCOME_BUILD_TARGETS: ${{ steps.build_targets.outcome }}
+          OUTCOME_FF0A_GATE: ${{ steps.ff0a_gate.outcome }}
+          OUTCOME_UPLOAD_BINARIES: ${{ steps.upload_binaries.outcome }}
+          OUTCOME_UPLOAD_ORACLE_DUMP: ${{ steps.upload_oracle_dump.outcome }}
+          OUTCOME_UPLOAD_ORACLE_TOOL: ${{ steps.upload_oracle_tool.outcome }}
+        run: |
+          $checks = @(
+            @($env:OUTCOME_CHECKOUT, "Checkout repository"),
+            @($env:OUTCOME_SETUP_DOTNET, "Install .NET SDK (for nuget usage)"),
+            @($env:OUTCOME_SETUP_PYTHON, "Install Python (synthetic FF0a fixture generator)"),
+            @($env:OUTCOME_RESTORE_DXSDK, "Restore DXSDK NuGet package"),
+            @($env:OUTCOME_EXTRACT_DXSDK, "Extract DXSDK paths from NuGet"),
+            @($env:OUTCOME_INSTALL_CMAKE, "Install latest CMake"),
+            @($env:OUTCOME_CONFIGURE, "Configure CMake ${{ matrix.config }}"),
+            @($env:OUTCOME_BUILD_TARGETS, "Build ${{ matrix.config }}"),
+            @($env:OUTCOME_FF0A_GATE, "FF0a synthetic dump, byte-stability, and fixture allowlist gate"),
+            @($env:OUTCOME_UPLOAD_BINARIES, "Upload KisakCOD binaries"),
+            @($env:OUTCOME_UPLOAD_ORACLE_DUMP, "Upload FF0a synthetic oracle dump only"),
+            @($env:OUTCOME_UPLOAD_ORACLE_TOOL, "Upload FF0a oracle tool binary")
+          )
+
+          $verdict = "BMK4_VERDICT=green"
+          foreach ($check in $checks) {
+            if ($check[0] -ne "success") {
+              $verdict = "BMK4_VERDICT=red step=$($check[1])"
+              break
+            }
+          }
+
+          Write-Host $verdict
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $verdict

@@ -23,11 +23,14 @@ on:
 jobs:
   compile-census:
     runs-on: macos-15
+    continue-on-error: ${{ github.ref == 'refs/heads/staging' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - id: checkout
+        uses: actions/checkout@v4
 
       - name: CMake configure with KISAK_PLATFORM=ios (must succeed)
+        id: configure
         run: |
           set -euxo pipefail
           cmake -B build-ios \
@@ -38,6 +41,7 @@ jobs:
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
 
       - name: Fetch DXVK native headers (pinned)
+        id: fetch_dxvk
         run: |
           set -euxo pipefail
           # include/native/directx is a submodule (Joshua-Ashton/mingw-directx-headers) —
@@ -55,6 +59,7 @@ jobs:
           git -C dxvk-headers apply --verbose "$GITHUB_WORKSPACE/scripts/platform/ios/dxvk-v2.7.1-ios.patch"
 
       - name: Per-file compile census (all tracked files required)
+        id: compile_census
         run: |
           set -uo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
@@ -87,8 +92,39 @@ jobs:
           test "$pass" -eq "$total"
           test "$fail" -eq 0
 
-      - uses: actions/upload-artifact@v4
+      - id: upload_census
+        uses: actions/upload-artifact@v4
         with:
           name: ios-compile-census
           path: census/
           retention-days: 14
+
+      - name: Verdict for coordinator
+        if: github.ref == 'refs/heads/staging' && always()
+        env:
+          OUTCOME_CHECKOUT: ${{ steps.checkout.outcome }}
+          OUTCOME_CONFIGURE: ${{ steps.configure.outcome }}
+          OUTCOME_FETCH_DXVK: ${{ steps.fetch_dxvk.outcome }}
+          OUTCOME_COMPILE_CENSUS: ${{ steps.compile_census.outcome }}
+          OUTCOME_UPLOAD_CENSUS: ${{ steps.upload_census.outcome }}
+        run: |
+          checks=(
+            "$OUTCOME_CHECKOUT|Checkout repository"
+            "$OUTCOME_CONFIGURE|CMake configure with KISAK_PLATFORM=ios (must succeed)"
+            "$OUTCOME_FETCH_DXVK|Fetch DXVK native headers (pinned)"
+            "$OUTCOME_COMPILE_CENSUS|Per-file compile census (all tracked files required)"
+            "$OUTCOME_UPLOAD_CENSUS|Upload iOS compile census"
+          )
+
+          verdict='BMK4_VERDICT=green'
+          for check in "${checks[@]}"; do
+            outcome=${check%%|*}
+            step=${check#*|}
+            if [[ "$outcome" != success ]]; then
+              verdict="BMK4_VERDICT=red step=$step"
+              break
+            fi
+          done
+
+          echo "$verdict"
+          echo "$verdict" >> "$GITHUB_STEP_SUMMARY"
