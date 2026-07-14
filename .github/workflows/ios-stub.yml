@@ -100,21 +100,64 @@ jobs:
       - name: Boot simulator, install, launch, capture proof
         run: |
           set -euxo pipefail
+          APP_BUNDLE_ID=dev.braxton.kisakstub
           UDID=$(xcrun simctl list devices available --json \
             | jq -r '[.devices[] | .[] | select(.name | test("^iPhone"))][0].udid')
           echo "Using simulator UDID=$UDID"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" ios/dd/Build/Products/Debug-iphonesimulator/KisakStub.app
-          xcrun simctl launch "$UDID" dev.braxton.kisakstub
-          sleep 10
           mkdir -p proof
-          xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-1.png
-          sleep 5
-          xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-2.png
+
+          # --console-pty remains attached to the app, so capture it in a
+          # background subshell and bound the proof window explicitly.
+          (
+            set +e
+            xcrun simctl launch --console-pty "$UDID" "$APP_BUNDLE_ID" \
+              2>&1 | tee proof/app-console.txt
+            printf '%s\n' "${PIPESTATUS[0]}" > proof/app-launch-exit-code.txt
+          ) &
+          CONSOLE_CAPTURE_PID=$!
+          for second in $(seq 1 30); do
+            sleep 1
+            if [[ "$second" == 10 ]]; then
+              xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-1.png
+            elif [[ "$second" == 15 ]]; then
+              xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-2.png
+            fi
+          done
+
+          # Stop an app that survived the bounded window, then reap (or, if
+          # simctl itself stayed attached, terminate) the console capture.
+          xcrun simctl terminate "$UDID" "$APP_BUNDLE_ID" || true
+          for _ in $(seq 1 5); do
+            if ! kill -0 "$CONSOLE_CAPTURE_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          if kill -0 "$CONSOLE_CAPTURE_PID" 2>/dev/null; then
+            kill "$CONSOLE_CAPTURE_PID" || true
+          fi
+          wait "$CONSOLE_CAPTURE_PID" || true
+
+          # Preserve process-scoped unified logs and only .ips reports whose
+          # contents identify KisakStub. Diagnostics never replace a gate.
+          xcrun simctl spawn "$UDID" log show --style compact --last 3m \
+            --predicate 'process == "KisakStub" OR eventMessage CONTAINS[c] "dev.braxton.kisakstub"' \
+            > proof/simulator-app-log.txt 2>&1 || true
+          REPORT_DIR="$HOME/Library/Logs/DiagnosticReports"
+          if [[ -d "$REPORT_DIR" ]]; then
+            while IFS= read -r -d '' report; do
+              if grep -Fqi 'KisakStub' "$report"; then
+                cp "$report" "proof/$(basename "$report")"
+              fi
+            done < <(find "$REPORT_DIR" -maxdepth 1 -type f -name '*.ips' -print0)
+          fi
+
           # HARD ASSERTION: the app only writes this file after successfully
           # presenting a Metal frame. Missing file -> job fails.
-          CONTAINER=$(xcrun simctl get_app_container "$UDID" dev.braxton.kisakstub data)
+          CONTAINER=$(xcrun simctl get_app_container "$UDID" "$APP_BUNDLE_ID" data)
           cat "$CONTAINER/Documents/metal_first_frame.txt" | tee proof/metal_first_frame.txt
           grep -Fqx 'cominit-preflight=dvar enum/external string OK — cold Dvar_Init path' proof/metal_first_frame.txt
           grep -Fqx 'cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced' proof/metal_first_frame.txt
@@ -123,6 +166,7 @@ jobs:
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: simulator-launch-proof
           path: proof/

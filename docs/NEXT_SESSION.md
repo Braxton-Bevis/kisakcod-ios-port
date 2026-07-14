@@ -1,4 +1,4 @@
-# NEXT_SESSION - BMK4 context handoff (2026-07-14, Stage B2 link-closure fix)
+# NEXT_SESSION - BMK4 context handoff (2026-07-14, Stage B2 runtime diagnostics)
 
 Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries,
 `docs/M14_PMOVE_SANDBOX_REPORT.md`, and `docs/FASTFILE_PLAN.md` before
@@ -36,6 +36,20 @@ work pauses.
 - This Windows seat must not push or invoke `gh`; the coordination seat owns
   push and hosted-CI observation. Physical-iPad M13/M14 proof remains open and
   is not a blocker for hosted Phase 3 waves.
+
+## Stage B2 simulator runtime hypotheses (run `29352352608`)
+
+The app launched and remained observable through the screenshot window, but
+never wrote `Documents/metal_first_frame.txt`. The next simulator proof run
+captures `proof/app-console.txt`, a process-scoped unified log, the launch exit
+code, and any `KisakStub` `.ips` report. Match that evidence against these
+hypotheses before changing engine behavior:
+
+| # | Hypothesis / concrete failure scenario | Cheapest settling evidence |
+|---|---|---|
+| 1 | **The explicit headless request is not visible when the real common spine tests it.** `BootComInit.cpp:113` sets the flag before `Com_Init`, but if the state is lost or a duplicate owner is linked, `common.cpp:1349` misses the B2 branch and immediately reaches the abort-loud `SL_Init` tail instead of setting `com_iOSBootSpineReached`. | `app-console.txt` contains `boot scaffold reached unexpected dependency: SL_Init`; absence of that line plus a later spine message refutes this ordering/state failure. |
+| 2 | **The nominally empty startup line reaches a deferred dvar-command boundary.** `Com_ParseCommandLine` deliberately creates one console line even for `""` (`common.cpp:839-851`), and `Com_StartupVariable(0)` tokenizes it at `common.cpp:1359`. Any unexpected retained `set`/`seta` token would call the B4-deferred abort-loud `Dvar_Set_f`/`Dvar_SetA_f` owners. | `app-console.txt` names `Dvar_Set_f(B4 dvar_cmds owner)` or `Dvar_SetA_f(B4 dvar_cmds owner)`; normal engine prints followed by neither name refute this path. |
+| 3 | **A real early failure is being masked by the post-fence recovery scaffolds.** The most direct trigger is the 512 MiB headless hunk reservation (`com_memory.cpp:390-407`), whose failure reaches abort-loud `Sys_OutOfMemErrorInternal`; another `Com_Error` trigger longjmps to `Com_Init`, whose real-minimal `Sys_Error` aborts. If recovery inspects the intentionally poisoned `cls`, it can instead expose `CL_ConsoleFixPosition`/UI aborts and hide the originating error. | First use the `.ips` faulting frame and the last console line: `Sys_OutOfMemErrorInternal`, `Sys_Error: Error during initialization`, or a named client/UI scaffold settles the terminal path; the preceding engine error text identifies the original trigger. |
 
 ## Verified state
 
