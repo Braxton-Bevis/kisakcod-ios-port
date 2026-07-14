@@ -1,5 +1,16 @@
 # BMK4 — Roadmap to a playable game (detailed, Mac-free)
 
+> **SUPERSEDED ORDERING (2026-07-14):** the execution order below was revised
+> by cross-model review. The authoritative order is now the ten-slice plan in
+> [`docs/reviews/roadmap-sol.md`](reviews/roadmap-sol.md) as amended and
+> ratified in [`docs/reviews/roadmap-claude-response.md`](reviews/roadmap-claude-response.md).
+> Headline changes: the acceptance artifact is a **physical-iPad mp_killhouse
+> frame** (not the main menu); the Windows oracle (FF0a) runs FIRST, before
+> B3; asset waves are oracle-derived, not guessed; R_Init interleaves with the
+> first render-asset wave; the OAT adoption is spike-gated. Stage definitions
+> and guardrails below remain in force.
+
+
 *Coordination seat, 2026-07-13 night. Standing constraints: NO MAC until
 unavoidable (device installs via Sideloadly on the Windows laptop; batch
 device checkpoints); Claude Max = primary dev pool (resets ~07-16); Sol =
