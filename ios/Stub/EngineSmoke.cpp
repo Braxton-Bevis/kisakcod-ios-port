@@ -55,9 +55,8 @@ void CL_GetPredictedOriginForServerTime(clientActive_t *cl, int time, float *o, 
 void *MSG_GetStateFieldListForEntityType(int type) UNREACHED_STUB("MSG_GetStateFieldListForEntityType")
 
 // Engine globals owned by not-yet-graduated TUs; zeroed, untouched by the smoke.
+// msg_dumpEnts / msg_printEntityNums graduated to net_chan_mp.cpp (B3 wave).
 void *cl_shownet = nullptr;           // dvar_t*
-void *msg_dumpEnts = nullptr;         // dvar_t*
-void *msg_printEntityNums = nullptr;  // dvar_t*
 unsigned char clients[0x200000];      // server client array
 unsigned char msgHuff[0x80000];       // network huffman tables
 unsigned char orderInfo[0x20000];     // entity-order tables
