@@ -15,8 +15,9 @@ field graph; `sizeof`, `alignof`, and `offsetof` supply every numeric value.
 
 Current coverage is the complete one-structure `RawFile` graph and the 17
 structures/155 members in OAT's `menuDef_t` manifest. Structure ordering is
-normalized because graph order is not ABI-significant. Declaration member
-order, names, sizes, alignments, and offsets are all hard comparisons.
+normalized because graph order is not ABI-significant. Structure kinds, sizes,
+alignments, and all member numerics are hard comparisons. Member declaration
+order remains strict for structs and is set-based for unions.
 
 Serialization conditions/count expressions are not derivable from C++ headers
 and are intentionally outside this KISAK-side half. The adoption decision must
@@ -38,18 +39,21 @@ generator twice, proves byte stability, then compares both manifests with the
 checked-in OAT spike samples. The report is written to
 `build-layout-conformance-<Config>/layout-conformance-report.txt`.
 
-Any mismatch returns nonzero. There is no allowlist or alias mechanism: a
-disagreement must be fixed upstream, explained and reviewed, or the OAT map
-adoption fails.
+Any mismatch returns nonzero. The sole reviewed name alias is declared in the
+comparator's per-structure `ADJUDICATIONS` table; it pairs OAT `stringVal` with
+KISAK `string` only in `operandInternalDataUnion`. Applied adjudications are
+always printed, and numeric disagreement still fails.
 
-## Known source-level mismatches
+## Hosted result and reviewed schema differences
 
-The initial audit already proves two real menu-schema differences:
+Windows run `29358731938` proved zero numeric divergence across the sampled 17
+structures and 155 members. It also exposed two schema-only differences:
 
 1. KISAK declares `entryInternalData` in `op, operand` order; OAT emits
    `operand, op`.
 2. KISAK names the third `operandInternalDataUnion` arm `string`; OAT names it
    `stringVal`.
 
-Both are expected headline failures in the first hosted report. Numeric ABI
-differences, if any, remain unverified until the Win32 executable runs.
+Both types are unions, making member order layout-neutral, and the reviewed
+`stringVal`/`string` alias identifies the same arm. The comparator reports the
+result as `PASS-ADJUDICATED`; it does not silently discard either difference.

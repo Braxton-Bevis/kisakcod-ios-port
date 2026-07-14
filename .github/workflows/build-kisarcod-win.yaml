@@ -206,27 +206,32 @@ jobs:
           retention-days: 7
 
       # Slice 6 engine half: MSVC-derived KISAK layout manifests diffed against
-      # the OAT spike manifests. ADVISORY until the two known divergences
-      # (docs/LAYOUT_CONFORMANCE.md) are adjudicated with this step's numeric
-      # evidence; then it hardens into a fail-the-build gate. Always exits 0 so
-      # artifact uploads and slice-2 tooling are never blocked by a red here.
-      - name: Layout conformance (slice 6, advisory until adjudicated)
+      # the OAT spike manifests. HARD GATE since the run-29358731938 evidence
+      # was adjudicated (docs/LAYOUT_CONFORMANCE.md): the two naming-only union
+      # divergences are encoded in the comparator; any NUMERIC divergence fails
+      # the build. Runs after the artifact uploads so a red here never blocks
+      # slice-2 tooling downloads.
+      - name: Layout conformance gate (slice 6)
         id: layout_conformance
         shell: powershell
         run: |
           $line = ""
+          $failed = $false
           try {
             & .\tools\layout_conformance\run-windows-ci.ps1 -Configuration ${{ matrix.config }} -DxSdkInclude "$env:incDir"
             $line = "BMK4_LAYOUT_CONFORMANCE=green"
           } catch {
             $line = "BMK4_LAYOUT_CONFORMANCE=red detail=$($_.Exception.Message)"
+            $failed = $true
           }
           Write-Host $line
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+          if ($failed) { exit 1 }
           exit 0
 
       - name: Upload layout conformance report
         id: upload_layout_report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: layout-conformance-${{ matrix.config }}
@@ -252,6 +257,7 @@ jobs:
           OUTCOME_UPLOAD_BINARIES: ${{ steps.upload_binaries.outcome }}
           OUTCOME_UPLOAD_ORACLE_DUMP: ${{ steps.upload_oracle_dump.outcome }}
           OUTCOME_UPLOAD_ORACLE_TOOL: ${{ steps.upload_oracle_tool.outcome }}
+          OUTCOME_LAYOUT_CONFORMANCE: ${{ steps.layout_conformance.outcome }}
         run: |
           $checks = @(
             @($env:OUTCOME_CHECKOUT, "Checkout repository"),
@@ -265,7 +271,8 @@ jobs:
             @($env:OUTCOME_FF0A_GATE, "FF0a synthetic dump, byte-stability, and fixture allowlist gate"),
             @($env:OUTCOME_UPLOAD_BINARIES, "Upload KisakCOD binaries"),
             @($env:OUTCOME_UPLOAD_ORACLE_DUMP, "Upload FF0a synthetic oracle dump only"),
-            @($env:OUTCOME_UPLOAD_ORACLE_TOOL, "Upload FF0a oracle tool binary")
+            @($env:OUTCOME_UPLOAD_ORACLE_TOOL, "Upload FF0a oracle tool binary"),
+            @($env:OUTCOME_LAYOUT_CONFORMANCE, "Layout conformance gate (slice 6)")
           )
 
           $verdict = "BMK4_VERDICT=green"

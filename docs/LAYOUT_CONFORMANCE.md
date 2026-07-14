@@ -1,6 +1,6 @@
 # KISAK/OAT layout conformance gate — KISAK-side implementation
 
-Status: **implemented locally; hosted Win32 verdict pending**.
+Status: **hosted Win32 ABI agreement proven; reviewed schema adjudications encoded**.
 
 ## Decision and authority
 
@@ -27,25 +27,32 @@ declaration line.
 - Zero unexplained mismatches is required to adopt OAT-generated field maps.
   A mismatch is a failed conformance gate, not a warning.
 
-The workflow hook is deliberately left to the coordination seat because the
-Windows workflows were hot during this slice. The self-contained command is
-documented in `tools/layout_conformance/README.md`.
+The Windows workflow runs the self-contained command documented in
+`tools/layout_conformance/README.md` in both Debug and Release.
 
-## Headline findings before hosted execution
+## Hosted evidence and adjudication record
 
-Two schema mismatches are already confirmed directly from the checked-in
-sources:
+Windows run `29358731938` built and ran the Win32 probe in both configurations.
+`RawFile` passed directly. Across the complete `menuDef_t` sample, MSVC and OAT
+agreed numerically for all 17 structures and 155 members, including structure
+sizes/alignments and member offsets/sizes/alignments. The initial comparator
+reported four schema mismatches:
 
 1. `src/ui/ui_shared.h` declares `entryInternalData` members as `op` followed
-   by `operand`; the OAT golden emits `operand` followed by `op`.
+   by `operand`; the OAT manifest emits `operand` followed by `op`. Both records
+   identify the type as a union, so declaration order has no layout meaning.
 2. `src/ui/ui_shared.h` declares the operand union's string member as `string`;
-   the OAT golden emits `stringVal`.
+   the OAT manifest emits `stringVal`. The coordinator's final ruling for run
+   `29358731938` identifies these as the same union arm. That one name pair is
+   recorded explicitly in the comparator's `ADJUDICATIONS` table.
 
-The first does not change union offsets but disproves byte-identical field
-schema/order. The second is a naming divergence that would break unnormalized
-generated field-map consumption. Neither is papered over. Hosted MSVC output
-must now settle numeric alignment/offset questions, especially OAT's reported
-8-byte alignment for `Material`.
+The comparator now parses and compares each structure's `kind`. Non-union member
+order remains strict. When both manifests say `union`, members are paired as a
+set after applying only the structure-specific alias table. Every paired member
+must still have identical offset, size, and alignment; the self-test proves an
+aliased member with divergent numerics fails. Successful adjudication is visible
+as `PASS-ADJUDICATED`, with alias and union-order-exemption counts plus a detail
+line for every applied alias. This is not a blanket mismatch allowlist.
 
 ## Explicit boundary
 
