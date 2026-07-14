@@ -460,7 +460,8 @@ void Com_SkipRestOfLine(const char **) BOOT_UNREACHED("Com_SkipRestOfLine")
 XAssetHeader DB_FindXAssetHeader(XAssetType, const char *) BOOT_UNREACHED("DB_FindXAssetHeader")
 bool DB_IsMinimumFastFileLoaded() BOOT_UNREACHED("DB_IsMinimumFastFileLoaded")
 int Com_BlockChecksumKey32(const uint8_t *, uint32_t, uint32_t) BOOT_UNREACHED("Com_BlockChecksumKey32")
-int Com_SafeMode() BOOT_UNREACHED("Com_SafeMode")
+// Com_SafeMode: real owner common.cpp joined the cominit archive (dupe
+// caught at CI run 29350156834; same graduated-owner class as Com_Filter).
 void NET_Init() BOOT_UNREACHED("NET_Init")
 void PMem_DumpMemStats() BOOT_UNREACHED("PMem_DumpMemStats")
 void R_BeginRemoteScreenUpdate() BOOT_UNREACHED("R_BeginRemoteScreenUpdate")
