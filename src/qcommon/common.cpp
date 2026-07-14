@@ -218,20 +218,36 @@ void QDECL Com_PrintMessage(int channel, const char* msg, int error)
 	}
 	else
 	{
+#ifdef KISAK_IOS
+		if (!FS_iOS_HeadlessNoAssetsRequested()
+			&& channel != 6
+#ifdef KISAK_MP
+            && com_dedicated && !com_dedicated->current.integer
+#endif
+            )
+#else
 		if (channel != 6 
 #ifdef KISAK_MP
             && com_dedicated && !com_dedicated->current.integer
 #endif
             )
+#endif
 		{
 			//iassert( !Con_IsNotifyChannel( channel ) );
 			CL_ConsolePrint(0, channel, msg, 0, 0, 32 * error);
 		}
 		if (*msg == 94 && msg[1])
 			msg += 2;
+#ifdef KISAK_IOS
+		if (!FS_iOS_HeadlessNoAssetsRequested()
+			&& channel != 6
+			&& (!com_filter_output || !com_filter_output->current.enabled
+				|| Con_IsChannelVisible(CON_DEST_CONSOLE, channel, 3)))
+#else
 		if (channel != 6
 			&& (!com_filter_output || !com_filter_output->current.enabled
 				|| Con_IsChannelVisible(CON_DEST_CONSOLE, channel, 3)))
+#endif
 		{
 			Sys_Print(msg);
 		}

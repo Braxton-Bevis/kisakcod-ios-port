@@ -904,3 +904,61 @@ the app link is red, preserve the complete undefined-symbol output: it is the
 ratified definition of the next bounded B2 closure, not permission to add
 benign defaults or weaken any gate.
 
+## Phase 3 Stage B2 link-closure fix — 119 symbols (2026-07-14, Windows seat; CI UNVERIFIED)
+
+**Hosted verdict received:** authoritative staging commit `b6f2861` passed the
+iOS compile census at **35/35** and passed Windows Debug/Release. The stub link
+failed, as the linker-driven method predicted, with exactly 119 undefined
+symbols from the real `common.cpp` whole-object closure. The complete list is
+preserved at `build-ios-lib/b2-undefined-symbols.txt`. The coordinator also
+removed one scaffold duplicate missed by the B2 sweep, `Com_Filter`, before
+pushing; its real `com_shared.cpp` owner remains intact. No hosted run IDs were
+provided with this verdict, so none are invented here.
+
+**Attempted:** close only that evidence-defined linker set without graduating
+post-fence subsystems early. All 119 names are accounted for in
+`BootScaffold.cpp`: 114 functions are grouped abort-loud by their future real
+owner (common/config, client/UI, database/script/assets, network/server, and
+renderer/sound/platform); the four direct data references (`clientUIActives`,
+`cls`, `sv`, `updateScreenCalled`) use exact-size poison storage because data
+cannot abort on access; and `Sys_GetCpuCount` is real-minimal rather than a
+stub. The poison sizes are asserted against the MP layouts and the B2 marker
+can only be earned after the fence, before any data read.
+
+**Reached-path correction:** source tracing found that the 119-symbol report
+was not entirely post-fence. `Com_InitDvars` calls `Sys_GetCpuCount`, so its iOS
+body now performs the real `sysconf(_SC_NPROCESSORS_ONLN)` query and clamps to
+the engine's supported 1-4 range exactly as `threads.cpp` does. Also, the
+opening real `Com_Printf` could call `CL_ConsolePrint` and `Sys_Print` before
+`com_dedicated` is registered. Under the explicit iOS headless request,
+`Com_PrintMessage` now keeps its unconditional stderr output but fences those
+absent console frontends. Both frontend definitions remain abort-loud, so any
+unintended call fails by name.
+
+**dvar command decision:** `dvar_cmds.cpp` does **not** join B2. The B2 line
+claims real dvar registration and explicit policy readback only; it does not
+claim `set`, `seta`, `dvarlist`, or `Com_DvarDump`. Pulling that TU now would
+expand a bounded link-only slice without earning a new behavior. It joins no
+later than B4, because the frozen queued-console-event probe must execute real
+`set`; that wave must preflight/census the TU and atomically delete
+`Dvar_AddCommands`, `Dvar_Set_f`, `Dvar_SetA_f`, `Com_DvarDump`, `info1`, and
+`info2`. This preserves the Challenge-1 prohibition on M15-grade dvar claims
+using fake command owners.
+
+**Windows-available evidence:** a mechanical comparison accounts for all 119
+linker names exactly (114 abort functions + one reached real function + four
+data owners). No real TU was added, so the census remains 35 and no new-TU
+preflight was required. The newly reached `common.cpp` path remains covered by
+the prior portability audit; local gates require diff cleanliness, Bash
+syntax, exact nine-member archive membership, all five simulator marker
+assertions, symbol-accounting totals, and byte-identical Windows branches.
+This seat has no compiler, so simulator runtime, device linkage, and Windows
+regression for this fix remain **UNVERIFIED**.
+
+**Required coordinator verdict:** census 35/35; Windows Debug/Release green;
+simulator and unsigned-device links with no remaining undefined or duplicate
+symbols; exact nine-member archive/provenance checks; and simulator marker
+contains the unchanged B1/M13/FS/M14 lines plus exact B2
+`cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced`.
+Any runtime abort must report its named scaffold and stays inside B2.
+

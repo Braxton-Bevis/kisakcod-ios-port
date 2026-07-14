@@ -1,35 +1,38 @@
-# NEXT_SESSION - BMK4 context handoff (2026-07-13, Stage B2 common-spine candidate)
+# NEXT_SESSION - BMK4 context handoff (2026-07-14, Stage B2 link-closure fix)
 
 Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries,
 `docs/M14_PMOVE_SANDBOX_REPORT.md`, and `docs/FASTFILE_PLAN.md` before
 continuing. Re-reference this plan before each edit and refresh it whenever
 work pauses.
 
-## Active seat state — Stage B2 common-spine linker slice
+## Active seat state — Stage B2 119-symbol link closure
 
-- Wave 1's compile side is verified: census run `29281941827` is **35/35** and
-  Windows run `29281941785` passed Debug/Release. Stub run `29281941846`
-  correctly failed on the last `_copyDWord` undefined; the coordinator added
-  its exact four-line temporary owner. A subsequent full stub verdict has not
-  yet been reported, so do not call Wave 1 wholly green.
-- Authoritative staging commits are `d8256b7` (Mac lab) and `f5c1889` (B1).
-  Their hosted batch was still running at the last handoff; preserve the exact
-  B1, M13, filesystem, and M14 assertions until its verdict returns.
-- The local B2 candidate hard-requires real `src/qcommon/common.cpp` in the
-  exact Com_Init archive, calls real `Com_Init` from the cold orchestrator,
-  and removes the manual hunk/Cbuf/Cmd tail. An explicit iOS headless request
-  registers real `useFastFile=0` and `dedicated=2`; a temporary guarded fence
-  returns after real endian/command/dvar/hunk initialization and before the
-  script-string, filesystem, database, network, server, client, renderer, and
-  sound tails.
+- Authoritative B2 commit `b6f2861` passed the 35/35 census and Windows
+  Debug/Release. Its stub job exposed the expected whole-object closure:
+  exactly 119 undefined symbols, preserved at
+  `build-ios-lib/b2-undefined-symbols.txt`. B2 runtime remains unverified.
+- The local closure fix accounts for all 119: 114 grouped abort-loud function
+  boundaries, four exact-size poison data owners, and one reached real-minimal
+  `Sys_GetCpuCount` implementation using the same iOS sysconf/clamp semantics
+  as `threads.cpp`. The coordinator also removed a missed duplicate
+  `Com_Filter` before `b6f2861`; do not restore it.
+- Source tracing disproved the blanket assumption that all 119 are post-fence:
+  `Sys_GetCpuCount` is reached by `Com_InitDvars`, and the opening print could
+  call absent client/system consoles. The iOS headless lane now retains the
+  real common stderr print and explicitly guards both console frontends;
+  their scaffold entries remain abort-loud.
+- `dvar_cmds.cpp` is deliberately deferred to B4, where the frozen queued
+  console-event probe must behaviorally execute real `set`. That wave must
+  preflight/census it and delete `Dvar_AddCommands`, `Dvar_Set_f`,
+  `Dvar_SetA_f`, `Com_DvarDump`, `info1`, and `info2` together. B2 claims only
+  dvar registration/policy readback, never dvar command behavior.
 - The new exact line is
   `cominit-spine=Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced`.
   It is emitted only after `Com_Init` returns and the policy/fence postcondition
   passes. The frozen B1 line and all earlier markers remain separately armed.
-- B2 deliberately lets the first hosted link expose the remaining undefined
-  owner set from `common.cpp`; preserved full xcodebuild logs define the next
-  5-10-owner closure. Do not weaken the archive membership, provenance denies,
-  or new marker assertion to get past that evidence-producing failure.
+- Game installation metadata is committed in `docs/ASSET_INVENTORY.md`; all
+  five MP boot zones are present on the user's Windows machine. Assets remain
+  forbidden from Git, CI, artifacts, and logs.
 - This Windows seat must not push or invoke `gh`; the coordination seat owns
   push and hosted-CI observation. Physical-iPad M13/M14 proof remains open and
   is not a blocker for hosted Phase 3 waves.
@@ -229,20 +232,19 @@ link/runtime proof is still required before that replacement is accepted.
    is the only remaining Phase 2 boundary and does not invalidate the hosted
    proof while hardware is unavailable. It may be deferred while Phase 3
    begins, but it is mandatory before any physical-device M13/M14 claim.
-2. Coordinator: report the pending B1/Mac-lab staging verdicts, push the local
-   B2 candidate to staging, and preserve the complete simulator/device linker
-   diagnostics. If B2 links, require both exact Com_Init lines plus unchanged
-   M13/FS/M14, the nine-member archive/provenance checks, unsigned device IPA,
-   and Windows Debug/Release. If it does not link, the undefined list defines
-   the next 5-10-owner closure; do not weaken the assertions or add benign
-   defaults.
-3. After Phase 3, follow `docs/FASTFILE_PLAN.md` FF0-FF3 with synthetic zones.
+2. Coordinator: push the local 119-symbol closure fix to staging. Require
+   census 35/35, Windows Debug/Release, zero remaining undefined/duplicate
+   symbols in both app lanes, exact nine-member archive/provenance, unsigned
+   device IPA, and all five simulator marker assertions. A named scaffold
+   abort is a B2 failure, not permission to weaken the fence or marker.
+3. Next Sol turn: adversarially review `docs/ROADMAP_TO_PLAYABLE.md`,
+   `docs/OAT_EVALUATION.md`, and both knowledge packs, then reorder the plan
+   around the physical-iPad in-game screenshot posted to GitHub. Web research
+   is permitted; do not start that critique inside this closure-fix slice.
+4. After Phase 3, follow `docs/FASTFILE_PLAN.md` FF0-FF3 with synthetic zones.
    Before hand-writing FF2 maps for pointer-bearing structs, evaluate the
    GPL-3.0 OpenAssetTools IW3 `ZoneCodeGenerator` as the translation core and
    record fit/no-fit reasoning and required credit in the plan.
-4. When the user supplies the Steam install path, inventory it read-only into
-   `docs/ASSET_INVENTORY.md`: filenames, sizes, and hashes only. Game files
-   must never enter Git, CI, artifacts, or logs; FF4 is local-offline only.
 
 ## Guardrails
 
