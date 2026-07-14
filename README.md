@@ -191,15 +191,15 @@ Everything between today's state and *playing Call of Duty 4 on an iPad*, in
 dependency order. Checked items are machine-verified in CI or on device.
 
 - [x] **Toolchain + app shell** — Metal render loop, settings, controllers, signing, device installs
-- [x] **Engine compiles for iOS** — 35/35 census TUs (pmove/jump/slide/mantle closure, the real filesystem, `common.cpp`, `Com_Init`'s own TU)
+- [x] **Engine compiles for iOS** — 36/36 census TUs (pmove/jump/slide/mantle closure, the real filesystem, `common.cpp`, `Com_Init`'s own TU)
 - [x] **Renderer runtime** — D3D9→DXVK→Vulkan→MoltenVK→Metal live on device (Clear/readback/Present verified pixel-exact, journal M12)
 - [x] **First engine code executing on device** — math/bit-packing/string smoke, exact expected values
 - [x] **Engine subsystems boot in simulator** — real memory/dvar/command cold-start init, behavioral markers (journal M13)
 - [x] **Player movement sandbox** — real `bg_pmove` walks, jumps, lands, and stops on a synthetic world; exact simulator proof plus thumbstick/HUD wiring (journal M14)
 - [x] **Real filesystem on iOS** — `FS_InitFilesystem` under an explicit headless policy; engine write/read/delete round trip (Phase 3 Wave 1)
 - [ ] **Headless `Com_Init`** — real `Com_Init` entered on a cold path (in progress); remaining: net/msg loopback, the event-loop probe, the M15 marker
-- [ ] **Windows asset oracle** — dump modes on the Windows build; evidence run against the five inventoried boot zones plus `mp_killhouse.ff` (local only, never in CI)
-- [ ] **Layout-map generation** — per-struct 32-bit offset/size/pointer tables; OAT generator extension is spike-gated with a KisakCOD-header fallback
+- [x] **Windows asset oracle** — CI-built dump tool; all five boot zones plus `mp_killhouse.ff` parse clean on first contact (evidence run stays local, never in CI; sanitized findings in [docs/REAL_ZONE_EVIDENCE.md](docs/REAL_ZONE_EVIDENCE.md))
+- [x] **Layout-map generation** — per-struct 32-bit offset/size tables derived two independent ways (OAT's generator and KisakCOD's own headers under MSVC); zero numeric divergence across 17 structures / 155 members, conformance diff now runs in CI
 - [ ] **Fastfile translation kernel** — inflate/staging/32→64 fills proven on synthetic zones against the oracle. *The dominant remaining cost.*
 - [ ] **Oracle-derived asset waves + renderer integration** — only the observed boot/map closure; `R_Init` and the DXVK dummy-resource fix land with the first material wave
 - [ ] **`mp_killhouse` direct-client closure** — link and run only the TUs a direct map start reaches; map zone loads, client snapshot, cgame renders
