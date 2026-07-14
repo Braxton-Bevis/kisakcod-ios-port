@@ -205,6 +205,37 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # Slice 6 engine half: MSVC-derived KISAK layout manifests diffed against
+      # the OAT spike manifests. ADVISORY until the two known divergences
+      # (docs/LAYOUT_CONFORMANCE.md) are adjudicated with this step's numeric
+      # evidence; then it hardens into a fail-the-build gate. Always exits 0 so
+      # artifact uploads and slice-2 tooling are never blocked by a red here.
+      - name: Layout conformance (slice 6, advisory until adjudicated)
+        id: layout_conformance
+        shell: powershell
+        run: |
+          $line = ""
+          try {
+            & .\tools\layout_conformance\run-windows-ci.ps1 -Configuration ${{ matrix.config }} -DxSdkInclude "$env:incDir"
+            $line = "BMK4_LAYOUT_CONFORMANCE=green"
+          } catch {
+            $line = "BMK4_LAYOUT_CONFORMANCE=red detail=$($_.Exception.Message)"
+          }
+          Write-Host $line
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+          exit 0
+
+      - name: Upload layout conformance report
+        id: upload_layout_report
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-conformance-${{ matrix.config }}
+          path: |
+            ${{ github.workspace }}/build-layout-conformance-${{ matrix.config }}/layout-conformance-report.txt
+            ${{ github.workspace }}/build-layout-conformance-${{ matrix.config }}/run1/*.layout
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Verdict for coordinator
         if: github.ref == 'refs/heads/staging' && always()
         shell: powershell
