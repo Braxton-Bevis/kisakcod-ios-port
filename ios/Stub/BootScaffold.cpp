@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <pthread.h>
+#include <unistd.h> // sysconf(_SC_NPROCESSORS_ONLN) in Sys_GetCpuCount
 
 // Minimal ABI-identical dvar layout. Only current.enabled is read by the
 // hunk bootstrap globals, but keeping the complete layout prevents a false
