@@ -70,14 +70,20 @@ int getBuildNumberAsInt();
 #define CPUSTRING "ios-arm64"
 #endif
 
-// Stage B2 stops after the real early common spine has registered its policy
-// dvars and initialized the command/hunk owners. Later waves move this fence
-// toward the unmodified tail as their real owners join the exact archive.
+// Stage B3 stops after the real early common spine and loopback network owners
+// initialize. Later waves move this fence toward the unmodified tail as their
+// real owners join the exact archive.
 static bool com_iOSBootSpineReached;
+static bool com_iOSBootNetInitialized;
 
 bool Com_iOS_BootSpineReached()
 {
     return com_iOSBootSpineReached;
+}
+
+bool Com_iOS_BootNetInitialized()
+{
+    return com_iOSBootNetInitialized;
 }
 #endif
 
@@ -1135,6 +1141,7 @@ void __cdecl Com_Init(char* commandLine)
 
 #ifdef KISAK_IOS
     com_iOSBootSpineReached = false;
+    com_iOSBootNetInitialized = false;
 #endif
     Value = (jmp_buf *)Sys_GetValue(2);
 
@@ -1348,18 +1355,27 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 #ifdef KISAK_IOS
     if (FS_iOS_HeadlessNoAssetsRequested())
     {
-        // Explicit, temporary Stage B2 boundary. The production script-string,
-        // filesystem, server, client, renderer, sound, and database owners are
-        // outside this wave and remain forbidden at runtime. This path still
-        // enters the engine's real Com_Init function, command initialization,
-        // dvar policy registration, endian setup, and hunk initialization.
+        // Explicit, temporary Stage B3 boundary. The production script-string,
+        // filesystem, server, client, renderer, sound, and database tails are
+        // outside this wave and remain forbidden at runtime. This path enters
+        // real Com_Init, command/dvar/endian/hunk initialization, Netchan_Init,
+        // and NET_Init under the iOS loopback-only socket policy.
         Swap_Init();
         Cbuf_Init();
         Cmd_Init();
         Com_StartupVariable(0);
         Com_InitDvars();
         Com_InitHunkMemory();
+        NET_iOS_SetLoopbackOnly(true);
+        Netchan_Init((__int16)__rdtsc());
+        NET_Init();
+        // The explicit Stage B fence remains active even if socket creation
+        // fails; the separate B3 flag makes that failure observable without
+        // falling through into unrelated script/server/client abort tails.
         com_iOSBootSpineReached = true;
+        if (!NET_iOS_IsLoopbackOnly() || NET_iOS_GetOpenSocketCount() != 1)
+            return;
+        com_iOSBootNetInitialized = true;
         return;
     }
 #endif

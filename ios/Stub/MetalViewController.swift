@@ -82,6 +82,9 @@ final class MetalViewController: UIViewController {
     // Retained M13 hunk/dvar/command behavioral marker, now post-init only.
     private var bootStatus = "pending"
 
+    // Phase 3 B3: real Netchan/NET init plus msg encode/decode over loopback.
+    private var netStatus = "waiting for boot"
+
     // Phase 3 Wave 1: real FS_InitFilesystem plus a Documents round trip.
     private static let fsProofOK = "FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets"
     private var fsStatus = "waiting for boot"
@@ -240,19 +243,39 @@ final class MetalViewController: UIViewController {
                 NSLog("KISAK_BOOT_PROBE %@", result)
                 try? FileManager.default.removeItem(at: sentinel)
                 if result.hasPrefix("hunk OK") {
+                    self.runNetSmoke()
                     self.runFSSmoke()
                 } else {
+                    self.netStatus = "blocked by boot probe failure"
                     self.fsStatus = "blocked by boot probe failure"
                     self.pmoveProofStatus = "blocked by boot probe failure"
                 }
             } else {
                 try? FileManager.default.removeItem(at: sentinel)
                 self.bootStatus = "blocked by Com_Init stage failure"
+                self.netStatus = "blocked by Com_Init stage failure"
                 self.fsStatus = "blocked by Com_Init stage failure"
                 self.pmoveProofStatus = "blocked by Com_Init stage failure"
             }
             self.writeFirstFrameMarker()
         }
+    }
+
+    private func runNetSmoke() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("net_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            netStatus = "skipped — crashed \(crashes)x"
+            return
+        }
+
+        try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+        let result = String(cString: kisak_boot_net_smoke())
+        try? FileManager.default.removeItem(at: sentinel)
+        netStatus = result
+        NSLog("KISAK_NET_SMOKE %@", result)
+        writeFirstFrameMarker()
     }
 
     private func runFSSmoke() {
@@ -648,6 +671,7 @@ final class MetalViewController: UIViewController {
             Com_Init preflight: \(comInitPreflightStatus)
             Com_Init spine: \(comInitSpineStatus)
             boot: \(bootStatus)
+            network: \(netStatus)
             filesystem: \(fsStatus)
             pmove proof: \(pmoveProofStatus)
             pmove live: \(pmoveLiveStatus)
@@ -679,6 +703,7 @@ final class MetalViewController: UIViewController {
         cominit-preflight=\(comInitPreflightStatus)
         cominit-spine=\(comInitSpineStatus)
         boot=\(bootStatus)
+        net=\(netStatus)
         fs=\(fsStatus)
         pmove=\(pmoveProofStatus)
         pmoveLive=\(pmoveLiveStatus)

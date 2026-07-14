@@ -43,6 +43,45 @@ static SOCKET	ipx_socket = 0; // IPX is dead code on iOS; 0 = "no socket" so Sys
 static SOCKET	ipx_socket = INVALID_SOCKET;
 #endif
 
+#ifdef KISAK_IOS
+static bool net_iOSLoopbackOnly;
+
+void NET_iOS_SetLoopbackOnly(bool enabled)
+{
+	net_iOSLoopbackOnly = enabled;
+}
+
+bool NET_iOS_IsLoopbackOnly(void)
+{
+	sockaddr_in boundAddress;
+	socklen_t boundAddressLength = sizeof(boundAddress);
+
+	if (!net_iOSLoopbackOnly || ip_socket == 0 || ip_socket == INVALID_SOCKET
+		|| (socks_socket != 0 && socks_socket != INVALID_SOCKET)
+		|| (ipx_socket != 0 && ipx_socket != INVALID_SOCKET))
+	{
+		return false;
+	}
+	memset(&boundAddress, 0, sizeof(boundAddress));
+	if (getsockname(ip_socket, (sockaddr *)&boundAddress, &boundAddressLength) == -1)
+		return false;
+	return boundAddress.sin_family == AF_INET
+		&& boundAddress.sin_addr.s_addr == htonl(INADDR_LOOPBACK);
+}
+
+int NET_iOS_GetOpenSocketCount(void)
+{
+	int count = 0;
+	if (ip_socket != 0 && ip_socket != INVALID_SOCKET)
+		++count;
+	if (socks_socket != 0 && socks_socket != INVALID_SOCKET)
+		++count;
+	if (ipx_socket != 0 && ipx_socket != INVALID_SOCKET)
+		++count;
+	return count;
+}
+#endif
+
 #define	MAX_IPS		16
 static	int		numIP;
 static	byte	localIP[MAX_IPS][4];
@@ -443,6 +482,18 @@ char __cdecl Sys_SendPacket(int length, unsigned __int8 *data, netadr_t to)
 	int ret; // [esp+14h] [ebp-Ch]
 	uint32_t net_socket; // [esp+18h] [ebp-8h]
 
+#ifdef KISAK_IOS
+	// Stage B3 may exercise the in-memory NA_LOOPBACK path, but no packet from
+	// the headless boot is allowed onto a non-loopback interface. Keep this
+	// guard at the final BSD send seam so later callers cannot bypass policy.
+	if (net_iOSLoopbackOnly
+		&& (to.type != NA_IP || to.ip[0] != 127 || to.ip[1] || to.ip[2] || to.ip[3] != 1))
+	{
+		Com_PrintWarning(16, "NET iOS loopback policy refused outbound packet\n");
+		return 0;
+	}
+#endif
+
 	net_socket = 0;
 	switch (to.type)
 	{
@@ -574,6 +625,42 @@ NET_IPSocket
 */
 uint32_t __cdecl NET_IPSocket(const char *net_interface, int port)
 {
+#ifdef KISAK_IOS
+	if (net_iOSLoopbackOnly)
+	{
+		int nonblocking = 1;
+		SOCKET loopbackSocket;
+		sockaddr_in loopbackAddress;
+
+		(void)net_interface;
+		Com_Printf(16, "Opening iOS loopback-only UDP socket: 127.0.0.1:%i\n", port);
+		loopbackSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+		if (loopbackSocket == INVALID_SOCKET)
+		{
+			Com_PrintWarning(16, "WARNING: iOS loopback socket: %s\n", NET_ErrorString());
+			return 0;
+		}
+		if (ioctlsocket(loopbackSocket, 0x8004667E, &nonblocking) == -1)
+		{
+			Com_PrintWarning(16, "WARNING: iOS loopback nonblocking: %s\n", NET_ErrorString());
+			closesocket(loopbackSocket);
+			return 0;
+		}
+		memset(&loopbackAddress, 0, sizeof(loopbackAddress));
+		loopbackAddress.sin_len = sizeof(loopbackAddress);
+		loopbackAddress.sin_family = AF_INET;
+		loopbackAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		loopbackAddress.sin_port = port == -1 ? 0 : htons(port);
+		if (bind(loopbackSocket, (sockaddr *)&loopbackAddress, sizeof(loopbackAddress)) == -1)
+		{
+			Com_PrintWarning(16, "WARNING: iOS loopback bind: %s\n", NET_ErrorString());
+			closesocket(loopbackSocket);
+			return 0;
+		}
+		return (uint32_t)loopbackSocket;
+	}
+#endif
+
 	const char *v2; // eax
 	const char *v4; // eax
 	const char *v5; // eax
@@ -986,9 +1073,27 @@ void __cdecl NET_OpenIP()
 			break;
 	}
 	Dvar_SetInt(port, i + port->current.integer);
+#ifdef KISAK_IOS
+	if (!net_iOSLoopbackOnly && net_socksEnabled->current.enabled)
+		NET_OpenSocks(i + port->current.integer);
+	if (net_iOSLoopbackOnly)
+	{
+		numIP = 1;
+		localIP[0][0] = 127;
+		localIP[0][1] = 0;
+		localIP[0][2] = 0;
+		localIP[0][3] = 1;
+		Com_Printf(16, "IP: 127.0.0.1 (iOS headless loopback policy)\n");
+	}
+	else
+	{
+		NET_GetLocalAddress();
+	}
+#else
 	if (net_socksEnabled->current.enabled)
 		NET_OpenSocks(i + port->current.integer);
 	NET_GetLocalAddress();
+#endif
 }
 
 
@@ -1174,8 +1279,13 @@ void __cdecl NET_Config(int enableNetworking)
 		{
 			if (!net_noudp->current.enabled)
 				NET_OpenIP();
+#ifdef KISAK_IOS
+			if (!net_iOSLoopbackOnly && !net_noipx->current.enabled)
+				NET_OpenIPX();
+#else
 			if (!net_noipx->current.enabled)
 				NET_OpenIPX();
+#endif
 		}
 	}
 }
@@ -1201,7 +1311,12 @@ void __cdecl NET_Init()
 		Com_Printf(16, "Winsock Initialized\n");
 		NET_GetDvars();
 		NET_Config(1);
+#ifdef KISAK_IOS
+		// win_net_debug opens remote debug streams. They are outside B3 and
+		// forbidden by the loopback-only CI policy, so no debug socket is made.
+#else
 		NET_InitDebug();
+#endif
 	}
 }
 

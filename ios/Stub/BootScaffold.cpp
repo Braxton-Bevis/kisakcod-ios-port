@@ -11,10 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
 #include <pthread.h>
-#include <sched.h>
-#include <unistd.h>
 
 // Minimal ABI-identical dvar layout. Only current.enabled is read by the
 // hunk bootstrap globals, but keeping the complete layout prevents a false
@@ -157,16 +154,6 @@ void ProfLoad_Begin(const char *) {}
 void ProfLoad_End() {}
 void ProfLoad_BeginTrackedValue(MapProfileTrackedValue) {}
 void ProfLoad_EndTrackedValue(MapProfileTrackedValue) {}
-
-void NET_Sleep(int msec)
-{
-    if (msec <= 0) {
-        sched_yield();
-        return;
-    }
-    timespec delay = { msec / 1000, (msec % 1000) * 1000000L };
-    nanosleep(&delay, nullptr);
-}
 
 struct BootString
 {
@@ -340,8 +327,6 @@ void Dvar_Set_f() BOOT_UNREACHED("Dvar_Set_f(B4 dvar_cmds owner)")
 void FS_ShutdownServerIwdNames() BOOT_UNREACHED("FS_ShutdownServerIwdNames")
 void FS_ShutdownServerReferencedFFs() BOOT_UNREACHED("FS_ShutdownServerReferencedFFs")
 void FS_ShutdownServerReferencedIwds() BOOT_UNREACHED("FS_ShutdownServerReferencedIwds")
-void FakeLag_Init() BOOT_UNREACHED("FakeLag_Init")
-void FakeLag_Shutdown() BOOT_UNREACHED("FakeLag_Shutdown")
 void ProfLoad_Deactivate() BOOT_UNREACHED("ProfLoad_Deactivate")
 void ProfLoad_Init() BOOT_UNREACHED("ProfLoad_Init")
 void ProfLoad_IsActive() BOOT_UNREACHED("ProfLoad_IsActive")
@@ -364,6 +349,10 @@ void CL_Frame(netsrc_t) BOOT_UNREACHED("CL_Frame")
 void CL_GetLocalClientConnection(int) BOOT_UNREACHED("CL_GetLocalClientConnection")
 void CL_InitKeyCommands() BOOT_UNREACHED("CL_InitKeyCommands")
 void CL_KeyEvent(int, int, int, unsigned int) BOOT_UNREACHED("CL_KeyEvent")
+// The netchan object references these only from dormant profiling paths; B3
+// registers the profile commands but never invokes them or client state.
+char CL_AnyLocalClientsRunning() BOOT_UNREACHED("CL_AnyLocalClientsRunning(network profiling tail)")
+void CL_Netchan_PrintProfileStats(int, int) BOOT_UNREACHED("CL_Netchan_PrintProfileStats(network profiling tail)")
 void CL_PacketEvent(netsrc_t, netadr_t, msg_t *, int) BOOT_UNREACHED("CL_PacketEvent")
 void CL_RunOncePerClientFrame(int, int) BOOT_UNREACHED("CL_RunOncePerClientFrame")
 void CL_Shutdown(int) BOOT_UNREACHED("CL_Shutdown")
@@ -409,16 +398,15 @@ void Scr_UpdateRemoteDebugger() BOOT_UNREACHED("Scr_UpdateRemoteDebugger")
 void XAnimInit() BOOT_UNREACHED("XAnimInit")
 void XAnimShutdown() BOOT_UNREACHED("XAnimShutdown")
 
-// Network/server owners: B3 loopback networking and later server waves.
-void NET_GetClientPacket(netadr_t *, msg_t *) BOOT_UNREACHED("NET_GetClientPacket")
-void NET_GetLoopPacket(netsrc_t, netadr_t *, msg_t *) BOOT_UNREACHED("NET_GetLoopPacket")
-void NET_GetServerPacket(netadr_t *, msg_t *) BOOT_UNREACHED("NET_GetServerPacket")
+// Network/server tails beyond the real B3 loopback owners now in the archive.
 void NET_RestartDebug() BOOT_UNREACHED("NET_RestartDebug")
 void NET_ShutdownDebug() BOOT_UNREACHED("NET_ShutdownDebug")
-void Netchan_Init(short) BOOT_UNREACHED("Netchan_Init")
 void SV_AddDedicatedCommands() BOOT_UNREACHED("SV_AddDedicatedCommands")
 void SV_Frame(int) BOOT_UNREACHED("SV_Frame")
 void SV_PacketEvent(netadr_t, msg_t *) BOOT_UNREACHED("SV_PacketEvent")
+// Server profile formatting is likewise referenced but unreachable until a
+// user explicitly runs the registered profiling command in a later wave.
+void SV_Netchan_PrintProfileStats(int) BOOT_UNREACHED("SV_Netchan_PrintProfileStats(network profiling tail)")
 void SV_Shutdown(const char *) BOOT_UNREACHED("SV_Shutdown")
 void SV_ShutdownGameProgs() BOOT_UNREACHED("SV_ShutdownGameProgs")
 
@@ -463,7 +451,6 @@ bool DB_IsMinimumFastFileLoaded() BOOT_UNREACHED("DB_IsMinimumFastFileLoaded")
 int Com_BlockChecksumKey32(const uint8_t *, uint32_t, uint32_t) BOOT_UNREACHED("Com_BlockChecksumKey32")
 // Com_SafeMode: real owner common.cpp joined the cominit archive (dupe
 // caught at CI run 29350156834; same graduated-owner class as Com_Filter).
-void NET_Init() BOOT_UNREACHED("NET_Init")
 void PMem_DumpMemStats() BOOT_UNREACHED("PMem_DumpMemStats")
 void R_BeginRemoteScreenUpdate() BOOT_UNREACHED("R_BeginRemoteScreenUpdate")
 void R_EndRemoteScreenUpdate() BOOT_UNREACHED("R_EndRemoteScreenUpdate")
