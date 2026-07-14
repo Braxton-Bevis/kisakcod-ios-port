@@ -1,0 +1,129 @@
+zone-layout-manifest-v1
+game "IW3"
+word-size 32
+pointer-size 4
+asset "RawFile"
+asset-tag "AssetRawFile"
+graph-semantics serialization-reachable
+foreign-assets terminal
+runtime-block-members terminal
+structure-count 1
+
+structure "RawFile"
+  kind struct
+  size 12
+  align 4
+  force-align false
+  asset-tag "AssetRawFile"
+  context-asset true
+  foreign-asset false
+  allocation-align -
+  block "XFILE_BLOCK_TEMP":index=0:type=temp:default=true
+  leaf false
+  requires-marking true
+  cross-platform-layout-match false
+  embedded-reference false
+  non-embedded-reference false
+  single-pointer-reference false
+  array-pointer-reference false
+  array-reference false
+  non-default-normal-block-reference false
+  member-count 3
+  member 0 "name"
+    type "char"
+    type-kind base
+    offset 0
+    size 4
+    align 4
+    force-align false
+    alignment-override -
+    const true
+    bit-size -
+    condition -
+    ignored false
+    allocation-align -
+    block -
+    string true
+    script-string false
+    reusable false
+    leaf false
+    asset-ref -
+    pointer-depth 1
+    embedded-reference false
+    single-pointer-reference true
+    array-pointer-reference false
+    pointer-array-reference false
+    array-reference false
+    dynamic false
+    runtime-block false
+    modifier-count 1
+    modifier 0 pointer
+      count "1"
+      count-is-array false
+      indexed-count-count 0
+    end-modifier
+  end-member
+  member 1 "len"
+    type "int"
+    type-kind base
+    offset 4
+    size 4
+    align 4
+    force-align false
+    alignment-override -
+    const false
+    bit-size -
+    condition -
+    ignored false
+    allocation-align -
+    block -
+    string false
+    script-string false
+    reusable false
+    leaf true
+    asset-ref -
+    pointer-depth 0
+    embedded-reference true
+    single-pointer-reference false
+    array-pointer-reference false
+    pointer-array-reference false
+    array-reference false
+    dynamic false
+    runtime-block false
+    modifier-count 0
+  end-member
+  member 2 "buffer"
+    type "char"
+    type-kind base
+    offset 8
+    size 4
+    align 4
+    force-align false
+    alignment-override -
+    const true
+    bit-size -
+    condition -
+    ignored false
+    allocation-align -
+    block -
+    string false
+    script-string false
+    reusable false
+    leaf false
+    asset-ref -
+    pointer-depth 1
+    embedded-reference false
+    single-pointer-reference false
+    array-pointer-reference true
+    pointer-array-reference false
+    array-reference false
+    dynamic false
+    runtime-block false
+    modifier-count 1
+    modifier 0 pointer
+      count "varRawFile->len + 1"
+      count-is-array true
+      indexed-count-count 0
+    end-modifier
+  end-member
+end-structure

@@ -1,0 +1,5977 @@
+From be7f59293a26d5126d9a4127c86b299d32019eb4 Mon Sep 17 00:00:00 2001
+From: Braxton Bevis <bobevis1@crimson.ua.edu>
+Date: Tue, 14 Jul 2026 11:59:14 -0500
+Subject: [PATCH] Spike IW3 zone layout manifest generation
+
+---
+ .gitattributes                                |    1 +
+ .../bmk4-slice6-zone-layout-manifest.md       |   43 +
+ .../Generating/CodeGenerator.cpp              |    2 +
+ .../Templates/ZoneLayoutManifestTemplate.cpp  |  341 ++
+ .../Templates/ZoneLayoutManifestTemplate.h    |   10 +
+ .../ZoneCodeGeneratorArguments.cpp            |    3 +-
+ .../ZoneLayoutManifest/iw3_menudef_t.layout   | 5209 +++++++++++++++++
+ .../IW3/ZoneLayoutManifest/iw3_rawfile.layout |  129 +
+ .../bmk4-slice6/Build-ZoneCodeGenerator.ps1   |   56 +
+ .../bmk4-slice6/Verify-ZoneLayoutManifest.ps1 |   76 +
+ 10 files changed, 5869 insertions(+), 1 deletion(-)
+ create mode 100644 docs/spikes/bmk4-slice6-zone-layout-manifest.md
+ create mode 100644 src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.cpp
+ create mode 100644 src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.h
+ create mode 100644 test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_menudef_t.layout
+ create mode 100644 test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_rawfile.layout
+ create mode 100644 tools/spikes/bmk4-slice6/Build-ZoneCodeGenerator.ps1
+ create mode 100644 tools/spikes/bmk4-slice6/Verify-ZoneLayoutManifest.ps1
+
+diff --git a/.gitattributes b/.gitattributes
+index b12513a..e01eae1 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -1,3 +1,4 @@
+ # All .sh files should be lf line endings
+ *.sh text eol=lf
++test/ZoneCodeGeneratorLibTests/Golden/**/*.layout text eol=lf
+ src/ModManUi/** text=auto eol=lf
+diff --git a/docs/spikes/bmk4-slice6-zone-layout-manifest.md b/docs/spikes/bmk4-slice6-zone-layout-manifest.md
+new file mode 100644
+index 0000000..900df30
+--- /dev/null
++++ b/docs/spikes/bmk4-slice6-zone-layout-manifest.md
+@@ -0,0 +1,43 @@
++# BMK4 slice 6 spike: IW3 zone layout manifests
++
++## Verdict
++
++**FEASIBLE.** `ZoneCodeGenerator` can expose its computed IW3 layout and serialization metadata through a new hard-registered output template. The spike emits deterministic manifests from `OncePerAssetRenderingContext` at the game word size (IW3 is 32-bit), without parsing the C header a second time.
++
++The context's closure is the same one used by the load/mark/write templates: inline serialization-reachable structures are traversed transitively; foreign asset references and runtime-block members are terminal edges. The manifest states these boundaries explicitly. Every member of every reached structure is still emitted, including statically ignored union arms, so size/alignment/offset comparisons do not hide ABI fields.
++
++## Evidence
++
++- `RawFile`: one structure, three members, 32-bit size 12/alignment 4; `buffer` has the generated count expression `len + 1`.
++- `menuDef_t` (`AssetMenu`): 17 structures and 155 members. Its closure includes `ItemKeyHandler`, `statement_s`, `expressionEntry`, `Operand`, `itemDef_s`, and `itemDefData_t`, as well as terminal `Material` and `snd_alias_list_t` asset edges.
++- The deep manifest records the `expressionEntry` operand condition, all four `itemDefData_t` live-arm conditions plus the statically disabled arm, the menu item/statement counts, block assignments, pointer/array shapes, and per-member offsets/sizes/alignments.
++- Two independent generations produced byte-identical output for all 25 IW3 assets. The checked-in RawFile and Menu goldens matched those runs byte for byte.
++
++Golden files:
++
++- `test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_rawfile.layout`
++- `test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_menudef_t.layout`
++
++## Exact build and run commands
++
++The spike host did not have Visual Studio installed, so the minimal proof used portable Zig 0.13.0 as the C++23 driver. From the OAT repository root:
++
++```powershell
++New-Item -ItemType Directory -Force build | Out-Null
++node -e "const https=require('https'),fs=require('fs');https.get('https://ziglang.org/download/0.13.0/zig-windows-x86_64-0.13.0.zip',r=>r.pipe(fs.createWriteStream('build/zig-0.13.0.zip')))"
++& 'C:\Program Files\Git\usr\bin\unzip.exe' -o build\zig-0.13.0.zip -d build
++powershell -ExecutionPolicy Bypass -File tools\spikes\bmk4-slice6\Build-ZoneCodeGenerator.ps1 -ZigPath build\zig-windows-x86_64-0.13.0\zig.exe
++powershell -ExecutionPolicy Bypass -File tools\spikes\bmk4-slice6\Verify-ZoneLayoutManifest.ps1
++```
++
++The verifier runs the equivalent generator command twice, compares every generated IW3 manifest byte for byte, then compares the two requested outputs with the checked-in goldens:
++
++```powershell
++build\bmk4-spike\ZoneCodeGenerator.exe --no-color -h src\ZoneCode\Game\IW3\IW3_ZoneCode.h -c src\ZoneCode\Game\IW3\IW3_Commands.txt -o build\bmk4-spike\golden-test\run1 -g ZoneLayoutManifest
++```
++
++## Full adoption estimate and BMK4 consumption
++
++Estimate: **3-5 engineer-days** after this spike. Allow 1-2 days to freeze/version the manifest schema and add focused C++ tests for typedefs, anonymous aggregates, indexed counts, bitfields, runtime blocks, and foreign assets; 1-2 days for a BMK4 parser/normalizer and comparison report; and about one day to run the full IW3 set and triage genuine OAT/Kisak divergences.
++
++BMK4 should consume only normalized records needed by its translation gate: game/pointer size, structure kind/name/size/alignment, member name/type/offset/size/alignment, declaration modifier shape, count/condition/allocation expressions, block identity/type, and string/script-string/reusable/asset-reference flags. Kisak's own headers and Windows behavior remain authoritative; OAT supplies a mechanically independent schema and generator cross-check.
+diff --git a/src/ZoneCodeGeneratorLib/Generating/CodeGenerator.cpp b/src/ZoneCodeGeneratorLib/Generating/CodeGenerator.cpp
+index 71c403e..cb8af75 100644
+--- a/src/ZoneCodeGeneratorLib/Generating/CodeGenerator.cpp
++++ b/src/ZoneCodeGeneratorLib/Generating/CodeGenerator.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include "Domain/Computations/StructureComputations.h"
+ #include "Templates/AssetStructTestsTemplate.h"
++#include "Templates/ZoneLayoutManifestTemplate.h"
+ #include "Templates/ZoneLoadTemplate.h"
+ #include "Templates/ZoneMarkTemplate.h"
+ #include "Templates/ZoneWriteTemplate.h"
+@@ -27,6 +28,7 @@ void CodeGenerator::SetupTemplates()
+     m_template_mapping["zonemark"] = std::make_unique<ZoneMarkTemplate>();
+     m_template_mapping["zonewrite"] = std::make_unique<ZoneWriteTemplate>();
+     m_template_mapping["assetstructtests"] = std::make_unique<AssetStructTestsTemplate>();
++    m_template_mapping["zonelayoutmanifest"] = std::make_unique<ZoneLayoutManifestTemplate>();
+ }
+ 
+ utils::TextFileCheckDirtyResult CodeGenerator::GenerateCodeOncePerTemplate(const OncePerTemplateRenderingContext& context, ICodeTemplate* codeTemplate) const
+diff --git a/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.cpp b/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.cpp
+new file mode 100644
+index 0000000..1542297
+--- /dev/null
++++ b/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.cpp
+@@ -0,0 +1,341 @@
++#include "ZoneLayoutManifestTemplate.h"
++
++#include "Domain/Computations/MemberComputations.h"
++#include "Domain/Computations/StructureComputations.h"
++#include "Domain/Definition/ArrayDeclarationModifier.h"
++#include "Domain/Definition/PointerDeclarationModifier.h"
++#include "Internal/BaseTemplate.h"
++#include "Utils/StringUtils.h"
++
++#include <algorithm>
++#include <cassert>
++#include <cctype>
++#include <format>
++#include <iomanip>
++#include <sstream>
++#include <unordered_map>
++
++namespace
++{
++    constexpr int TAG_MANIFEST = 1;
++
++    const char* DefinitionTypeName(const DataDefinitionType type)
++    {
++        switch (type)
++        {
++        case DataDefinitionType::STRUCT:
++            return "struct";
++        case DataDefinitionType::UNION:
++            return "union";
++        case DataDefinitionType::ENUM:
++            return "enum";
++        case DataDefinitionType::TYPEDEF:
++            return "typedef";
++        case DataDefinitionType::BASE_TYPE:
++            return "base";
++        case DataDefinitionType::FORWARD_DECLARATION:
++            return "forward-declaration";
++        }
++
++        return "unknown";
++    }
++
++    const char* BlockTypeName(const FastFileBlockType type)
++    {
++        switch (type)
++        {
++        case FastFileBlockType::TEMP:
++            return "temp";
++        case FastFileBlockType::RUNTIME:
++            return "runtime";
++        case FastFileBlockType::DELAY:
++            return "delay";
++        case FastFileBlockType::NORMAL:
++            return "normal";
++        }
++
++        return "unknown";
++    }
++
++    std::string Quote(const std::string& value)
++    {
++        std::ostringstream str;
++        str << std::quoted(value);
++        return str.str();
++    }
++
++    std::string Bool(const bool value)
++    {
++        return value ? "true" : "false";
++    }
++
++    class PerAsset final : BaseTemplate
++    {
++    public:
++        PerAsset(std::ostream& stream, const OncePerAssetRenderingContext& context)
++            : BaseTemplate(stream, context),
++              m_env(context)
++        {
++        }
++
++        void Manifest()
++        {
++            BuildStableNames();
++
++            std::vector<const RenderingUsedType*> structures;
++            structures.reserve(m_env.m_used_structures.size());
++            for (const auto* usedType : m_env.m_used_structures)
++                structures.push_back(usedType);
++
++            std::ranges::sort(structures,
++                              [this](const RenderingUsedType* lhs, const RenderingUsedType* rhs)
++                              {
++                                  const auto lhsName = StableName(lhs->m_info->m_definition);
++                                  const auto rhsName = StableName(rhs->m_info->m_definition);
++                                  if (lhsName != rhsName)
++                                      return lhsName < rhsName;
++                                  return lhs->m_info->m_definition->GetType() < rhs->m_info->m_definition->GetType();
++                              });
++
++            LINE("zone-layout-manifest-v1")
++            LINEF("game {}", Quote(m_env.m_game))
++            LINEF("word-size {}", m_env.m_pointer_size * 8u)
++            LINEF("pointer-size {}", m_env.m_pointer_size)
++            LINEF("asset {}", Quote(StableName(m_env.m_asset->m_definition)))
++            LINEF("asset-tag {}", Quote(m_env.m_asset->m_asset_name))
++            LINE("graph-semantics serialization-reachable")
++            LINE("foreign-assets terminal")
++            LINE("runtime-block-members terminal")
++            LINEF("structure-count {}", structures.size())
++
++            for (const auto* structure : structures)
++            {
++                LINE("")
++                Structure(*structure);
++            }
++        }
++
++    private:
++        static std::string AnonymousPathComponent(const DefinitionWithMembers* definition, const Variable* member, const size_t memberIndex)
++        {
++            const auto memberName = member->m_name.empty() ? std::to_string(memberIndex) : std::format("{}-{}", memberIndex, member->m_name);
++            return std::format("<anonymous-{}-{}>", DefinitionTypeName(definition->GetType()), memberName);
++        }
++
++        void BuildStableNames()
++        {
++            for (const auto* usedType : m_env.m_used_structures)
++            {
++                const auto* definition = usedType->m_info->m_definition;
++                if (!definition->IsAnonymous())
++                    m_stable_names.emplace(definition, definition->GetFullName());
++            }
++
++            bool changed;
++            do
++            {
++                changed = false;
++                for (const auto* usedType : m_env.m_used_structures)
++                {
++                    const auto* parent = usedType->m_info->m_definition;
++                    const auto foundParentName = m_stable_names.find(parent);
++                    if (foundParentName == m_stable_names.end())
++                        continue;
++
++                    const auto& members = usedType->m_info->m_ordered_members;
++                    for (auto memberIndex = 0u; memberIndex < members.size(); memberIndex++)
++                    {
++                        const auto* child = members[memberIndex]->m_type ? members[memberIndex]->m_type->m_definition : nullptr;
++                        if (child == nullptr || !child->IsAnonymous())
++                            continue;
++
++                        const auto candidate = std::format(
++                            "{}::{}", foundParentName->second, AnonymousPathComponent(child, members[memberIndex]->m_member, memberIndex));
++                        const auto foundChildName = m_stable_names.find(child);
++                        if (foundChildName == m_stable_names.end())
++                        {
++                            m_stable_names.emplace(child, candidate);
++                            changed = true;
++                        }
++                        else if (candidate < foundChildName->second)
++                        {
++                            foundChildName->second = candidate;
++                            changed = true;
++                        }
++                    }
++                }
++            } while (changed);
++        }
++
++        std::string StableName(const DataDefinition* definition) const
++        {
++            const auto* definitionWithMembers = dynamic_cast<const DefinitionWithMembers*>(definition);
++            if (definitionWithMembers == nullptr || !definitionWithMembers->IsAnonymous())
++                return definition->GetFullName();
++
++            const auto foundName = m_stable_names.find(definitionWithMembers);
++            return foundName == m_stable_names.end() ? "<anonymous-unreached>" : foundName->second;
++        }
++
++        static std::string ExpressionSafeName(const std::string& name)
++        {
++            std::string result;
++            result.reserve(name.size());
++            for (const auto c : name)
++                result.push_back(isalnum(static_cast<unsigned char>(c)) ? c : '_');
++            return result;
++        }
++
++        std::string Evaluation(const IEvaluation* evaluation) const
++        {
++            if (evaluation == nullptr)
++                return "-";
++
++            auto rendered = MakeEvaluation(evaluation);
++            for (const auto& [definition, stableName] : m_stable_names)
++            {
++                if (!definition->IsAnonymous())
++                    continue;
++
++                const auto randomName = std::format("var{}", definition->m_name);
++                const auto normalizedName = std::format("var{}", ExpressionSafeName(stableName));
++                for (auto position = rendered.find(randomName); position != std::string::npos; position = rendered.find(randomName, position + normalizedName.size()))
++                    rendered.replace(position, randomName.size(), normalizedName);
++            }
++
++            return Quote(rendered);
++        }
++
++        static std::string Block(const FastFileBlock* block)
++        {
++            if (block == nullptr)
++                return "-";
++
++            return std::format("{}:index={}:type={}:default={}", Quote(block->m_name), block->m_index, BlockTypeName(block->m_type), Bool(block->m_is_default));
++        }
++
++        void Structure(const RenderingUsedType& usedType)
++        {
++            const auto* info = usedType.m_info;
++            const auto* definition = info->m_definition;
++            const StructureComputations computations(info);
++            const auto isForeignAsset = computations.IsAsset() && !usedType.m_is_context_asset;
++
++            LINEF("structure {}", Quote(StableName(definition)))
++            LINEF("  kind {}", DefinitionTypeName(definition->GetType()))
++            LINEF("  size {}", definition->GetSize())
++            LINEF("  align {}", definition->GetAlignment())
++            LINEF("  force-align {}", Bool(definition->GetForceAlignment()))
++            LINEF("  asset-tag {}", info->m_asset_name.empty() ? "-" : Quote(info->m_asset_name))
++            LINEF("  context-asset {}", Bool(usedType.m_is_context_asset))
++            LINEF("  foreign-asset {}", Bool(isForeignAsset))
++            LINEF("  allocation-align {}", Evaluation(info->m_alloc_alignment.get()))
++            LINEF("  block {}", Block(info->m_block))
++            LINEF("  leaf {}", Bool(info->m_is_leaf))
++            LINEF("  requires-marking {}", Bool(info->m_requires_marking))
++            LINEF("  cross-platform-layout-match {}", Bool(info->m_has_matching_cross_platform_structure))
++            LINEF("  embedded-reference {}", Bool(info->m_embedded_reference_exists))
++            LINEF("  non-embedded-reference {}", Bool(info->m_non_embedded_reference_exists))
++            LINEF("  single-pointer-reference {}", Bool(info->m_single_pointer_reference_exists))
++            LINEF("  array-pointer-reference {}", Bool(info->m_array_pointer_reference_exists))
++            LINEF("  array-reference {}", Bool(info->m_array_reference_exists))
++            LINEF("  non-default-normal-block-reference {}", Bool(info->m_reference_from_non_default_normal_block_exists))
++            LINEF("  member-count {}", info->m_ordered_members.size())
++
++            for (auto memberIndex = 0u; memberIndex < info->m_ordered_members.size(); memberIndex++)
++                Member(memberIndex, *info->m_ordered_members[memberIndex]);
++
++            LINE("end-structure")
++        }
++
++        void Member(const size_t memberIndex, const MemberInformation& info)
++        {
++            const auto* variable = info.m_member;
++            const auto* declaration = variable->m_type_declaration.get();
++            const MemberComputations computations(&info);
++
++            LINEF("  member {} {}", memberIndex, Quote(variable->m_name))
++            LINEF("    type {}", Quote(StableName(declaration->m_type)))
++            LINEF("    type-kind {}", DefinitionTypeName(declaration->m_type->GetType()))
++            LINEF("    offset {}", variable->m_offset)
++            LINEF("    size {}", declaration->GetSize())
++            LINEF("    align {}", declaration->GetAlignment())
++            LINEF("    force-align {}", Bool(declaration->GetForceAlignment()))
++            LINEF("    alignment-override {}", variable->m_has_alignment_override ? std::to_string(variable->m_alignment_override) : "-")
++            LINEF("    const {}", Bool(declaration->m_is_const))
++            LINEF("    bit-size {}", declaration->m_has_custom_bit_size ? std::to_string(declaration->m_custom_bit_size) : "-")
++            LINEF("    condition {}", Evaluation(info.m_condition.get()))
++            LINEF("    ignored {}", Bool(computations.ShouldIgnore()))
++            LINEF("    allocation-align {}", Evaluation(info.m_alloc_alignment.get()))
++            LINEF("    block {}", Block(info.m_fast_file_block))
++            LINEF("    string {}", Bool(info.m_is_string))
++            LINEF("    script-string {}", Bool(info.m_is_script_string))
++            LINEF("    reusable {}", Bool(info.m_is_reusable))
++            LINEF("    leaf {}", Bool(info.m_is_leaf))
++            LINEF("    asset-ref {}", info.m_asset_ref.empty() ? "-" : Quote(info.m_asset_ref))
++            LINEF("    pointer-depth {}", computations.GetPointerDepth())
++            LINEF("    embedded-reference {}", Bool(!computations.ContainsNonEmbeddedReference()))
++            LINEF("    single-pointer-reference {}", Bool(computations.ContainsSinglePointerReference()))
++            LINEF("    array-pointer-reference {}", Bool(computations.ContainsArrayPointerReference()))
++            LINEF("    pointer-array-reference {}", Bool(computations.ContainsPointerArrayReference()))
++            LINEF("    array-reference {}", Bool(computations.ContainsArrayReference()))
++            LINEF("    dynamic {}", Bool(computations.IsDynamicMember()))
++            LINEF("    runtime-block {}", Bool(computations.IsInRuntimeBlock()))
++            LINEF("    modifier-count {}", declaration->m_declaration_modifiers.size())
++
++            for (auto modifierIndex = 0u; modifierIndex < declaration->m_declaration_modifiers.size(); modifierIndex++)
++                Modifier(modifierIndex, *declaration->m_declaration_modifiers[modifierIndex]);
++
++            LINE("  end-member")
++        }
++
++        void Modifier(const size_t modifierIndex, const DeclarationModifier& modifier)
++        {
++            if (modifier.GetType() == DeclarationModifierType::ARRAY)
++            {
++                const auto& array = dynamic_cast<const ArrayDeclarationModifier&>(modifier);
++                LINEF("    modifier {} array", modifierIndex)
++                LINEF("      size {}", array.m_size)
++                LINEF("      dynamic-size {}", Evaluation(array.m_dynamic_size_evaluation.get()))
++                LINEF("      dynamic-count {}", Evaluation(array.m_dynamic_count_evaluation.get()))
++            }
++            else
++            {
++                const auto& pointer = dynamic_cast<const PointerDeclarationModifier&>(modifier);
++                LINEF("    modifier {} pointer", modifierIndex)
++                LINEF("      count {}", Evaluation(pointer.GetCountEvaluation()))
++                LINEF("      count-is-array {}", Bool(pointer.CountEvaluationIsArray()))
++                LINEF("      indexed-count-count {}", pointer.m_count_evaluation_by_array_index.size())
++                for (auto countIndex = 0u; countIndex < pointer.m_count_evaluation_by_array_index.size(); countIndex++)
++                {
++                    LINEF("      indexed-count {} {}", countIndex, Evaluation(pointer.m_count_evaluation_by_array_index[countIndex].get()))
++                }
++            }
++
++            LINE("    end-modifier")
++        }
++
++        const OncePerAssetRenderingContext& m_env;
++        std::unordered_map<const DefinitionWithMembers*, std::string> m_stable_names;
++    };
++} // namespace
++
++std::vector<CodeTemplateFile> ZoneLayoutManifestTemplate::GetFilesToRenderOncePerAsset(const OncePerAssetRenderingContext& context)
++{
++    auto assetName = context.m_asset->m_definition->m_name;
++    utils::MakeStringLowerCase(assetName);
++
++    auto gameName = context.m_game;
++    utils::MakeStringLowerCase(gameName);
++
++    return {CodeTemplateFile(std::format("ZoneLayoutManifest/{}/{}_{}.layout", gameName, gameName, assetName), TAG_MANIFEST)};
++}
++
++void ZoneLayoutManifestTemplate::RenderOncePerAssetFile(std::ostream& stream,
++                                                        const CodeTemplateFileTag fileTag,
++                                                        const OncePerAssetRenderingContext& context)
++{
++    assert(fileTag == TAG_MANIFEST);
++    if (fileTag == TAG_MANIFEST)
++        PerAsset(stream, context).Manifest();
++}
+diff --git a/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.h b/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.h
+new file mode 100644
+index 0000000..0ff4d14
+--- /dev/null
++++ b/src/ZoneCodeGeneratorLib/Generating/Templates/ZoneLayoutManifestTemplate.h
+@@ -0,0 +1,10 @@
++#pragma once
++
++#include "Generating/ICodeTemplate.h"
++
++class ZoneLayoutManifestTemplate final : public ICodeTemplate
++{
++public:
++    std::vector<CodeTemplateFile> GetFilesToRenderOncePerAsset(const OncePerAssetRenderingContext& context) override;
++    void RenderOncePerAssetFile(std::ostream& stream, CodeTemplateFileTag fileTag, const OncePerAssetRenderingContext& context) override;
++};
+diff --git a/src/ZoneCodeGeneratorLib/ZoneCodeGeneratorArguments.cpp b/src/ZoneCodeGeneratorLib/ZoneCodeGeneratorArguments.cpp
+index ec2d3d4..f7d3148 100644
+--- a/src/ZoneCodeGeneratorLib/ZoneCodeGeneratorArguments.cpp
++++ b/src/ZoneCodeGeneratorLib/ZoneCodeGeneratorArguments.cpp
+@@ -80,7 +80,8 @@ const CommandLineOption* const OPTION_GENERATE =
+     CommandLineOption::Builder::Create()
+     .WithShortName("g")
+     .WithLongName("generate")
+-    .WithDescription("Generates a specified preset. Can be used multiple times. Available presets: ZoneLoad, ZoneWrite, AssetStructTests")
++    .WithDescription(
++        "Generates a specified preset. Can be used multiple times. Available presets: ZoneLoad, ZoneMark, ZoneWrite, AssetStructTests, ZoneLayoutManifest")
+     .WithCategory(CATEGORY_OUTPUT)
+     .WithParameter("preset")
+     .Reusable()
+diff --git a/test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_menudef_t.layout b/test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_menudef_t.layout
+new file mode 100644
+index 0000000..cb2be67
+--- /dev/null
++++ b/test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_menudef_t.layout
+@@ -0,0 +1,5209 @@
++zone-layout-manifest-v1
++game "IW3"
++word-size 32
++pointer-size 4
++asset "menuDef_t"
++asset-tag "AssetMenu"
++graph-semantics serialization-reachable
++foreign-assets terminal
++runtime-block-members terminal
++structure-count 17
++
++structure "ItemKeyHandler"
++  kind struct
++  size 12
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 3
++  member 0 "key"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "action"
++    type "char"
++    type-kind base
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 2 "next"
++    type "ItemKeyHandler"
++    type-kind struct
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "Material"
++  kind struct
++  size 80
++  align 8
++  force-align false
++  asset-tag "AssetMaterial"
++  context-asset false
++  foreign-asset true
++  allocation-align "4"
++  block "XFILE_BLOCK_TEMP":index=0:type=temp:default=true
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 11
++  member 0 "info"
++    type "MaterialInfo"
++    type-kind struct
++    offset 0
++    size 24
++    align 8
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "stateBitsEntry"
++    type "char"
++    type-kind base
++    offset 24
++    size 34
++    align 1
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 34
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 2 "textureCount"
++    type "unsigned char"
++    type-kind base
++    offset 58
++    size 1
++    align 1
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "constantCount"
++    type "unsigned char"
++    type-kind base
++    offset 59
++    size 1
++    align 1
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "stateBitsCount"
++    type "unsigned char"
++    type-kind base
++    offset 60
++    size 1
++    align 1
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "stateFlags"
++    type "unsigned char"
++    type-kind base
++    offset 61
++    size 1
++    align 1
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 6 "cameraRegion"
++    type "unsigned char"
++    type-kind base
++    offset 62
++    size 1
++    align 1
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 7 "techniqueSet"
++    type "MaterialTechniqueSet"
++    type-kind struct
++    offset 64
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 8 "textureTable"
++    type "MaterialTextureDef"
++    type-kind struct
++    offset 68
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference false
++    array-pointer-reference true
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "varMaterial->textureCount"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 9 "constantTable"
++    type "MaterialConstantDef"
++    type-kind struct
++    offset 72
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference false
++    array-pointer-reference true
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "varMaterial->constantCount"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 10 "stateBitsTable"
++    type "GfxStateBits"
++    type-kind struct
++    offset 76
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference false
++    array-pointer-reference true
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "varMaterial->stateBitsCount"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "Operand"
++  kind struct
++  size 8
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 2
++  member 0 "dataType"
++    type "expDataType"
++    type-kind enum
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "internals"
++    type "operandInternalDataUnion"
++    type-kind union
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "columnInfo_s"
++  kind struct
++  size 16
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf true
++  requires-marking false
++  cross-platform-layout-match true
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference true
++  non-default-normal-block-reference false
++  member-count 4
++  member 0 "pos"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "width"
++    type "int"
++    type-kind base
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 2 "maxChars"
++    type "int"
++    type-kind base
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "alignment"
++    type "int"
++    type-kind base
++    offset 12
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "editFieldDef_s"
++  kind struct
++  size 32
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf true
++  requires-marking false
++  cross-platform-layout-match true
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 8
++  member 0 "minVal"
++    type "float"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "maxVal"
++    type "float"
++    type-kind base
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 2 "defVal"
++    type "float"
++    type-kind base
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "range"
++    type "float"
++    type-kind base
++    offset 12
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "maxChars"
++    type "int"
++    type-kind base
++    offset 16
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "maxCharsGotoNext"
++    type "int"
++    type-kind base
++    offset 20
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 6 "maxPaintChars"
++    type "int"
++    type-kind base
++    offset 24
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 7 "paintOffset"
++    type "int"
++    type-kind base
++    offset 28
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "entryInternalData"
++  kind union
++  size 8
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 2
++  member 0 "operand"
++    type "Operand"
++    type-kind struct
++    offset 0
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "varexpressionEntry->type == EET_OPERAND"
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "op"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "expressionEntry"
++  kind struct
++  size 12
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 2
++  member 0 "type"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "data"
++    type "entryInternalData"
++    type-kind union
++    offset 4
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "itemDefData_t"
++  kind union
++  size 4
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 5
++  member 0 "listBox"
++    type "listBoxDef_s"
++    type-kind struct
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "varitemDef_s->type == ITEM_TYPE_LISTBOX"
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 1 "editField"
++    type "editFieldDef_s"
++    type-kind struct
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "varitemDef_s->type == ITEM_TYPE_TEXT || varitemDef_s->type == ITEM_TYPE_EDITFIELD || varitemDef_s->type == ITEM_TYPE_NUMERICFIELD || varitemDef_s->type == ITEM_TYPE_SLIDER || varitemDef_s->type == ITEM_TYPE_YESNO || varitemDef_s->type == ITEM_TYPE_BIND || varitemDef_s->type == ITEM_TYPE_VALIDFILEFIELD || varitemDef_s->type == ITEM_TYPE_DECIMALFIELD || varitemDef_s->type == ITEM_TYPE_UPREDITFIELD"
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 2 "multi"
++    type "multiDef_s"
++    type-kind struct
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "varitemDef_s->type == ITEM_TYPE_MULTI"
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 3 "enumDvarName"
++    type "char"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition "varitemDef_s->type == ITEM_TYPE_DVARENUM"
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 4 "data"
++    type "void"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "0"
++    ignored true
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "itemDef_s"
++  kind struct
++  size 372
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 42
++  member 0 "window"
++    type "windowDef_t"
++    type-kind struct
++    offset 0
++    size 156
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "textRect"
++    type "rectDef_s"
++    type-kind struct
++    offset 156
++    size 24
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 1
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 2 "type"
++    type "int"
++    type-kind base
++    offset 180
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "dataType"
++    type "int"
++    type-kind base
++    offset 184
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "alignment"
++    type "int"
++    type-kind base
++    offset 188
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "fontEnum"
++    type "int"
++    type-kind base
++    offset 192
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 6 "textAlignMode"
++    type "int"
++    type-kind base
++    offset 196
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 7 "textalignx"
++    type "float"
++    type-kind base
++    offset 200
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 8 "textaligny"
++    type "float"
++    type-kind base
++    offset 204
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 9 "textscale"
++    type "float"
++    type-kind base
++    offset 208
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 10 "textStyle"
++    type "int"
++    type-kind base
++    offset 212
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 11 "gameMsgWindowIndex"
++    type "int"
++    type-kind base
++    offset 216
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 12 "gameMsgWindowMode"
++    type "int"
++    type-kind base
++    offset 220
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 13 "text"
++    type "char"
++    type-kind base
++    offset 224
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 14 "itemFlags"
++    type "int"
++    type-kind base
++    offset 228
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 15 "parent"
++    type "menuDef_t"
++    type-kind struct
++    offset 232
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "0"
++    ignored true
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 16 "mouseEnterText"
++    type "char"
++    type-kind base
++    offset 236
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 17 "mouseExitText"
++    type "char"
++    type-kind base
++    offset 240
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 18 "mouseEnter"
++    type "char"
++    type-kind base
++    offset 244
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 19 "mouseExit"
++    type "char"
++    type-kind base
++    offset 248
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 20 "action"
++    type "char"
++    type-kind base
++    offset 252
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 21 "onAccept"
++    type "char"
++    type-kind base
++    offset 256
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 22 "onFocus"
++    type "char"
++    type-kind base
++    offset 260
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 23 "leaveFocus"
++    type "char"
++    type-kind base
++    offset 264
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 24 "dvar"
++    type "char"
++    type-kind base
++    offset 268
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 25 "dvarTest"
++    type "char"
++    type-kind base
++    offset 272
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 26 "onKey"
++    type "ItemKeyHandler"
++    type-kind struct
++    offset 276
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 27 "enableDvar"
++    type "char"
++    type-kind base
++    offset 280
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 28 "dvarFlags"
++    type "int"
++    type-kind base
++    offset 284
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 29 "focusSound"
++    type "snd_alias_list_t"
++    type-kind struct
++    offset 288
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 30 "special"
++    type "float"
++    type-kind base
++    offset 292
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 31 "cursorPos"
++    type "int"
++    type-kind base
++    offset 296
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 1
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 32 "typeData"
++    type "itemDefData_t"
++    type-kind union
++    offset 300
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 33 "imageTrack"
++    type "int"
++    type-kind base
++    offset 304
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 34 "visibleExp"
++    type "statement_s"
++    type-kind struct
++    offset 308
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 35 "textExp"
++    type "statement_s"
++    type-kind struct
++    offset 316
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 36 "materialExp"
++    type "statement_s"
++    type-kind struct
++    offset 324
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 37 "rectXExp"
++    type "statement_s"
++    type-kind struct
++    offset 332
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 38 "rectYExp"
++    type "statement_s"
++    type-kind struct
++    offset 340
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 39 "rectWExp"
++    type "statement_s"
++    type-kind struct
++    offset 348
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 40 "rectHExp"
++    type "statement_s"
++    type-kind struct
++    offset 356
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 41 "forecolorAExp"
++    type "statement_s"
++    type-kind struct
++    offset 364
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "listBoxDef_s"
++  kind struct
++  size 340
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 16
++  member 0 "mousePos"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "startPos"
++    type "int"
++    type-kind base
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 1
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 2 "endPos"
++    type "int"
++    type-kind base
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 1
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 3 "drawPadding"
++    type "int"
++    type-kind base
++    offset 12
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "elementWidth"
++    type "float"
++    type-kind base
++    offset 16
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "elementHeight"
++    type "float"
++    type-kind base
++    offset 20
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 6 "elementStyle"
++    type "int"
++    type-kind base
++    offset 24
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 7 "numColumns"
++    type "int"
++    type-kind base
++    offset 28
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 8 "columnInfo"
++    type "columnInfo_s"
++    type-kind struct
++    offset 32
++    size 256
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 16
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 9 "doubleClick"
++    type "char"
++    type-kind base
++    offset 288
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 10 "notselectable"
++    type "int"
++    type-kind base
++    offset 292
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 11 "noScrollBars"
++    type "int"
++    type-kind base
++    offset 296
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 12 "usePaging"
++    type "int"
++    type-kind base
++    offset 300
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 13 "selectBorder"
++    type "float"
++    type-kind base
++    offset 304
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 14 "disableColor"
++    type "float"
++    type-kind base
++    offset 320
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 15 "selectIcon"
++    type "Material"
++    type-kind struct
++    offset 336
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "menuDef_t"
++  kind struct
++  size 284
++  align 4
++  force-align false
++  asset-tag "AssetMenu"
++  context-asset true
++  foreign-asset false
++  allocation-align -
++  block "XFILE_BLOCK_TEMP":index=0:type=temp:default=true
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 24
++  member 0 "window"
++    type "windowDef_t"
++    type-kind struct
++    offset 0
++    size 156
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "font"
++    type "char"
++    type-kind base
++    offset 156
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 2 "fullScreen"
++    type "int"
++    type-kind base
++    offset 160
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "itemCount"
++    type "int"
++    type-kind base
++    offset 164
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "fontIndex"
++    type "int"
++    type-kind base
++    offset 168
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "cursorItem"
++    type "int"
++    type-kind base
++    offset 172
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 1
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 6 "fadeCycle"
++    type "int"
++    type-kind base
++    offset 176
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 7 "fadeClamp"
++    type "float"
++    type-kind base
++    offset 180
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 8 "fadeAmount"
++    type "float"
++    type-kind base
++    offset 184
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 9 "fadeInAmount"
++    type "float"
++    type-kind base
++    offset 188
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 10 "blurRadius"
++    type "float"
++    type-kind base
++    offset 192
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 11 "onOpen"
++    type "char"
++    type-kind base
++    offset 196
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 12 "onClose"
++    type "char"
++    type-kind base
++    offset 200
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 13 "onESC"
++    type "char"
++    type-kind base
++    offset 204
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 14 "onKey"
++    type "ItemKeyHandler"
++    type-kind struct
++    offset 208
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 15 "visibleExp"
++    type "statement_s"
++    type-kind struct
++    offset 212
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 16 "allowedBinding"
++    type "char"
++    type-kind base
++    offset 220
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 17 "soundName"
++    type "char"
++    type-kind base
++    offset 224
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 18 "imageTrack"
++    type "int"
++    type-kind base
++    offset 228
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 19 "focusColor"
++    type "float"
++    type-kind base
++    offset 232
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 20 "disableColor"
++    type "float"
++    type-kind base
++    offset 248
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 21 "rectXExp"
++    type "statement_s"
++    type-kind struct
++    offset 264
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 22 "rectYExp"
++    type "statement_s"
++    type-kind struct
++    offset 272
++    size 8
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 23 "items"
++    type "itemDef_s"
++    type-kind struct
++    offset 280
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 2
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference true
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 2
++    modifier 0 pointer
++      count "varmenuDef_t->itemCount"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++    modifier 1 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "multiDef_s"
++  kind struct
++  size 392
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 5
++  member 0 "dvarList"
++    type "char"
++    type-kind base
++    offset 0
++    size 128
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference true
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 2
++    modifier 0 array
++      size 32
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++    modifier 1 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 1 "dvarStr"
++    type "char"
++    type-kind base
++    offset 128
++    size 128
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference true
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 2
++    modifier 0 array
++      size 32
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++    modifier 1 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 2 "dvarValue"
++    type "float"
++    type-kind base
++    offset 256
++    size 128
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 32
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 3 "count"
++    type "int"
++    type-kind base
++    offset 384
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "strDef"
++    type "int"
++    type-kind base
++    offset 388
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "operandInternalDataUnion"
++  kind union
++  size 4
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 3
++  member 0 "intVal"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "varOperand->dataType == VAL_INT"
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "floatVal"
++    type "float"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition "varOperand->dataType == VAL_FLOAT"
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 2 "stringVal"
++    type "char"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition "varOperand->dataType == VAL_STRING"
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "rectDef_s"
++  kind struct
++  size 24
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf true
++  requires-marking false
++  cross-platform-layout-match true
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference true
++  non-default-normal-block-reference false
++  member-count 6
++  member 0 "x"
++    type "float"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "y"
++    type "float"
++    type-kind base
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 2 "w"
++    type "float"
++    type-kind base
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "h"
++    type "float"
++    type-kind base
++    offset 12
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 4 "horzAlign"
++    type "int"
++    type-kind base
++    offset 16
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "vertAlign"
++    type "int"
++    type-kind base
++    offset 20
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "snd_alias_list_t"
++  kind struct
++  size 12
++  align 4
++  force-align false
++  asset-tag "AssetSound"
++  context-asset false
++  foreign-asset true
++  allocation-align -
++  block "XFILE_BLOCK_TEMP":index=0:type=temp:default=true
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference true
++  single-pointer-reference true
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 3
++  member 0 "aliasName"
++    type "char"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 1 "head"
++    type "snd_alias_t"
++    type-kind struct
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable true
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference false
++    array-pointer-reference true
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "varsnd_alias_list_t->count"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 2 "count"
++    type "int"
++    type-kind base
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++end-structure
++
++structure "statement_s"
++  kind struct
++  size 8
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking false
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 2
++  member 0 "numEntries"
++    type "int"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 1 "entries"
++    type "expressionEntry"
++    type-kind struct
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 2
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference true
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 2
++    modifier 0 pointer
++      count "varstatement_s->numEntries"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++    modifier 1 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
++
++structure "windowDef_t"
++  kind struct
++  size 156
++  align 4
++  force-align false
++  asset-tag -
++  context-asset false
++  foreign-asset false
++  allocation-align -
++  block -
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference true
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 17
++  member 0 "name"
++    type "char"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 1 "rect"
++    type "rectDef_s"
++    type-kind struct
++    offset 4
++    size 24
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 2 "rectClient"
++    type "rectDef_s"
++    type-kind struct
++    offset 28
++    size 24
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 3 "group"
++    type "char"
++    type-kind base
++    offset 52
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 4 "style"
++    type "int"
++    type-kind base
++    offset 56
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 5 "border"
++    type "int"
++    type-kind base
++    offset 60
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 6 "ownerDraw"
++    type "int"
++    type-kind base
++    offset 64
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 7 "ownerDrawFlags"
++    type "int"
++    type-kind base
++    offset 68
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 8 "borderSize"
++    type "float"
++    type-kind base
++    offset 72
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 9 "staticFlags"
++    type "int"
++    type-kind base
++    offset 76
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 10 "dynamicFlags"
++    type "int"
++    type-kind base
++    offset 80
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 1
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 11 "nextTime"
++    type "int"
++    type-kind base
++    offset 84
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 12 "foreColor"
++    type "float"
++    type-kind base
++    offset 88
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 13 "backColor"
++    type "float"
++    type-kind base
++    offset 104
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 14 "borderColor"
++    type "float"
++    type-kind base
++    offset 120
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 15 "outlineColor"
++    type "float"
++    type-kind base
++    offset 136
++    size 16
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference true
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 array
++      size 4
++      dynamic-size -
++      dynamic-count -
++    end-modifier
++  end-member
++  member 16 "background"
++    type "Material"
++    type-kind struct
++    offset 152
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
+diff --git a/test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_rawfile.layout b/test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_rawfile.layout
+new file mode 100644
+index 0000000..13084fb
+--- /dev/null
++++ b/test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest/iw3_rawfile.layout
+@@ -0,0 +1,129 @@
++zone-layout-manifest-v1
++game "IW3"
++word-size 32
++pointer-size 4
++asset "RawFile"
++asset-tag "AssetRawFile"
++graph-semantics serialization-reachable
++foreign-assets terminal
++runtime-block-members terminal
++structure-count 1
++
++structure "RawFile"
++  kind struct
++  size 12
++  align 4
++  force-align false
++  asset-tag "AssetRawFile"
++  context-asset true
++  foreign-asset false
++  allocation-align -
++  block "XFILE_BLOCK_TEMP":index=0:type=temp:default=true
++  leaf false
++  requires-marking true
++  cross-platform-layout-match false
++  embedded-reference false
++  non-embedded-reference false
++  single-pointer-reference false
++  array-pointer-reference false
++  array-reference false
++  non-default-normal-block-reference false
++  member-count 3
++  member 0 "name"
++    type "char"
++    type-kind base
++    offset 0
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string true
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference true
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "1"
++      count-is-array false
++      indexed-count-count 0
++    end-modifier
++  end-member
++  member 1 "len"
++    type "int"
++    type-kind base
++    offset 4
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const false
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf true
++    asset-ref -
++    pointer-depth 0
++    embedded-reference true
++    single-pointer-reference false
++    array-pointer-reference false
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 0
++  end-member
++  member 2 "buffer"
++    type "char"
++    type-kind base
++    offset 8
++    size 4
++    align 4
++    force-align false
++    alignment-override -
++    const true
++    bit-size -
++    condition -
++    ignored false
++    allocation-align -
++    block -
++    string false
++    script-string false
++    reusable false
++    leaf false
++    asset-ref -
++    pointer-depth 1
++    embedded-reference false
++    single-pointer-reference false
++    array-pointer-reference true
++    pointer-array-reference false
++    array-reference false
++    dynamic false
++    runtime-block false
++    modifier-count 1
++    modifier 0 pointer
++      count "varRawFile->len + 1"
++      count-is-array true
++      indexed-count-count 0
++    end-modifier
++  end-member
++end-structure
+diff --git a/tools/spikes/bmk4-slice6/Build-ZoneCodeGenerator.ps1 b/tools/spikes/bmk4-slice6/Build-ZoneCodeGenerator.ps1
+new file mode 100644
+index 0000000..5ab59c8
+--- /dev/null
++++ b/tools/spikes/bmk4-slice6/Build-ZoneCodeGenerator.ps1
+@@ -0,0 +1,56 @@
++param(
++    [Parameter(Mandatory = $true)]
++    [string] $ZigPath,
++
++    [string] $OutputPath = "build/bmk4-spike/ZoneCodeGenerator.exe"
++)
++
++$ErrorActionPreference = "Stop"
++
++$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../.."))
++$zig = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $ZigPath))
++$output = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutputPath))
++$buildDirectory = Split-Path -Parent $output
++$generatedDirectory = Join-Path $buildDirectory "generated"
++
++if (-not (Test-Path -LiteralPath $zig -PathType Leaf)) {
++    throw "Zig executable does not exist: $zig"
++}
++
++New-Item -ItemType Directory -Force $buildDirectory, $generatedDirectory | Out-Null
++Set-Content -LiteralPath (Join-Path $generatedDirectory "GitVersion.h") -Encoding Ascii -Value @(
++    "#pragma once"
++    "#define GIT_VERSION `"a87850d-bmk4-spike`""
++)
++
++$env:ZIG_GLOBAL_CACHE_DIR = Join-Path $buildDirectory "zig-global-cache"
++$env:ZIG_LOCAL_CACHE_DIR = Join-Path $buildDirectory "zig-cache"
++
++$sourceRoots = @("src/Utils", "src/Parser", "src/ZoneCodeGeneratorLib", "src/ZoneCodeGenerator")
++$sources = foreach ($sourceRoot in $sourceRoots) {
++    Get-ChildItem -LiteralPath (Join-Path $repoRoot $sourceRoot) -Recurse -Filter *.cpp | ForEach-Object FullName
++}
++
++$arguments = @(
++    "c++",
++    "-std=c++23",
++    "-O2",
++    "-DNDEBUG",
++    "-DARCH_x64",
++    "-D__STDC_LIB_EXT1__",
++    "-D__STDC_WANT_LIB_EXT1__=1",
++    "-D_CRT_SECURE_NO_WARNINGS",
++    "-Wno-dll-attribute-on-redeclaration",
++    "-I$(Join-Path $repoRoot 'src/Utils')",
++    "-I$(Join-Path $repoRoot 'src/Parser')",
++    "-I$(Join-Path $repoRoot 'src/ZoneCodeGeneratorLib')",
++    "-I$(Join-Path $repoRoot 'src/ZoneCodeGenerator')",
++    "-I$generatedDirectory"
++) + $sources + @("-o", $output)
++
++& $zig @arguments
++if ($LASTEXITCODE -ne 0) {
++    throw "ZoneCodeGenerator build failed with exit code $LASTEXITCODE"
++}
++
++Write-Output "Built $output"
+diff --git a/tools/spikes/bmk4-slice6/Verify-ZoneLayoutManifest.ps1 b/tools/spikes/bmk4-slice6/Verify-ZoneLayoutManifest.ps1
+new file mode 100644
+index 0000000..8bf98a9
+--- /dev/null
++++ b/tools/spikes/bmk4-slice6/Verify-ZoneLayoutManifest.ps1
+@@ -0,0 +1,76 @@
++param(
++    [string] $ZoneCodeGeneratorPath = "build/bmk4-spike/ZoneCodeGenerator.exe"
++)
++
++$ErrorActionPreference = "Stop"
++
++$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../.."))
++$generator = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $ZoneCodeGeneratorPath))
++$testRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "build/bmk4-spike/golden-test"))
++$run1 = Join-Path $testRoot "run1"
++$run2 = Join-Path $testRoot "run2"
++$goldenRoot = Join-Path $repoRoot "test/ZoneCodeGeneratorLibTests/Golden/IW3/ZoneLayoutManifest"
++
++if (-not (Test-Path -LiteralPath $generator -PathType Leaf)) {
++    throw "ZoneCodeGenerator executable does not exist: $generator"
++}
++
++$expectedBuildRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot "build")) + [System.IO.Path]::DirectorySeparatorChar
++if (-not ($testRoot + [System.IO.Path]::DirectorySeparatorChar).StartsWith($expectedBuildRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
++    throw "Refusing to clean a test path outside the build directory: $testRoot"
++}
++
++if (Test-Path -LiteralPath $testRoot) {
++    Remove-Item -LiteralPath $testRoot -Recurse -Force
++}
++
++function Invoke-Generation([string] $outputDirectory) {
++    & $generator `
++        --no-color `
++        -h (Join-Path $repoRoot "src/ZoneCode/Game/IW3/IW3_ZoneCode.h") `
++        -c (Join-Path $repoRoot "src/ZoneCode/Game/IW3/IW3_Commands.txt") `
++        -o $outputDirectory `
++        -g ZoneLayoutManifest
++
++    if ($LASTEXITCODE -ne 0) {
++        throw "ZoneLayoutManifest generation failed with exit code $LASTEXITCODE"
++    }
++}
++
++function Assert-ByteIdentical([string] $expected, [string] $actual) {
++    $difference = Compare-Object `
++        (Get-Content -LiteralPath $expected -Encoding Byte -ReadCount 0) `
++        (Get-Content -LiteralPath $actual -Encoding Byte -ReadCount 0)
++    if ($null -ne $difference) {
++        throw "Files are not byte-identical: $expected and $actual"
++    }
++}
++
++Invoke-Generation $run1
++Invoke-Generation $run2
++
++$manifestRoot1 = Join-Path $run1 "ZoneLayoutManifest/iw3"
++$manifestRoot2 = Join-Path $run2 "ZoneLayoutManifest/iw3"
++$relativeFiles1 = Get-ChildItem -LiteralPath $manifestRoot1 -File | ForEach-Object Name | Sort-Object
++$relativeFiles2 = Get-ChildItem -LiteralPath $manifestRoot2 -File | ForEach-Object Name | Sort-Object
++
++if (Compare-Object $relativeFiles1 $relativeFiles2) {
++    throw "The two runs produced different manifest file sets"
++}
++
++foreach ($relativeFile in $relativeFiles1) {
++    Assert-ByteIdentical (Join-Path $manifestRoot1 $relativeFile) (Join-Path $manifestRoot2 $relativeFile)
++}
++
++$goldenFiles = @("iw3_rawfile.layout", "iw3_menudef_t.layout")
++foreach ($goldenFile in $goldenFiles) {
++    $generated = Join-Path $manifestRoot1 $goldenFile
++    $golden = Join-Path $goldenRoot $goldenFile
++    Assert-ByteIdentical $golden $generated
++
++    $hash = (Get-FileHash -LiteralPath $generated -Algorithm SHA256).Hash.ToLowerInvariant()
++    $structureCount = (Select-String -LiteralPath $generated -Pattern '^structure "').Count
++    Write-Output "PASS $goldenFile structures=$structureCount sha256=$hash"
++}
++
++Write-Output "PASS all $($relativeFiles1.Count) IW3 manifests were byte-identical across two independent output directories"
+-- 
+2.51.0.windows.1
+
