@@ -169,6 +169,10 @@ jobs:
           if ($LASTEXITCODE -ne 3) { throw "outside output was not refused with exit code 3" }
           if (Test-Path $outsideOutput) { throw "refused outside output was created" }
           $ErrorActionPreference = $savedEap
+          # The wrapper ends the step with `exit $LASTEXITCODE`; the last native
+          # call above is the intentional exit-3 refusal. All assertions passed
+          # if we reached this line.
+          exit 0
 
       - id: upload_binaries
         uses: actions/upload-artifact@v4
