@@ -1,0 +1,24 @@
+{
+  "container": {
+    "decompressed_sha256": "f907caee21965f0b03a01bb02ec0ce3d4bb8f639a9589124ba70ebbdce59d9ea",
+    "file": "malformed_truncated_delayed_record.ff",
+    "magic": "IWffu100",
+    "sha256": "b82865a5249a414d5b69ba61455d2ccda70a4593236b67f0a0a5dea50929bb08",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "delayed_stream_truncation",
+    "must_fail_gate": true,
+    "note": "Refuse when the final queued delayed record cannot be fully drained."
+  },
+  "fixture": "delayed_stream_order",
+  "mechanism": 6,
+  "notes": [
+    "The minimal CLIPMAP_PVS drives a genuine block-1 DynEntityPose zero-fill.",
+    "No stock asset walker in this tree pushes blocks 2 or 3; the manifest's delayed_read_plan is the explicit kernel probe.",
+    "Final delayed byte removed while the read plan still requires it."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}

@@ -1,0 +1,22 @@
+{
+  "container": {
+    "decompressed_sha256": "a361b600a8188cb08a4aeda922047c07e82754ff09c5bdca9beff9a1e1af281d",
+    "file": "malformed_bad_script_count.ff",
+    "magic": "IWffu100",
+    "sha256": "1613072ba02158a6b0e11b9f1558336b7d72bd4f4ca77c24942291316ce700aa",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "bad_count",
+    "must_fail_gate": true,
+    "note": "Refuse the impossible script-string count before allocation or array walking."
+  },
+  "fixture": "stringtable_script_remap",
+  "mechanism": 2,
+  "notes": [
+    "XAssetList declares 1,073,741,824 script strings but contains only two slots."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}

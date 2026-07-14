@@ -1,0 +1,119 @@
+{
+  "container": {
+    "decompressed_sha256": "64eef73d12cd00015be7af84d1c79fada52f263363addcba841a4e838b26b7a9",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "1b2501f04b10f43f89d69815bc5174f47c5b39bbfb4704498b2d1efe176b1f0b",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "alias_forward",
+  "mechanism": 3,
+  "notes": [],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "RAWFILE(31)": 2
+    },
+    "relations": [
+      {
+        "alias_slot": {
+          "block": 4,
+          "offset": 16
+        },
+        "expected_equal": true,
+        "kind": "alias_pointer_equality",
+        "source": "assets[1].header",
+        "target": "assets[0].header"
+      }
+    ],
+    "script_strings": {
+      "content_hash.fnv1a64": "cbf29ce484222325",
+      "count": 0
+    },
+    "targeted_fields": [
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "5b00a1f6351e2efd",
+        "path": "rawfile[0].name",
+        "value": "alias_owner"
+      },
+      {
+        "encoding": "raw_bytes_nul",
+        "fnv1a64": "fc17bb83ee075471",
+        "path": "rawfile[0].buffer",
+        "value": "abc\\0"
+      },
+      {
+        "encoding": "u32_le",
+        "fnv1a64": "acd5cafcaaf48d34",
+        "path": "alias_slot.token",
+        "value": "0x40000011"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 2,
+    "blocks.bytes": [
+      12,
+      0,
+      0,
+      0,
+      36,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 115,
+    "container.decompressed_bytes": 104,
+    "container.input_bytes": 127,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 0,
+    "script_strings.metadata_hash.fnv1a64": "a8c7f832281a39c5",
+    "script_strings.pointer_token": "0x00000000",
+    "targeted_hash.asset_list.fnv1a64": "12d98c2f97974403",
+    "targeted_hash.decompressed_payload.fnv1a64": "c588331f897d9ac1",
+    "targeted_hash.xfile.fnv1a64": "204cefd71f760f21",
+    "xfile.external_size": 0,
+    "xfile.size": 60
+  },
+  "purpose": "-2 RawFile insertion slot followed by a forward file-image alias reference.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 16,
+      "label": "asset_array",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 12,
+      "label": "rawfile[0]",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 4,
+      "file_bytes": 0,
+      "label": "rawfile[0].inserted_alias_slot",
+      "offset": 16
+    },
+    {
+      "block": 4,
+      "bytes": 12,
+      "label": "rawfile[0].name",
+      "offset": 20
+    },
+    {
+      "block": 4,
+      "bytes": 4,
+      "label": "rawfile[0].buffer",
+      "offset": 32
+    }
+  ]
+}

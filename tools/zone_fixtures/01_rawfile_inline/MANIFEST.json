@@ -1,0 +1,101 @@
+{
+  "container": {
+    "decompressed_sha256": "7444da646940336373e3654bd952cdf879aed6484c67e982b77f74550a54a5a6",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "ddd28ccf1bb6317227dd4a176d83adf47f53f789a2d56afba3826089b31505f6",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "rawfile_inline",
+  "mechanism": 1,
+  "notes": [],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "RAWFILE(31)": 1
+    },
+    "relations": [],
+    "script_strings": {
+      "content_hash.fnv1a64": "cbf29ce484222325",
+      "count": 0
+    },
+    "targeted_fields": [
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "fc7845dd3a44c753",
+        "path": "rawfile[0].name",
+        "value": "synthetic/raw_inline.txt"
+      },
+      {
+        "encoding": "u32_le",
+        "fnv1a64": "2d401a55eec16520",
+        "path": "rawfile[0].len",
+        "value": 5
+      },
+      {
+        "encoding": "raw_bytes_nul",
+        "fnv1a64": "a9bc8acca21f39b1",
+        "path": "rawfile[0].buffer",
+        "value": "hello\\0"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 1,
+    "blocks.bytes": [
+      12,
+      0,
+      0,
+      0,
+      39,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 122,
+    "container.decompressed_bytes": 111,
+    "container.input_bytes": 134,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 0,
+    "script_strings.metadata_hash.fnv1a64": "a8c7f832281a39c5",
+    "script_strings.pointer_token": "0x00000000",
+    "targeted_hash.asset_list.fnv1a64": "acb786bb777c77a0",
+    "targeted_hash.decompressed_payload.fnv1a64": "b1e9b4a8c78a80b9",
+    "targeted_hash.xfile.fnv1a64": "82139fcf4ee7711d",
+    "xfile.external_size": 0,
+    "xfile.size": 67
+  },
+  "purpose": "RawFile body with an inline -1 XString name and inline buffer.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 8,
+      "label": "asset_array",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 12,
+      "label": "rawfile[0]",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 25,
+      "label": "rawfile[0].name",
+      "offset": 8
+    },
+    {
+      "block": 4,
+      "bytes": 6,
+      "label": "rawfile[0].buffer",
+      "offset": 33
+    }
+  ]
+}

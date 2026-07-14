@@ -1,0 +1,167 @@
+{
+  "container": {
+    "decompressed_sha256": "8196ceadf03f101827092905c82b55374d465e8e75a25f791a1ccc49390d3572",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "f84d582031a5508e87ec139910e90fad4a37966cb092f2babaeabae01dd3939b",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "stringtable_script_remap",
+  "mechanism": 2,
+  "notes": [],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "STRINGTABLE(32)": 1,
+      "XANIMPARTS(2)": 1
+    },
+    "relations": [
+      {
+        "expected_text": "script_one",
+        "kind": "script_string_index_remap",
+        "source": "xanimparts[0].names[0]",
+        "source_index": 1,
+        "target": "script_strings[1]"
+      }
+    ],
+    "script_strings": {
+      "content_hash.fnv1a64": "dbdbd34c08d4b111",
+      "count": 2
+    },
+    "targeted_fields": [
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "1143552c0469f770",
+        "path": "stringtable[0].name",
+        "value": "synthetic/remap.csv"
+      },
+      {
+        "encoding": "utf8_nul_sequence",
+        "fnv1a64": "8338d73bed2f6627",
+        "path": "stringtable[0].values",
+        "value": [
+          "key",
+          "value"
+        ]
+      },
+      {
+        "encoding": "u16_le",
+        "fnv1a64": "082f2207b4e88cc4",
+        "path": "xanimparts[0].names[0].source_index",
+        "value": 1
+      },
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "d5a577873ce075a7",
+        "path": "xanimparts[0].names[0].resolved_text",
+        "value": "script_one"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 2,
+    "blocks.bytes": [
+      144,
+      0,
+      0,
+      0,
+      72,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 283,
+    "container.decompressed_bytes": 272,
+    "container.input_bytes": 295,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 2,
+    "script_strings.metadata_hash.fnv1a64": "5b76ef155f79d963",
+    "script_strings.pointer_token": "0xffffffff",
+    "targeted_hash.asset_list.fnv1a64": "0d2dd29bf8f536dd",
+    "targeted_hash.decompressed_payload.fnv1a64": "a281683fb5d008df",
+    "targeted_hash.xfile.fnv1a64": "8d21b7d7fc412c49",
+    "xfile.external_size": 0,
+    "xfile.size": 228
+  },
+  "purpose": "StringTable plus script-string interning and XAnimParts uint16 index remap.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 8,
+      "label": "script_string_pointer_array",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 12,
+      "label": "script_string[0]",
+      "offset": 8
+    },
+    {
+      "block": 4,
+      "bytes": 11,
+      "label": "script_string[1]",
+      "offset": 20
+    },
+    {
+      "block": 4,
+      "bytes": 16,
+      "label": "asset_array",
+      "offset": 32
+    },
+    {
+      "block": 0,
+      "bytes": 16,
+      "label": "stringtable[0]",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 20,
+      "label": "stringtable[0].name",
+      "offset": 16
+    },
+    {
+      "block": 0,
+      "bytes": 8,
+      "label": "stringtable[0].values",
+      "offset": 36
+    },
+    {
+      "block": 0,
+      "bytes": 4,
+      "label": "stringtable[0].value[0]",
+      "offset": 44
+    },
+    {
+      "block": 0,
+      "bytes": 6,
+      "label": "stringtable[0].value[1]",
+      "offset": 48
+    },
+    {
+      "block": 0,
+      "bytes": 88,
+      "label": "xanimparts[0]",
+      "offset": 56
+    },
+    {
+      "block": 4,
+      "bytes": 21,
+      "label": "xanimparts[0].name",
+      "offset": 48
+    },
+    {
+      "block": 4,
+      "bytes": 2,
+      "label": "xanimparts[0].names",
+      "offset": 70
+    }
+  ]
+}

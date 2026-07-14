@@ -1,0 +1,105 @@
+{
+  "container": {
+    "decompressed_sha256": "fc5e6e13341253cea7e9d25133e6f2783d04beb8aaeeb89a4a39daaac39ef8d4",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "168dfdf2488f51015d0738d678d5eda2c641f6ea3fead7d12efd5c03d6fd13c0",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "cross_block_offset",
+  "mechanism": 4,
+  "notes": [],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "RAWFILE(31)": 2
+    },
+    "relations": [
+      {
+        "expected_text": "cross_block_name",
+        "kind": "cross_block_pointer",
+        "source": "rawfile[1].name",
+        "target": {
+          "block": 4,
+          "offset": 16
+        }
+      }
+    ],
+    "script_strings": {
+      "content_hash.fnv1a64": "cbf29ce484222325",
+      "count": 0
+    },
+    "targeted_fields": [
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "220d50a2b72fe017",
+        "path": "rawfile[0].name",
+        "value": "cross_block_name"
+      },
+      {
+        "encoding": "u32_le",
+        "fnv1a64": "acd5cafcaaf48d34",
+        "path": "rawfile[1].name_token",
+        "value": "0x40000011"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 2,
+    "blocks.bytes": [
+      24,
+      0,
+      0,
+      0,
+      33,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 128,
+    "container.decompressed_bytes": 117,
+    "container.input_bytes": 140,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 0,
+    "script_strings.metadata_hash.fnv1a64": "a8c7f832281a39c5",
+    "script_strings.pointer_token": "0x00000000",
+    "targeted_hash.asset_list.fnv1a64": "12d98c2f97974403",
+    "targeted_hash.decompressed_payload.fnv1a64": "7053dcb60c6a439c",
+    "targeted_hash.xfile.fnv1a64": "2a58a56d1dbe7ae5",
+    "xfile.external_size": 0,
+    "xfile.size": 73
+  },
+  "purpose": "RawFile.name in block 0 resolves to a previously loaded string in block 4.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 16,
+      "label": "asset_array",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 12,
+      "label": "rawfile[0]",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 17,
+      "label": "rawfile[0].name",
+      "offset": 16
+    },
+    {
+      "block": 0,
+      "bytes": 12,
+      "label": "rawfile[1]",
+      "offset": 12
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "container": {
+    "decompressed_sha256": "599a29d401c6ee9cd9b2bc29e85b162dcaae26d7b68b5a035ab7c7e527df9a61",
+    "file": "malformed_one_past_interior.ff",
+    "magic": "IWffu100",
+    "sha256": "8c5d56ad44376ccb1253f48ff10e9480d0e1bd49ed8d7f2bc37fd6b668b9b98d",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "offset_out_of_bounds",
+    "must_fail_gate": true,
+    "note": "Refuse the one-past-block interior pointer."
+  },
+  "fixture": "interior_offset",
+  "mechanism": 5,
+  "notes": [
+    "Token targets one byte past block 0."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}
