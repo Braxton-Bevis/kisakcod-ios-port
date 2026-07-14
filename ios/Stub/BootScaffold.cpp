@@ -156,6 +156,15 @@ void ProfLoad_End() {}
 void ProfLoad_BeginTrackedValue(MapProfileTrackedValue) {}
 void ProfLoad_EndTrackedValue(MapProfileTrackedValue) {}
 
+// Netchan OOB packet profiling, referenced by net_chan_mp.cpp's out-of-band
+// send paths. Real owners: cl_net_chan_mp.cpp:76 / sv_net_chan_mp.cpp:93
+// (client/server waves MUST delete these). Both bodies are gated on the
+// net_profile dvar (default 0) — and the client one also on a nonnull
+// clientConnections — so in the headless boot the real functions are
+// observably identical no-ops. Behavior-matching, not a lie.
+void CL_Netchan_AddOOBProfilePacket(int, int) {}
+void SV_Netchan_AddOOBProfilePacket(int) {}
+
 struct BootString
 {
     char *value;
