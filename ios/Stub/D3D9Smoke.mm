@@ -10,9 +10,12 @@
 
 #include <windows.h>
 #include <d3d9.h>
+#include <TargetConditionals.h>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+
+#include "RendererPlaceholder.h"
 
 // windows_base.h defines `interface` as a macro (COM-ism) — kill it before
 // any ObjC @interface is parsed. BOOL is handled by the __OBJC__ guard the
@@ -21,6 +24,10 @@
 #import <Foundation/Foundation.h>
 
 static const char *kisak_d3d9_smoke_inner(void *metalLayer);
+static IDirect3D9 *g_retainedD3D9;
+static IDirect3DDevice9 *g_retainedD3D9Device;
+static const char *g_rendererPlaceholderBridgeDetail;
+static char g_rendererPlaceholderExceptionDetail[320];
 
 extern "C" const char *kisak_d3d9_smoke(void *metalLayer)
 {
@@ -120,6 +127,11 @@ static const char *kisak_d3d9_smoke_inner(void *metalLayer)
     constexpr unsigned kExpectedPixel = 0xFFBA55D3u;
     if (SUCCEEDED(clearHr) && SUCCEEDED(readHr)
         && pixel == kExpectedPixel && SUCCEEDED(presentHr)) {
+        // Retain the successfully proven device for the next one-shot stage.
+        // The swapchain already owns this CAMetalLayer for the app lifetime;
+        // teardown ordering remains outside this bounded proof.
+        g_retainedD3D9 = d3d;
+        g_retainedD3D9Device = dev;
         return "DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present";
     }
 
@@ -132,4 +144,48 @@ static const char *kisak_d3d9_smoke_inner(void *metalLayer)
     // this is a one-shot smoke — teardown ordering is bring-up work, not
     // smoke-test work.
     return buf;
+}
+
+extern "C" const char *kisak_renderer_placeholder(void)
+{
+#if TARGET_OS_SIMULATOR
+    g_rendererPlaceholderBridgeDetail = nullptr;
+    if (!g_retainedD3D9 || !g_retainedD3D9Device) {
+        g_rendererPlaceholderBridgeDetail =
+            "FAIL renderer placeholder detail: successful D3D9 smoke required first";
+        return "FAIL renderer placeholder: successful D3D9 smoke required first";
+    }
+    try {
+        return kisak_renderer_placeholder_run(g_retainedD3D9,
+                                               g_retainedD3D9Device);
+    } catch (const std::exception &e) {
+        static char ebuf[256];
+        snprintf(ebuf, sizeof(ebuf),
+                 "FAIL renderer placeholder std::exception: %s", e.what());
+        snprintf(g_rendererPlaceholderExceptionDetail,
+                 sizeof(g_rendererPlaceholderExceptionDetail), "%s", ebuf);
+        g_rendererPlaceholderBridgeDetail =
+            g_rendererPlaceholderExceptionDetail;
+        return ebuf;
+    } catch (...) {
+        g_rendererPlaceholderBridgeDetail =
+            "FAIL renderer placeholder detail: non-std C++ exception";
+        return "FAIL renderer placeholder non-std C++ exception";
+    }
+#else
+    // The renderer proof archive is simulator-only in this wave. Keep the
+    // unsigned device target linkable without pretending it earned a frame.
+    return "UNAVAILABLE renderer placeholder: simulator-only proof build";
+#endif
+}
+
+extern "C" const char *kisak_renderer_placeholder_detail(void)
+{
+#if TARGET_OS_SIMULATOR
+    if (g_rendererPlaceholderBridgeDetail)
+        return g_rendererPlaceholderBridgeDetail;
+    return kisak_renderer_placeholder_detail_run();
+#else
+    return "IW3 R/RB placeholder detail - simulator-only proof build";
+#endif
 }

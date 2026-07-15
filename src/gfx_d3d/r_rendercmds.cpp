@@ -1,4 +1,9 @@
 #include "r_rendercmds.h"
+#ifdef KISAK_IOS
+#include "rb_backend.h"
+#include <cstdio>
+#include <cstdlib>
+#endif
 #include <qcommon/mem_track.h>
 #include <qcommon/threads.h>
 #include "rb_logfile.h"
@@ -25,6 +30,17 @@
 #include "r_drawsurf.h"
 #include "rb_state.h"
 #include <universal/profile.h>
+
+#ifdef KISAK_IOS
+[[noreturn]] static void R_iOS_CommandProofBoundaryAbort(const char *symbol)
+{
+    std::fprintf(stderr,
+                 "BMK4 renderer proof reached deferred lifecycle: %s\n",
+                 symbol);
+    std::fflush(stderr);
+    std::abort();
+}
+#endif
 
 //  struct GfxBackEndData *frontEndDataOut 85827c80     gfx_d3d : r_rendercmds.obj
 GfxBackEndData *frontEndDataOut;
@@ -218,6 +234,12 @@ void __cdecl R_InitRenderThread()
 
 void __cdecl R_SyncRenderThread()
 {
+#ifdef KISAK_IOS
+    // The bounded placeholder backend is synchronous and never starts the
+    // production renderer thread. Fail closed until qcommon/threads.cpp and
+    // the full render-thread lifecycle graduate together.
+    R_iOS_CommandProofBoundaryAbort("R_SyncRenderThread");
+#else
     if (!Sys_IsRenderThread())
     {
 #ifndef KISAK_SP // called in Debug_Frame from script debugger (SP = SERVER thread)
@@ -235,6 +257,7 @@ void __cdecl R_SyncRenderThread()
             }
         }
     }
+#endif
 }
 
 GfxCmdArray *R_ClearCmdList()
@@ -380,6 +403,109 @@ void __cdecl R_AbortRenderCommands()
 
 GfxCmdArray *s_cmdList;
 
+#ifdef KISAK_IOS
+// Private storage for the asset-free R/RB proof. It intentionally does not
+// borrow rg.inFrame (owned by db_registry.cpp): the proof exercises the real
+// command allocator without claiming that the full renderer frame lifecycle
+// has started. Remove this seam when that owner graduates into the link.
+alignas(8) static uint8_t s_iOSCommandBuffer[64 * 1024];
+static GfxCmdArray s_iOSCommandList;
+static bool s_iOSCommandFrameActive;
+static GfxCmdArray *s_iOSRestoreCommandList;
+static uint32_t s_iOSRestoreCommandBufferSize;
+static int s_iOSRestoreCommandWarnSize;
+
+static_assert(sizeof(GfxCmdDrawTriangles) == 24, "arm64 draw-triangles command ABI drift");
+static_assert(alignof(GfxCmdDrawTriangles) == 8, "arm64 draw-triangles command alignment drift");
+static_assert(sizeof(float) == 4 && sizeof(GfxColor) == 4 && sizeof(uint16_t) == 2,
+    "draw-triangles payload element ABI drift");
+
+void R_iOS_ResetCommandList()
+{
+    iassert(!s_iOSCommandFrameActive);
+    s_iOSRestoreCommandList = s_cmdList;
+    s_iOSRestoreCommandBufferSize = s_renderCmdBufferSize;
+    s_iOSRestoreCommandWarnSize = s_renderCmdWarnSize;
+    memset(s_iOSCommandBuffer, 0, sizeof(s_iOSCommandBuffer));
+    s_iOSCommandList.cmds = s_iOSCommandBuffer;
+    s_iOSCommandList.usedTotal = 0;
+    s_iOSCommandList.usedCritical = 0;
+    s_iOSCommandList.lastCmd = nullptr;
+    s_cmdList = &s_iOSCommandList;
+    s_renderCmdBufferSize = sizeof(s_iOSCommandBuffer);
+    s_renderCmdWarnSize = sizeof(s_iOSCommandBuffer);
+    s_iOSCommandFrameActive = true;
+}
+
+void R_iOS_EndCommandList()
+{
+    iassert(s_iOSCommandFrameActive);
+    s_cmdList = s_iOSRestoreCommandList;
+    s_renderCmdBufferSize = s_iOSRestoreCommandBufferSize;
+    s_renderCmdWarnSize = s_iOSRestoreCommandWarnSize;
+    s_iOSRestoreCommandList = nullptr;
+    s_iOSCommandFrameActive = false;
+}
+
+GfxCmdHeader *R_iOS_QueueDrawTrianglesCommand(
+    const Material *material,
+    MaterialTechniqueType techType,
+    int vertexCount,
+    const float (*xyzw)[4],
+    const float (*normal)[3],
+    const GfxColor *color,
+    const float (*st)[2],
+    int indexCount,
+    const uint16_t *indices)
+{
+    if (!s_iOSCommandFrameActive || !material || !xyzw || !normal || !color || !st || !indices)
+        return nullptr;
+    if (techType < 0 || techType >= TECHNIQUE_TOTAL_COUNT)
+        return nullptr;
+    if (vertexCount <= 0 || vertexCount > INT16_MAX || indexCount <= 0 || indexCount > INT16_MAX)
+        return nullptr;
+    if (indexCount % 3 != 0)
+        return nullptr;
+
+    for (int index = 0; index < indexCount; ++index)
+    {
+        if (indices[index] >= vertexCount)
+            return nullptr;
+    }
+
+    const uint64_t vertexBytes = 40ull * static_cast<uint64_t>(vertexCount);
+    const uint64_t indexBytes = 2ull * static_cast<uint64_t>(indexCount);
+    const uint64_t rawBytes = sizeof(GfxCmdDrawTriangles) + vertexBytes + indexBytes;
+    const uint64_t alignedBytes = (rawBytes + 7ull) & ~7ull;
+    if (alignedBytes > UINT16_MAX)
+        return nullptr;
+
+    GfxCmdDrawTriangles *cmd = reinterpret_cast<GfxCmdDrawTriangles *>(
+        R_GetCommandBuffer(RC_DRAW_TRIANGLES, static_cast<int>(alignedBytes)));
+    if (!cmd)
+        return nullptr;
+
+    cmd->material = material;
+    cmd->techType = techType;
+    cmd->indexCount = static_cast<__int16>(indexCount);
+    cmd->vertexCount = static_cast<__int16>(vertexCount);
+
+    uint8_t *writer = reinterpret_cast<uint8_t *>(cmd) + sizeof(*cmd);
+    memcpy(writer, xyzw, 16u * static_cast<size_t>(vertexCount));
+    writer += 16u * static_cast<size_t>(vertexCount);
+    memcpy(writer, normal, 12u * static_cast<size_t>(vertexCount));
+    writer += 12u * static_cast<size_t>(vertexCount);
+    memcpy(writer, color, 4u * static_cast<size_t>(vertexCount));
+    writer += 4u * static_cast<size_t>(vertexCount);
+    memcpy(writer, st, 8u * static_cast<size_t>(vertexCount));
+    writer += 8u * static_cast<size_t>(vertexCount);
+    memcpy(writer, indices, 2u * static_cast<size_t>(indexCount));
+    writer += 2u * static_cast<size_t>(indexCount);
+    memset(writer, 0, static_cast<size_t>(alignedBytes - rawBytes));
+    return &cmd->header;
+}
+#endif
+
 void __cdecl R_BeginClientCmdList2D()
 {
     frontEndDataOut->viewInfo[frontEndDataOut->viewInfoCount].cmds = &s_cmdList->cmds[s_cmdList->usedTotal];
@@ -426,7 +552,13 @@ GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes)
             bytes);
     iassert( s_cmdList );
     iassert( s_cmdList->cmds );
+#ifdef KISAK_IOS
+    // The bounded proof uses the private command list; a future full iOS
+    // renderer continues to use the production rg.inFrame invariant.
+    iassert( rg.inFrame || s_iOSCommandFrameActive );
+#else
     iassert( rg.inFrame );
+#endif
     if (renderCmd < RC_FIRST_NONCRITICAL && s_cmdList->usedCritical < 7680 && bytes + s_cmdList->usedCritical >= 7680)
         Com_PrintWarning(8, "RENDERCOMMAND_CRITICAL_WARN_SIZE (%i bytes) reached\n", 7680);
     if (s_cmdList->usedTotal < s_renderCmdWarnSize && bytes + s_cmdList->usedTotal >= s_renderCmdWarnSize)
@@ -1623,6 +1755,9 @@ void __cdecl R_AddCmdProjectionSet(GfxProjectionTypes projection)
 
 void __cdecl R_BeginRemoteScreenUpdate()
 {
+#ifdef KISAK_IOS
+    R_iOS_CommandProofBoundaryAbort("R_BeginRemoteScreenUpdate");
+#else
     if (IsFastFileLoad() && Sys_IsMainThread())
     {
         iassert( r_glob.remoteScreenUpdateNesting >= 0 );
@@ -1641,10 +1776,14 @@ void __cdecl R_BeginRemoteScreenUpdate()
             }
         }
     }
+#endif
 }
 
 void __cdecl R_EndRemoteScreenUpdate()
 {
+#ifdef KISAK_IOS
+    R_iOS_CommandProofBoundaryAbort("R_EndRemoteScreenUpdate");
+#else
     if (IsFastFileLoad() && Sys_IsMainThread())
     {
         iassert( r_glob.remoteScreenUpdateNesting >= 0 );
@@ -1676,6 +1815,7 @@ void __cdecl R_EndRemoteScreenUpdate()
             MyAssertHandler(".\\r_rendercmds.cpp", 2402, 0, "%s", "r_glob.remoteScreenUpdateNesting == 0");
         }
     }
+#endif
 }
 
 void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
@@ -1699,6 +1839,9 @@ void __cdecl R_PushRemoteScreenUpdate(int remoteScreenUpdateNesting)
 
 int __cdecl R_PopRemoteScreenUpdate()
 {
+#ifdef KISAK_IOS
+    R_iOS_CommandProofBoundaryAbort("R_PopRemoteScreenUpdate");
+#else
     volatile int remoteScreenUpdateNesting; // [esp+4h] [ebp-4h]
 
     iassert( IsFastFileLoad() || r_glob.remoteScreenUpdateNesting == 0 );
@@ -1717,6 +1860,7 @@ int __cdecl R_PopRemoteScreenUpdate()
             "(remoteScreenUpdateNesting >= 0)",
             remoteScreenUpdateNesting);
     return remoteScreenUpdateNesting;
+#endif
 }
 
 bool __cdecl R_IsInRemoteScreenUpdate()
@@ -1760,6 +1904,9 @@ void R_AddCmdSetViewportValues(int x, int y, int width, int height)
 
 void __cdecl R_BeginDebugFrame()
 {
+#ifdef KISAK_IOS
+    R_iOS_CommandProofBoundaryAbort("R_BeginDebugFrame");
+#else
     iassert(s_debugFrameGlob.restoreCmdList == NULL);
     iassert(s_debugFrameGlob.restoreFrontEndDataOut == NULL);
 
@@ -1780,10 +1927,14 @@ void __cdecl R_BeginDebugFrame()
         frontEndDataOut = &s_debugFrameGlob.frontEndDataOut;
         R_BeginSharedCmdList();
     }
+#endif
 }
 
 void __cdecl R_EndDebugFrame()
 {
+#ifdef KISAK_IOS
+    R_iOS_CommandProofBoundaryAbort("R_EndDebugFrame");
+#else
     bool v0; // [esp+1h] [ebp-1h]
 
     if (rg.registered)
@@ -1818,4 +1969,5 @@ void __cdecl R_EndDebugFrame()
         iassert(rg.inFrame);
         rg.inFrame = s_debugFrameGlob.inFrame;
     }
+#endif
 }

@@ -599,6 +599,23 @@ void __cdecl R_ClearClientCmdList2D();
 void __cdecl R_BeginSharedCmdList();
 void __cdecl R_AddCmdEndOfList();
 GfxCmdHeader *__cdecl R_GetCommandBuffer(GfxRenderCommand renderCmd, int bytes);
+#ifdef KISAK_IOS
+// Asset-free renderer proof adapter. The producer still passes through the
+// engine's real R_GetCommandBuffer; this seam only supplies an isolated,
+// aligned command list until the full renderer frame lifecycle graduates.
+void R_iOS_ResetCommandList();
+void R_iOS_EndCommandList();
+GfxCmdHeader *R_iOS_QueueDrawTrianglesCommand(
+    const Material *material,
+    MaterialTechniqueType techType,
+    int vertexCount,
+    const float (*xyzw)[4],
+    const float (*normal)[3],
+    const GfxColor *color,
+    const float (*st)[2],
+    int indexCount,
+    const uint16_t *indices);
+#endif
 DebugGlobals *R_ToggleSmpFrame();
 GfxViewParms *__cdecl R_AllocViewParms();
 void __cdecl R_AddCmdDrawStretchPic(

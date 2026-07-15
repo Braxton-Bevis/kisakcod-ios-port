@@ -1325,7 +1325,13 @@ void __cdecl RB_DrawTrianglesCmd(GfxRenderCommandExecState *execState)
 
     GfxCmdDrawTriangles *cmd = (GfxCmdDrawTriangles *)execState->cmd;
 
+#ifdef KISAK_IOS
+    static_assert(sizeof(GfxCmdDrawTriangles) == 24, "arm64 draw-triangles command ABI drift");
+    xyzwOffset = sizeof(GfxCmdDrawTriangles);
+#else
+    // Preserve the original 32-bit Windows command layout byte-for-byte.
     xyzwOffset = 16;
+#endif
     xyzwSize = 16 * cmd->vertexCount;
 
     normalOffset = xyzwOffset + xyzwSize;
@@ -1377,6 +1383,23 @@ void __cdecl RB_DrawTriangles_Internal(
     for (index = 0; index < indexCount; ++index)
         tess.indices[index + tess.indexCount] = LOWORD(tess.vertexCount) + indices[index];
     for (indexa = 0; indexa < vertexCount; ++indexa)
+#ifdef KISAK_IOS
+        // The recovered Win32 expressions flatten pointer-to-array inputs by
+        // indexing beyond their first subarray, which is undefined C++ and
+        // unsafe under the arm64 optimizer. Use the declared array types.
+        R_SetVertex4dWithNormal(
+            &tess.verts[indexa + tess.vertexCount],
+            xyzw[indexa][0],
+            xyzw[indexa][1],
+            xyzw[indexa][2],
+            xyzw[indexa][3],
+            normal[indexa][0],
+            normal[indexa][1],
+            normal[indexa][2],
+            st[indexa][0],
+            st[indexa][1],
+            (const uint8_t *)&color[indexa]);
+#else
         R_SetVertex4dWithNormal(
             &tess.verts[indexa + tess.vertexCount],
             (*xyzw)[4 * indexa],
@@ -1389,6 +1412,7 @@ void __cdecl RB_DrawTriangles_Internal(
             (*st)[2 * indexa],
             (*st)[2 * indexa + 1],
             (const uint8_t *)&color[indexa]);
+#endif
     tess.indexCount += indexCount;
     tess.vertexCount += vertexCount;
     RB_EndTessSurface();
@@ -3065,4 +3089,3 @@ void __cdecl RB_RegisterBackendAssets()
 {
     backEnd.debugFont = R_RegisterFont("fonts/smalldevfont", 1);
 }
-

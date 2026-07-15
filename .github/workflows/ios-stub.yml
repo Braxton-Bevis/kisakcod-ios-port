@@ -125,6 +125,24 @@ jobs:
           ! grep -E ' [A-Za-z] _?dvarCount$' ../proof/cominit-defined-symbols.txt
           grep -E ' [A-Za-z] _?(com_dedicated|com_sv_running|useFastFile|com_errorEntered)$' \
             ../proof/cominit-defined-symbols.txt
+          xcrun ar -t libs/iphonesimulator/libkisakrenderer.a \
+            | tee ../proof/renderer-archive-members.txt
+          test "$(grep -vc '__\.SYMDEF' ../proof/renderer-archive-members.txt)" -eq 11
+          xcrun nm -gU libs/iphonesimulator/libkisakrenderer.a \
+            | c++filt | tee ../proof/renderer-defined-symbols.txt
+          for symbol in 'R_GetCommandBuffer(' 'R_iOS_ResetCommandList(' \
+                        'R_iOS_QueueDrawTrianglesCommand(' 'RB_DrawTrianglesCmd(' \
+                        'RB_EndTessSurface(' 'R_DrawTessTechnique(' \
+                        'R_DrawIndexedPrimitive('; do
+            grep -F "$symbol" ../proof/renderer-defined-symbols.txt
+          done
+          for symbol in 'R_InitThreads(' 'R_ComErrorCleanup(' \
+                        'R_SyncRenderThread(' 'R_BeginRemoteScreenUpdate(' \
+                        'R_EndRemoteScreenUpdate(' 'R_PopRemoteScreenUpdate(' \
+                        'R_BeginDebugFrame(' 'R_EndDebugFrame(' \
+                        'Sys_DestroySplashWindow('; do
+            grep -F "$symbol" ../proof/renderer-defined-symbols.txt
+          done
           xcrun nm -gU libs/iphonesimulator/libkisaksmoke.a \
             | c++filt | tee ../proof/smoke-defined-symbols.txt
           for symbol in Dvar_Init Dvar_RegisterEnum Dvar_EnumToString \
@@ -145,6 +163,13 @@ jobs:
             | tee ../proof/simulator-app-defined-symbols.txt
           grep -E ' [A-Za-z] _vkGetInstanceProcAddr$' \
             ../proof/simulator-app-defined-symbols.txt
+          xcrun nm -gU dd/Build/Products/Debug-iphonesimulator/KisakStub.app/KisakStub \
+            | c++filt | tee ../proof/simulator-app-defined-symbols-demangled.txt
+          for symbol in 'R_GetCommandBuffer(' 'R_iOS_QueueDrawTrianglesCommand(' \
+                        'RB_DrawTrianglesCmd(' 'RB_EndTessSurface(' \
+                        'R_DrawTessTechnique(' 'R_DrawIndexedPrimitive('; do
+            grep -F "$symbol" ../proof/simulator-app-defined-symbols-demangled.txt
+          done
           ! grep -E ' [Tt] Dvar_(Init|RegisterEnum|EnumToString|RegisterString|SetStringFromSource|GetString)\(' \
             ../proof/app-object-defined-symbols.txt
           ! grep -E ' [Tt] (Sys_QueEvent|Sys_GetEvent|Dvar_AddCommands|Dvar_Set_f|Dvar_SetA_f|Com_DvarDump)\(' \
@@ -159,6 +184,8 @@ jobs:
             ../proof/app-object-defined-symbols.txt
           ! grep -E ' [A-Za-z] _?(com_dedicated|com_sv_running|useFastFile|com_errorEntered)$' \
             ../proof/app-object-defined-symbols.txt
+          ! grep -E ' [Tt] (R_InitThreads|R_ComErrorCleanup|R_SyncRenderThread|R_BeginRemoteScreenUpdate|R_EndRemoteScreenUpdate|R_PopRemoteScreenUpdate|R_BeginDebugFrame|R_EndDebugFrame|Sys_DestroySplashWindow)\(' \
+            ../proof/app-object-defined-symbols.txt
           ! grep -F 'kisak_boot_smoke' Stub/*.cpp Stub/*.h Stub/*.swift
           ! grep -Eq '^(int|void|bool|const char \*\*) FS_(LoadStack|FreeFile|HashFileName|ListFiles|Printf|ReadFile)\(' \
             Stub/BootScaffold.cpp
@@ -169,7 +196,7 @@ jobs:
           set -euxo pipefail
           APP_BUNDLE_ID=dev.braxton.kisakstub
           UDID=$(xcrun simctl list devices available --json \
-            | jq -r '[.devices[] | .[] | select(.name | test("^iPhone"))][0].udid')
+            | jq -r '([.devices[] | .[] | select(.name | test("^iPad"))][0] // [.devices[] | .[] | select(.name | test("^iPhone"))][0]).udid')
           echo "Using simulator UDID=$UDID"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
@@ -202,7 +229,8 @@ jobs:
             sleep 1
             if [[ -f "$MARKER" ]] \
                 && grep -Fqx 'cominit=Com_Init OK — 4 subsystems up, no assets' "$MARKER" \
-                && grep -Fqx 'd3d9=DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present' "$MARKER"; then
+                && grep -Fqx 'd3d9=DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present' "$MARKER" \
+                && grep -Fqx 'render=IW3 R/RB placeholder scene OK — generated assets, RC_DRAW_TRIANGLES, readback non-background, Present' "$MARKER"; then
               READY=1
               break
             fi
@@ -215,7 +243,7 @@ jobs:
             sleep 5
             xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-2.png
           else
-            echo 'M15 + DXVK D3D9 markers did not earn within 360 seconds' >&2
+            echo 'M15 + DXVK D3D9 + IW3 R/RB renderer markers did not earn within 360 seconds' >&2
             xcrun simctl io "$UDID" screenshot proof/simulator-timeout.png || true
           fi
 
@@ -275,6 +303,9 @@ jobs:
           grep -Fqx 'event=Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected' proof/metal_first_frame.txt
           grep -Fqx 'cominit=Com_Init OK — 4 subsystems up, no assets' proof/metal_first_frame.txt
           grep -Fqx 'd3d9=DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present' proof/metal_first_frame.txt
+          grep -Fqx 'render=IW3 R/RB placeholder scene OK — generated assets, RC_DRAW_TRIANGLES, readback non-background, Present' proof/metal_first_frame.txt
+          grep -Eq '^render-detail=IW3 R/RB placeholder detail — vertices=339 indices=483 triangles=161 cmdBytes=14552 stats=1/161/339/483 changedPixels=[1-9][0-9]{5} fnv1a=0x[0-9A-F]{8} center=0x[0-9A-F]{8} uploads=10848/483$' \
+            proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
           tr -d '\r' < proof/app-console.txt \
             | grep -Eq '^KISAK_M15_DETAIL dvars=(2[5-9]|[3-9][0-9]|[1-9][0-9]{2,}) set=closed dvarlist=1 fs=1 event=1 sl=1$'

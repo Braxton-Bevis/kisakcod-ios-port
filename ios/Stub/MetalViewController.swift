@@ -70,7 +70,12 @@ final class MetalViewController: UIViewController {
     // dedicated sublayer (the main layer belongs to the stub's own loop).
     // If the pipeline works, this sublayer turns orchid on screen.
     private let d3d9Layer = CAMetalLayer()
+    private static let d3d9ProofOK = "DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present"
     private var d3d9Status = "pending"
+    private static let rendererProofOK = "IW3 R/RB placeholder scene OK — generated assets, RC_DRAW_TRIANGLES, readback non-background, Present"
+    private var rendererStatus = "waiting for DXVK"
+    private var rendererDetailStatus = "not run"
+    private let rendererProofLabel = UILabel()
 
     // Phase 3 fresh cold-start path. This exact B1 preflight is earned before
     // the retained M13/FS/M14 probes run; the retired staged entry is absent.
@@ -219,12 +224,75 @@ final class MetalViewController: UIViewController {
             try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
             let t0 = CACurrentMediaTime()
             let result = String(cString: kisak_d3d9_smoke(Unmanaged.passUnretained(self.d3d9Layer).toOpaque()))
-            try? FileManager.default.removeItem(at: sentinel)
             self.d3d9Status = result
             NSLog("KISAK_D3D9_SMOKE %@ elapsed_ms=%.0f", result,
                   (CACurrentMediaTime() - t0) * 1000)
+            if result == Self.d3d9ProofOK {
+#if targetEnvironment(simulator)
+                self.prepareRendererProofCanvas()
+                let rendererResult = String(cString: kisak_renderer_placeholder())
+                let rendererDetail = String(cString: kisak_renderer_placeholder_detail())
+                self.rendererStatus = rendererResult
+                self.rendererDetailStatus = rendererDetail
+                NSLog("KISAK_IW3_RENDERER %@", rendererResult)
+                NSLog("KISAK_IW3_RENDERER_DETAIL %@", rendererDetail)
+                if rendererResult == Self.rendererProofOK {
+                    self.showRendererProofLabel()
+                }
+#else
+                self.rendererStatus = "unavailable — simulator-only proof wave"
+                self.rendererDetailStatus = "simulator-only proof build"
+#endif
+            } else {
+                self.rendererStatus = "blocked by DXVK smoke"
+            }
+            // Keep the crash guard armed through the renderer proof too. An
+            // abort in the real R/RB path must not relaunch into an endless
+            // crash loop or be mistaken for a completed D3D attempt.
+            try? FileManager.default.removeItem(at: sentinel)
             self.writeFirstFrameMarker()
         }
+    }
+
+    private func prepareRendererProofCanvas() {
+        // The engine target is 640x480. Scale that 4:3 drawable without
+        // distortion and let it cover the Swift shell once native R/RB owns
+        // the evidence frame.
+        let available = view.bounds.insetBy(dx: 8, dy: 8)
+        let targetAspect: CGFloat = 4.0 / 3.0
+        let frame: CGRect
+        if available.width / available.height > targetAspect {
+            let width = available.height * targetAspect
+            frame = CGRect(x: available.midX - width / 2,
+                           y: available.minY,
+                           width: width,
+                           height: available.height)
+        } else {
+            let height = available.width / targetAspect
+            frame = CGRect(x: available.minX,
+                           y: available.midY - height / 2,
+                           width: available.width,
+                           height: height)
+        }
+        d3d9Layer.frame = frame
+    }
+
+    private func showRendererProofLabel() {
+        virtualController?.disconnect()
+        virtualController = nil
+        rendererProofLabel.text = "COD4 IW3 R/RB renderer — generated placeholder scene; no retail assets; not mp_killhouse"
+        rendererProofLabel.textColor = .white
+        rendererProofLabel.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+        rendererProofLabel.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
+        rendererProofLabel.textAlignment = .center
+        rendererProofLabel.numberOfLines = 2
+        rendererProofLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(rendererProofLabel)
+        NSLayoutConstraint.activate([
+            rendererProofLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            rendererProofLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            rendererProofLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+        ])
     }
 
     // MARK: - Fresh Com_Init path (see BootComInit.cpp / BootSmoke.cpp)
@@ -753,6 +821,7 @@ final class MetalViewController: UIViewController {
             Controller: \(controllerStatus)  stick (\(String(format: "%.2f", stick.x)), \(String(format: "%.2f", stick.y)))
             engine: \(engineSmoke)
             d3d9: \(d3d9Status)
+            renderer: \(rendererStatus)
             Com_Init preflight: \(comInitPreflightStatus)
             Com_Init spine: \(comInitSpineStatus)
             boot: \(bootStatus)
@@ -792,6 +861,8 @@ final class MetalViewController: UIViewController {
         settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
         engine=\(engineSmoke)
         d3d9=\(d3d9Status)
+        render=\(rendererStatus)
+        render-detail=\(rendererDetailStatus)
         cominit-preflight=\(comInitPreflightStatus)
         cominit-spine=\(comInitSpineStatus)
         boot=\(bootStatus)

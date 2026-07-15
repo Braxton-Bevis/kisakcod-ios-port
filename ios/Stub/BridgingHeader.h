@@ -8,6 +8,12 @@ const char *kisak_engine_smoke(void);
 // Pass a CAMetalLayer* the D3D9 swapchain may own (NOT the stub's main layer).
 const char *kisak_d3d9_smoke(void *metalLayer);
 
+// RendererPlaceholder.cpp — source-generated shoot-house geometry queued
+// through IW3's real RC_DRAW_TRIANGLES producer/backend. Simulator-only proof;
+// the device build returns an explicit non-success diagnostic.
+const char *kisak_renderer_placeholder(void);
+const char *kisak_renderer_placeholder_detail(void);
+
 // BootComInit.cpp is the fresh cold-start path; BootSmoke.cpp re-earns the
 // existing M13 behavioral marker without repeating any initializer.
 const char *kisak_boot_cominit_stage(void);

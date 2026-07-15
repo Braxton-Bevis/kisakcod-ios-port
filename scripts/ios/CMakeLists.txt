@@ -50,6 +50,16 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/win32/win_net.cpp"           # networking (BSD sockets under KISAK_IOS)
     "${SRC_DIR}/win32/win_steam.cpp"         # Steam auth (explicit no-op on iOS)
     "${SRC_DIR}/gfx_d3d/r_init.cpp"          # D3D9 renderer init (Objective 4 target)
+    "${SRC_DIR}/gfx_d3d/r_rendercmds.cpp"    # real renderer command producer
+    "${SRC_DIR}/gfx_d3d/rb_backend.cpp"      # real renderer command consumer
+    "${SRC_DIR}/gfx_d3d/rb_shade.cpp"        # tessellation/material draw path
+    "${SRC_DIR}/gfx_d3d/rb_state.cpp"        # backend command-buffer globals/state
+    "${SRC_DIR}/gfx_d3d/rb_stats.cpp"        # backend primitive accounting
+    "${SRC_DIR}/gfx_d3d/r_state_utils.cpp"   # renderer state transitions
+    "${SRC_DIR}/gfx_d3d/r_shade.cpp"         # material pass setup
+    "${SRC_DIR}/gfx_d3d/r_state.cpp"         # D3D9 render-state owner
+    "${SRC_DIR}/gfx_d3d/r_buffers.cpp"       # dynamic vertex/index buffers
+    "${SRC_DIR}/gfx_d3d/r_draw_bsp.cpp"      # real R_SetStreamSource owner
 )
 
 add_library(${PROJECT_NAME} OBJECT ${IOS_PROBE_SOURCES})
