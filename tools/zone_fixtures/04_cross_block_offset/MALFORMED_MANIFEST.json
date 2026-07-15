@@ -1,0 +1,22 @@
+{
+  "container": {
+    "decompressed_sha256": "1fcbd74256bf974a35415e9a0ce139ec898db85870203e07acdc7d1da646166d",
+    "file": "malformed_empty_block_offset.ff",
+    "magic": "IWffu100",
+    "sha256": "abb4cd1c4972efe2c7a4e36526d7c8be4142115bcbe11383b9e7351997976132",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "offset_out_of_bounds",
+    "must_fail_gate": true,
+    "note": "Refuse an offset token targeting empty block 5."
+  },
+  "fixture": "cross_block_offset",
+  "mechanism": 4,
+  "notes": [
+    "Malformed token targets empty block 5."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}

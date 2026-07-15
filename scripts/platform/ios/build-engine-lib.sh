@@ -92,6 +92,8 @@ build_one_sdk() {
     src_qcommon_com_fileaccess.cpp.o
     src_qcommon_unzip.cpp.o
     src_qcommon_common.cpp.o
+    src_qcommon_net_chan_mp.cpp.o
+    src_win32_win_net.cpp.o
     src_stringed_stringed_hooks.cpp.o
     src_stringed_stringed_ingame.cpp.o
     src_buildnumber.cpp.o

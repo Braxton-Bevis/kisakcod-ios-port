@@ -1,6 +1,6 @@
-// Phase 3 Stage B2: fresh cold-start entry into the real Com_Init owner.
-// B1's LP64 preflight stays frozen; common.cpp now owns the temporary
-// command/dvar/hunk spine instead of a second initializer in this file.
+// Phase 3 Stage B3: fresh cold-start entry into the real Com_Init owner.
+// B1's LP64 preflight stays frozen; common.cpp owns the temporary
+// command/dvar/hunk plus net/msg spine instead of a second initializer here.
 
 #include <cstdint>
 #include <cstdio>
@@ -109,7 +109,7 @@ extern "C" const char *kisak_boot_cominit_stage(void)
     }
 
     // Explicit headless policy: common.cpp registers useFastFile=0 and
-    // dedicated=2 from this request before its guarded B2 boundary returns.
+    // dedicated=2 from this request before its guarded B3 boundary returns.
     FS_iOS_SetHeadlessNoAssets(true);
     Com_Init(emptyCommandLine);
     if (!Com_iOS_BootSpineReached() || Dvar_GetBool("useFastFile")
@@ -127,7 +127,7 @@ extern "C" const char *kisak_boot_cominit_stage(void)
 extern "C" const char *kisak_boot_common_spine_status(void)
 {
     if (!Com_iOS_BootSpineReached())
-        return "common spine FAIL: Com_Init did not reach B2 fence";
+        return "common spine FAIL: Com_Init did not reach B3 fence";
     if (Dvar_GetBool("useFastFile") || Dvar_GetInt("dedicated") != 2)
         return "common spine FAIL: headless policy drift";
     return "Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced";

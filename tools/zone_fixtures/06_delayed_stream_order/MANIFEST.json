@@ -1,0 +1,167 @@
+{
+  "container": {
+    "decompressed_sha256": "dc96f013acb5d380e5ba012da4d130308946f3cfe1dafdf20e70c5077542702d",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "8c616c25663176fc1feac370e4b18e38598dd8816ee4c8fbecf66da109287e74",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "delayed_stream_order",
+  "mechanism": 6,
+  "notes": [
+    "The minimal CLIPMAP_PVS drives a genuine block-1 DynEntityPose zero-fill.",
+    "No stock asset walker in this tree pushes blocks 2 or 3; the manifest's delayed_read_plan is the explicit kernel probe."
+  ],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "CLIPMAP_PVS(11)": 1
+    },
+    "relations": [
+      {
+        "drain_phase": "after_asset_walk",
+        "kind": "delayed_read_plan",
+        "physical_bytes_hex": "423241423321217a",
+        "records": [
+          {
+            "block": 2,
+            "bytes": 3,
+            "expected_hex": "423241",
+            "offset": 0,
+            "order": 0
+          },
+          {
+            "block": 3,
+            "bytes": 4,
+            "expected_hex": "42332121",
+            "offset": 0,
+            "order": 1
+          },
+          {
+            "block": 2,
+            "bytes": 1,
+            "expected_hex": "7a",
+            "offset": 3,
+            "order": 2
+          }
+        ]
+      }
+    ],
+    "script_strings": {
+      "content_hash.fnv1a64": "cbf29ce484222325",
+      "count": 0
+    },
+    "targeted_fields": [
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "0cbd12328272d5d1",
+        "path": "clipmap_pvs[0].name",
+        "value": "synthetic/runtime_delay"
+      },
+      {
+        "encoding": "zero_filled_raw_bytes",
+        "fnv1a64": "0c8210784d8af5a5",
+        "path": "clipmap_pvs[0].dynEntPoseList[0]",
+        "value": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "encoding": "raw_bytes",
+        "fnv1a64": "88fbfbba49b94e75",
+        "path": "delayed_records.physical_order",
+        "value": "B2AB3!!z"
+      },
+      {
+        "encoding": "raw_bytes",
+        "fnv1a64": "3c02baa6cc3c6592",
+        "path": "block[2].final",
+        "value": "B2Az"
+      },
+      {
+        "encoding": "raw_bytes",
+        "fnv1a64": "34a660a6c86f8048",
+        "path": "block[3].final",
+        "value": "B3!!"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 1,
+    "blocks.bytes": [
+      284,
+      32,
+      4,
+      4,
+      32,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 395,
+    "container.decompressed_bytes": 384,
+    "container.input_bytes": 407,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 0,
+    "script_strings.metadata_hash.fnv1a64": "a8c7f832281a39c5",
+    "script_strings.pointer_token": "0x00000000",
+    "targeted_hash.asset_list.fnv1a64": "acb786bb777c77a0",
+    "targeted_hash.decompressed_payload.fnv1a64": "6d25bc1b4bda2c9f",
+    "targeted_hash.xfile.fnv1a64": "b40c1704e6c39935",
+    "xfile.external_size": 0,
+    "xfile.size": 340
+  },
+  "purpose": "Block-1 zero fill and explicit block-2/3 delayed-record drain ordering.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 8,
+      "label": "asset_array",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 284,
+      "label": "clipmap_pvs[0]",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 24,
+      "label": "clipmap_pvs[0].name",
+      "offset": 8
+    },
+    {
+      "block": 1,
+      "bytes": 32,
+      "file_bytes": 0,
+      "label": "clipmap_pvs[0].dynEntPoseList[0].zero_fill",
+      "offset": 0
+    },
+    {
+      "block": 2,
+      "bytes": 3,
+      "label": "delayed_record[0]",
+      "offset": 0,
+      "phase": "enqueue_without_read"
+    },
+    {
+      "block": 3,
+      "bytes": 4,
+      "label": "delayed_record[1]",
+      "offset": 0,
+      "phase": "enqueue_without_read"
+    },
+    {
+      "block": 2,
+      "bytes": 1,
+      "label": "delayed_record[2]",
+      "offset": 3,
+      "phase": "enqueue_without_read"
+    }
+  ]
+}

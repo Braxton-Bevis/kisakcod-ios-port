@@ -1,0 +1,22 @@
+{
+  "container": {
+    "decompressed_sha256": "cf556f3dcc745c77f2e1062b2a39556dea421d4a538af55734b49347b4022d35",
+    "file": "malformed_truncated_buffer.ff",
+    "magic": "IWffu100",
+    "sha256": "ec7dcaedffbc2d9f598fd963c37d8733ce8e2709b2ddb8c48bd4a1549a33543a",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "stream_truncation",
+    "must_fail_gate": true,
+    "note": "Refuse when RawFile.len + 1 bytes cannot be read from block 4."
+  },
+  "fixture": "rawfile_inline",
+  "mechanism": 1,
+  "notes": [
+    "Final RawFile buffer byte removed; declared len remains 5."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}

@@ -270,6 +270,15 @@ int __cdecl ShortSwap(__int16 l)
     return HIBYTE(l) + ((uint8_t)l << 8);
 }
 
+#ifdef KISAK_IOS
+// q_shared.h's Win32 lane defines this inline, while the portable declaration
+// otherwise had no iOS owner. Network ports remain big-endian on arm64 too.
+__int16 __cdecl BigShort(__int16 l)
+{
+    return (__int16)ShortSwap(l);
+}
+#endif
+
 __int16 __cdecl ShortNoSwap(__int16 l)
 {
     return l;
@@ -1131,4 +1140,3 @@ uint32_t __cdecl LongNoSwap(uint32_t color)
 {
     return color;
 }
-

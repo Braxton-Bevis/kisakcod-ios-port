@@ -1,0 +1,111 @@
+{
+  "container": {
+    "decompressed_sha256": "70bcb2b48aad3b54bfa21dc5002f43dc5b0ccb27294545655fd6dad91644cc72",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "b351c74ff63ed75d3a209d7a36dcc77aff6b2dab315c421bde542569d1a51985",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "tagged_union_arm",
+  "mechanism": 7,
+  "notes": [],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "XANIMPARTS(2)": 1
+    },
+    "relations": [
+      {
+        "expected_arm": "uint8_t*",
+        "expected_elements": 4,
+        "expected_file_bytes": 4,
+        "kind": "tagged_union_arm",
+        "predicate": "numframes >= 256",
+        "selector": "xanimparts[0].numframes",
+        "union": "XAnimIndices"
+      }
+    ],
+    "script_strings": {
+      "content_hash.fnv1a64": "cbf29ce484222325",
+      "count": 0
+    },
+    "targeted_fields": [
+      {
+        "encoding": "u16_le",
+        "fnv1a64": "08285607b4e2c672",
+        "path": "xanimparts[0].numframes",
+        "value": 7
+      },
+      {
+        "encoding": "raw_bytes",
+        "fnv1a64": "f5d73487f8f75a22",
+        "path": "xanimparts[0].indices",
+        "value": "03010401"
+      },
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "54de06c6099c1f81",
+        "path": "xanimparts[0].indices.arm",
+        "value": "uint8"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 1,
+    "blocks.bytes": [
+      88,
+      0,
+      0,
+      0,
+      31,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 190,
+    "container.decompressed_bytes": 179,
+    "container.input_bytes": 202,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 0,
+    "script_strings.metadata_hash.fnv1a64": "a8c7f832281a39c5",
+    "script_strings.pointer_token": "0x00000000",
+    "targeted_hash.asset_list.fnv1a64": "acb786bb777c77a0",
+    "targeted_hash.decompressed_payload.fnv1a64": "a300c9d22875adf4",
+    "targeted_hash.xfile.fnv1a64": "3b36896bb6b06035",
+    "xfile.external_size": 0,
+    "xfile.size": 135
+  },
+  "purpose": "XAnimIndices selects its uint8_t pointer arm when numframes is below 256.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 8,
+      "label": "asset_array",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 88,
+      "label": "xanimparts[0]",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 19,
+      "label": "xanimparts[0].name",
+      "offset": 8
+    },
+    {
+      "block": 4,
+      "bytes": 4,
+      "label": "xanimparts[0].indices",
+      "offset": 27
+    }
+  ]
+}

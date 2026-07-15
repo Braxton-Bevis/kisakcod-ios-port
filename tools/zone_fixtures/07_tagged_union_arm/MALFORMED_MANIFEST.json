@@ -1,0 +1,22 @@
+{
+  "container": {
+    "decompressed_sha256": "d1812f3593de8687f0380fd9a4fedd07eaff9822cbd9af7c96d2d8d98d0a020a",
+    "file": "malformed_wrong_arm_size.ff",
+    "magic": "IWffu100",
+    "sha256": "c538fa672c7502bcae004dd7c072e781089cc45879e44daea4df8c69062140e9",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "union_arm_truncation",
+    "must_fail_gate": true,
+    "note": "Refuse when the uint16_t arm selected by numframes has only uint8_t-arm bytes."
+  },
+  "fixture": "tagged_union_arm",
+  "mechanism": 7,
+  "notes": [
+    "Selector requires 8 index bytes, but only 4 are present."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}

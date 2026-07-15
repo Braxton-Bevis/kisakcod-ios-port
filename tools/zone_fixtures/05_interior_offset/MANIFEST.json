@@ -1,0 +1,113 @@
+{
+  "container": {
+    "decompressed_sha256": "94dd61c065e55defe9a4f28b847489cff9a426e6ff3e36d3e530da5a61bdd7d8",
+    "file": "valid.ff",
+    "magic": "IWffu100",
+    "sha256": "f6a4c6e8bc9f78b89074dad9205ed01c2585a82b4e76d727e4147f1bceac880e",
+    "version": 5
+  },
+  "expectation": "accept",
+  "fixture": "interior_offset",
+  "mechanism": 5,
+  "notes": [],
+  "oracle_runtime": {
+    "asset_type_counts": {
+      "RAWFILE(31)": 2
+    },
+    "relations": [
+      {
+        "expected_text": "mid",
+        "interior_delta": 4,
+        "kind": "interior_pointer",
+        "owning_allocation": "rawfile[0]",
+        "source": "rawfile[1].name",
+        "target": {
+          "block": 0,
+          "offset": 4
+        }
+      }
+    ],
+    "script_strings": {
+      "content_hash.fnv1a64": "cbf29ce484222325",
+      "count": 0
+    },
+    "targeted_fields": [
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "b2ceabe51428c05b",
+        "path": "rawfile[0].name",
+        "value": "interior_owner"
+      },
+      {
+        "encoding": "u32_le",
+        "fnv1a64": "2d401a55eec16520",
+        "path": "rawfile[1].name_token",
+        "value": "0x00000005"
+      },
+      {
+        "encoding": "utf8_nul",
+        "fnv1a64": "da3a16a2a77e373f",
+        "path": "rawfile[1].name",
+        "value": "mid"
+      }
+    ]
+  },
+  "oracle_v1": {
+    "assets.pointer_token": "0xffffffff",
+    "assets.total": 2,
+    "blocks.bytes": [
+      24,
+      0,
+      0,
+      0,
+      31,
+      0,
+      0,
+      0,
+      0
+    ],
+    "container.compressed_bytes": 126,
+    "container.decompressed_bytes": 115,
+    "container.input_bytes": 138,
+    "container.magic": "IWffu100",
+    "container.secure": 0,
+    "container.version": 5,
+    "schema": "bmk4.ff-oracle.v1",
+    "script_strings.count": 0,
+    "script_strings.metadata_hash.fnv1a64": "a8c7f832281a39c5",
+    "script_strings.pointer_token": "0x00000000",
+    "targeted_hash.asset_list.fnv1a64": "12d98c2f97974403",
+    "targeted_hash.decompressed_payload.fnv1a64": "bba5902a8a30fa02",
+    "targeted_hash.xfile.fnv1a64": "01e1e46e0f0d5835",
+    "xfile.external_size": 0,
+    "xfile.size": 71
+  },
+  "purpose": "RawFile.name points four bytes into a previously loaded RawFile struct.",
+  "schema": "bmk4.zone-fixture-manifest.v1",
+  "stream_events": [
+    {
+      "block": 4,
+      "bytes": 16,
+      "label": "asset_array",
+      "offset": 0
+    },
+    {
+      "block": 0,
+      "bytes": 12,
+      "label": "rawfile[0]",
+      "offset": 0
+    },
+    {
+      "block": 4,
+      "bytes": 15,
+      "label": "rawfile[0].name",
+      "offset": 16
+    },
+    {
+      "block": 0,
+      "bytes": 12,
+      "label": "rawfile[1]",
+      "offset": 12
+    }
+  ]
+}

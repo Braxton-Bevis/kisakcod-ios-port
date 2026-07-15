@@ -1,0 +1,22 @@
+{
+  "container": {
+    "decompressed_sha256": "425ad4374867febe20387633a513cbb3c2fee499a50c96bdb716f90c225cbc6c",
+    "file": "malformed_bad_sentinel.ff",
+    "magic": "IWffu100",
+    "sha256": "001570bb64ecbf31fbda54e97f09c64216b9270f460cf5727b2bd75b532e3c3e",
+    "version": 5
+  },
+  "expectation": "refuse",
+  "expected_refusal": {
+    "code": "bad_sentinel",
+    "must_fail_gate": true,
+    "note": "Refuse -3: it is neither -1/-2 nor a valid in-range alias token."
+  },
+  "fixture": "alias_forward",
+  "mechanism": 3,
+  "notes": [
+    "-3 is neither an IW3 inline sentinel nor a valid in-range alias token."
+  ],
+  "oracle_v1_static_parser_may_accept": true,
+  "schema": "bmk4.zone-fixture-refusal.v1"
+}
