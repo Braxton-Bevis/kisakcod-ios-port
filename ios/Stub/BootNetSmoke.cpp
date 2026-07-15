@@ -39,7 +39,11 @@ extern "C" const char *kisak_boot_net_smoke(void)
         return status;
     }
 
+    fprintf(stderr, "KISAK_NET_BREADCRUMB msg-init enter\n");
+    fflush(stderr);
     MSG_Init(&outgoing, outgoingData, sizeof(outgoingData));
+    fprintf(stderr, "KISAK_NET_BREADCRUMB msg-init complete\n");
+    fflush(stderr);
     MSG_WriteLong(&outgoing, payloadMagic);
     MSG_WriteString(&outgoing, payloadText);
     if (outgoing.overflowed || outgoing.cursize <= 4)

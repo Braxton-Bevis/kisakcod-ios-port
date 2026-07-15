@@ -262,6 +262,7 @@ final class MetalViewController: UIViewController {
     }
 
     private func runNetSmoke() {
+        NSLog("KISAK_STAGE_ENTER net")
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let sentinel = docs.appendingPathComponent("net_attempt_in_flight")
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
@@ -279,6 +280,7 @@ final class MetalViewController: UIViewController {
     }
 
     private func runFSSmoke() {
+        NSLog("KISAK_STAGE_ENTER fs")
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let sentinel = docs.appendingPathComponent("fs_attempt_in_flight")
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
@@ -302,6 +304,7 @@ final class MetalViewController: UIViewController {
     }
 
     private func runPmoveProof() {
+        NSLog("KISAK_STAGE_ENTER pmove")
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let sentinel = docs.appendingPathComponent("pmove_attempt_in_flight")
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0

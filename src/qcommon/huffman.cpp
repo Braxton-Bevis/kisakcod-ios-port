@@ -112,7 +112,13 @@ nodetype *__cdecl Huff_initNode(huff_t *huff, int ch, int weight)
 
 int __cdecl nodeCmp(const void *left, const void *right)
 {
+#ifdef KISAK_IOS
+    const nodetype *leftNode = *static_cast<nodetype *const *>(left);
+    const nodetype *rightNode = *static_cast<nodetype *const *>(right);
+    return leftNode->weight - rightNode->weight;
+#else
     return *(uint32_t *)(*(uint32_t *)left + 12) - *(uint32_t *)(*(uint32_t *)right + 12);
+#endif
 }
 
 void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
@@ -132,7 +138,13 @@ void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
         inited = Huff_initNode(huff, i, msg_hData[i]);
         heap[i] = inited;
     }
+#ifdef KISAK_IOS
+    // heap contains pointers: Win32's 4-byte element width truncates and
+    // mis-sorts them on arm64 before nodeCmp can read a weight.
+    qsort(heap, 0x100u, sizeof(heap[0]), nodeCmp);
+#else
     qsort(heap, 0x100u, 4u, nodeCmp);
+#endif
     v3 = Huff_initNode(huff, 257, 1);
     v3->left = huff->tree;
     v3->right = heap[0];
@@ -142,7 +154,11 @@ void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
     heap[0] = v3;
     while (numNodes > 1)
     {
+#ifdef KISAK_IOS
+        qsort(&heap[heapHead], 256 - heapHead, sizeof(heap[0]), nodeCmp);
+#else
         qsort(&heap[heapHead], 256 - heapHead, 4u, nodeCmp);
+#endif
         v4 = Huff_initNode(huff, 257, 1);
         v4->left = heap[heapHead];
         v4->right = heap[heapHead + 1];
@@ -154,4 +170,3 @@ void __cdecl Huff_BuildFromData(huff_t *huff, const int *msg_hData)
     }
     huff->tree = heap[heapHead];
 }
-
