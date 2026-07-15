@@ -6,7 +6,7 @@ Read `docs/HANDOFF_TO_CODEX.md`, the ratified roadmap in
 entries before continuing. Re-reference this file before each edit and refresh
 it whenever work pauses.
 
-## Active seat state — M15 promoted; main verification in progress
+## Active seat state — M15 on main; renderer queued at the sampler boundary
 
 - B4 was permanently gated and promoted through PR #5. Protected `main` merge
   `b113cdd` passed both hard iOS jobs, the 39/39 census, and Windows Debug and
@@ -48,37 +48,65 @@ it whenever work pauses.
   run `29431086988` passed 41/41, iOS run `29431086945` passed simulator and
   unsigned-device jobs, and Windows run `29431087320` passed Debug/Release,
   FF0a, and layout conformance with no substantive red step.
-- Staging renderer-plumbing commit `f780d19` passed 41/41 and built all 215
-  DXVK simulator targets with the iOS WSI plus D1 patch. Its first iOS run
-  `29431163115` stopped before app link because the pinned `MoltenVK-ios.tar`
-  contains only the device slice. The follow-up switches only the simulator
-  download to the hash-pinned `MoltenVK-all.tar`, which carries the simulator
-  xcframework slice. Follow-up `6aa7e24` built and linked the complete
-  simulator app, while its device lane and Windows Debug/Release stayed green.
-  Runtime run `29431650949` then failed closed at adapter selection: MoltenVK
-  exposed Vulkan 1.4 on the Apple simulator GPU, but DXVK rejected its missing
-  `imageCubeArray` core feature before `CreateDevice`; the app survived, M15
-  remained earned, launch exit was 0, and no KisakStub `.ips` existed. DXVK
-  v2.7.1 uses `imageCubeArray` only in its disabled D3D11 SRV path, so the next
-  bounded round makes that requirement optional on Apple while retaining it
-  whenever supported. The direct D3D9
-  clear remains plumbing evidence, not an engine/game screenshot or D1 probe.
+- Staging commits `f780d19` through `90d835d` now build the patched DXVK 2.7.1
+  D3D9 frontend and MoltenVK simulator slice, link the app, and advance adapter
+  selection through the Apple-only `imageCubeArray`, single-viewport,
+  non-precise-occlusion, and `shaderInt64` boundaries. The `shaderInt64`
+  change is paired with a bit-exact two-`uint32` rewrite of DXVK's internal
+  2x/4x/8x/16x multisample lookup; it does not merely suppress the capability
+  check. Commit `90d835d` restores normal unified-diff context after CI caught
+  a zero-context hunk that GNU patch accepted but `git apply` correctly
+  rejected.
+- Exact staging SHA `90d835d209bef469287cacc6103a1275aa219609` has 41/41
+  census run `29438325538`, fully green device archive/unsigned arm64 IPA in
+  iOS run `29438330184`, and fully green Windows Debug/Release, FF0a, and
+  layout run `29438325418`. Its simulator archive, app link, and ownership
+  checks are green. SIM_RUN is red only because MoltenVK's hosted simulator GPU
+  lacks required `shaderSampledImageArrayDynamicIndexing`; DXVK then reports
+  no adapters and the D3D smoke fails closed in 43 ms. M15 still earns with 72
+  dvars and every behavioral bit set, pmove earns, launch exit is `0`, and the
+  proof has zero `.ips` reports. Evidence is in run `29438330184`; the local
+  downloaded copy is `scratch-run-29438330184` and must not be committed.
+- The next feature is load-bearing: D3D9 and DXVK's built-in presentation code
+  use the global sampler heap. Do **not** make
+  `shaderSampledImageArrayDynamicIndexing` optional by itself. Pair any Apple
+  simulator admission with a bounded fixed/constant-index sampler fallback,
+  safe descriptor-set creation when descriptor indexing is absent, and an
+  abort-loud boundary for textured paths the fallback cannot reproduce.
+  Source audit predicts the same Apple simulator will also lack aggregate
+  `descriptorIndexing`, its update/partially-bound/runtime-array features, and
+  `samplerMirrorClampToEdge`; treat those as one coherent fallback wave rather
+  than one dishonest capability-toggle round at a time.
+- The audited renderer implementation is remotely preserved on branch
+  `renderer-placeholder-queued` at `5121928`. Its first commit bounds
+  simulator dead stripping while retaining `_vkGetInstanceProcAddr`; its
+  second grows the census to 51 and drives a generated recognizable room
+  through real IW3 `R_GetCommandBuffer(RC_DRAW_TRIANGLES)` → `RB_*` → D3D9.
+  It has not run in Apple CI and is not on staging or main. It must be rebased
+  after the sampler fallback goes green, then landed in the two existing
+  commits so link closure is proved separately from the scene. No screenshot
+  from this branch has been earned or published.
 
 ## Current next actions
 
-1. Run the D3D9-only `imageCubeArray` requirement relaxation through staging.
-   Require the unchanged CreateDevice/Clear/readback/Present marker; do not
-   promote a build-only or adapter-rejection result.
+1. Implement and source-audit one coherent Apple simulator sampler fallback
+   for `shaderSampledImageArrayDynamicIndexing` plus the dependent descriptor
+   indexing/runtime-array features. Preserve the full physical-device path
+   whenever those features exist, and fail closed on any unsupported textured
+   engine shader. Require the unchanged CreateDevice/Clear/readback/Present
+   marker in staging; a build or adapter admission alone is not evidence.
 2. Once that runtime gate is green, promote the simulator-DXVK plumbing to
    protected `main`; the clear frame must not be published as the requested
    render.
-3. Enable bounded simulator dead stripping with an explicit retained
-   `_vkGetInstanceProcAddr`, prove the unchanged D3D9 marker again, then wire
-   the exact real COD4 R/RB command path and a recognizable generated
-   placeholder room. Earn a native marker from
-   draw counts, non-background output/readback, and successful Present before
-   publishing that simulator screenshot.
-4. In parallel with renderer closure, begin slice 7 with the smallest
+3. Rebase `renderer-placeholder-queued` on the promoted line. Push and prove
+   its link-closure commit first, then its generated IW3 R/RB scene commit.
+   Inspect the artifact visually and require its native draw-count,
+   non-background-readback, and Present marker before publishing it as an
+   honest generated-placeholder game-engine screenshot.
+4. Promote the green renderer result to protected `main` through the normal
+   staging PR. Never merge the current red simulator adapter or the unrun
+   renderer checkpoint merely to move branch pointers.
+5. In parallel with renderer closure, begin slice 7 with the smallest
    synthetic FF1/FF2 RawFile valid+malformed twin. The 32→64 fastfile
    translation kernel remains mandatory for the final real `mp_killhouse`
    physical-iPad frame.
