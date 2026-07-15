@@ -48,7 +48,8 @@ targets:
         # The engine is arm64-only (sse2neon absorbs the SSE layer) — no
         # x86_64 simulator slice exists or is wanted.
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
-        # Device builds additionally link the TRANSLATION renderer stack:
+        # Device and arm64 simulator builds additionally link the TRANSLATION
+        # renderer stack:
         # DXVK d3d9 (+ its component libs, built by build-dxvk-ios.sh with the
         # iOS CAMetalLayer WSI) and MoltenVK static. D3D9Smoke.mm drives it.
         # MoltenVK must be force-loaded AND dead-stripping disabled: DXVK
@@ -58,3 +59,4 @@ targets:
         # signal 5 inside Direct3DCreate9, zero vk* symbols in the binary).
         DEAD_CODE_STRIPPING: NO
         "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lz", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]
+        "OTHER_LDFLAGS[sdk=iphonesimulator*]": ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lz", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphonesimulator/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]

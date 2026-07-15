@@ -191,7 +191,7 @@ final class MetalViewController: UIViewController {
         runBootComInit()
     }
 
-    // MARK: - D3D9-through-DXVK smoke (device only; see D3D9Smoke.mm)
+    // MARK: - D3D9-through-DXVK smoke (device + arm64 simulator)
 
     private func setUpD3D9Smoke() {
         d3d9Layer.frame = CGRect(x: 16, y: 190, width: 320, height: 240)
@@ -220,8 +220,9 @@ final class MetalViewController: UIViewController {
             let t0 = CACurrentMediaTime()
             let result = String(cString: kisak_d3d9_smoke(Unmanaged.passUnretained(self.d3d9Layer).toOpaque()))
             try? FileManager.default.removeItem(at: sentinel)
-            self.d3d9Status = "\(result) (\(String(format: "%.0f", (CACurrentMediaTime() - t0) * 1000))ms)"
-            NSLog("KISAK_D3D9_SMOKE %@", self.d3d9Status)
+            self.d3d9Status = result
+            NSLog("KISAK_D3D9_SMOKE %@ elapsed_ms=%.0f", result,
+                  (CACurrentMediaTime() - t0) * 1000)
             self.writeFirstFrameMarker()
         }
     }

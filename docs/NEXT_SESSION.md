@@ -6,7 +6,7 @@ Read `docs/HANDOFF_TO_CODEX.md`, the ratified roadmap in
 entries before continuing. Re-reference this file before each edit and refresh
 it whenever work pauses.
 
-## Active seat state — M15 headless Com_Init earned on staging
+## Active seat state — M15 promoted; main verification in progress
 
 - B4 was permanently gated and promoted through PR #5. Protected `main` merge
   `b113cdd` passed both hard iOS jobs, the 39/39 census, and Windows Debug and
@@ -38,17 +38,33 @@ it whenever work pauses.
   that position is reserved for the first real engine-rendered frame.
 - M15 is SIM_RUN evidence. The unsigned device IPA is compile/link/package
   evidence only; it is not a physical-device M15 runtime claim.
+- Permanent-gate commit `f2cbd0f` passed census run `29427943390` (41/41),
+  iOS run `29427946590`, and Windows run `29427946410`. The follow-up
+  `b8c80bf` removes shell-smoke images from the README hero and passed exact-SHA
+  census run `29429035322`, iOS run `29429033587`, and Windows run
+  `29429026387`.
+- Staging-to-main PR #6 auto-merged as protected `main` merge `0cc70dd` after
+  required PR run `29430079226` passed Debug and Release. The hard workflows
+  triggered by that main merge still need exact-SHA verification.
+- Local branch `renderer-placeholder-work` has a simulator-DXVK plumbing wave.
+  It is SOURCE-only: it has not compiled or run in CI and its
+  direct D3D9 clear is not an engine/game screenshot or a D1 runtime probe.
 
 ## Current next actions
 
-1. Commit and push the permanent B5 gate/doc/screenshot follow-up to `staging`.
-   Require 41/41, both iOS jobs, both Windows builds, exact M15 marker/detail,
-   launch exit 0, zero relevant `.ips`, and every per-step staging verdict.
-2. Only after that exact staging SHA is green, open the staging-to-main PR,
-   arm auto-merge, and verify the hard PR/main checks.
-3. Begin slice 7 with the smallest synthetic FF1/FF2 RawFile valid+malformed
-   twin. The 32→64 fastfile translation kernel is now the critical path to the
-   first real `mp_killhouse` frame.
+1. Let PR #6 auto-merge, then verify all hard `main` runs on the merge SHA,
+   including per-step iOS simulator/device outcomes and the 41/41 census.
+2. Commit and push the simulator-DXVK plumbing wave to `staging`. Give it one
+   bounded hosted attempt. It may prove CreateDevice/Clear/readback/Present,
+   but its clear frame must not be published as the requested render.
+3. Use the resulting renderer plumbing to wire a real COD4 R/RB command path
+   and a recognizable generated placeholder room. Earn a native marker from
+   draw counts, non-background output/readback, and successful Present before
+   publishing that simulator screenshot.
+4. In parallel with renderer closure, begin slice 7 with the smallest
+   synthetic FF1/FF2 RawFile valid+malformed twin. The 32→64 fastfile
+   translation kernel remains mandatory for the final real `mp_killhouse`
+   physical-iPad frame.
 
 ## Historical checkpoint — Stage B2 119-symbol link closure
 

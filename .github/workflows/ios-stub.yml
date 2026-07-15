@@ -30,17 +30,35 @@ jobs:
           xcodebuild -version
           xcrun simctl list runtimes
 
-      - name: Build engine archives (census + smoke + pmove + Com_Init wave)
+      - name: Build simulator renderer + engine archives
         id: build_archives
         run: |
           set -euxo pipefail
-          git clone --depth 1 --branch v2.7.1 --recurse-submodules=include/native/directx --shallow-submodules \
-            https://github.com/doitsujin/dxvk dxvk-headers
-          git -C dxvk-headers apply --verbose "$GITHUB_WORKSPACE/scripts/platform/ios/dxvk-v2.7.1-ios.patch"
-          mkdir -p ios/libs/dxvk-include
-          cp -R dxvk-headers/include/native/directx ios/libs/dxvk-include/
-          cp -R dxvk-headers/include/native/windows ios/libs/dxvk-include/
-          ./scripts/platform/ios/build-engine-lib.sh "$PWD/dxvk-headers/include/native" iphonesimulator
+          brew install meson ninja glslang
+          ./scripts/platform/ios/build-dxvk-ios.sh dxvk-ios-simulator-work iphonesimulator
+
+          mkdir -p ios/libs/iphonesimulator ios/libs/dxvk-include
+          for archive in libdxvk_d3d9.a libdxso.a libdxvk.a libutil.a \
+                         libspirv.a libwsi.a libvkcommon.a libdisplay-info.a; do
+            source=$(find dxvk-ios-simulator-work/dxvk/build-ios-simulator \
+              -type f -name "$archive" -print -quit)
+            test -n "$source"
+            cp "$source" ios/libs/iphonesimulator/
+          done
+          cp -R dxvk-ios-simulator-work/dxvk/include/native/directx ios/libs/dxvk-include/
+          cp -R dxvk-ios-simulator-work/dxvk/include/native/windows ios/libs/dxvk-include/
+
+          curl -L --fail --retry 3 \
+            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-ios.tar \
+            -o MoltenVK-ios.tar
+          echo "54336b90212c390ed5935c96460aed3bf651ad7d3c0f0e956586ce18e9c0b701  MoltenVK-ios.tar" \
+            | shasum -a 256 -c -
+          tar -xf MoltenVK-ios.tar
+          cp MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64_x86_64-simulator/libMoltenVK.a \
+            ios/libs/iphonesimulator/
+
+          ./scripts/platform/ios/build-engine-lib.sh \
+            "$PWD/dxvk-ios-simulator-work/dxvk/include/native" iphonesimulator
 
       - name: Install XcodeGen
         id: install_xcodegen
@@ -170,13 +188,15 @@ jobs:
           CONSOLE_CAPTURE_PID=$!
 
           # Hosted CoreSimulator can take several minutes between accepting a
-          # launch command and creating the process. Wait on the native-earned
-          # B5 line instead of racing a fixed screenshot timer.
+          # launch command and creating the process. Wait for both the native
+          # B5 line and the independently earned D3D9 renderer result instead
+          # of racing a fixed screenshot timer.
           READY=0
           for second in $(seq 1 360); do
             sleep 1
             if [[ -f "$MARKER" ]] \
-                && grep -Fqx 'cominit=Com_Init OK — 4 subsystems up, no assets' "$MARKER"; then
+                && grep -Fqx 'cominit=Com_Init OK — 4 subsystems up, no assets' "$MARKER" \
+                && grep -Fqx 'd3d9=DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present' "$MARKER"; then
               READY=1
               break
             fi
@@ -189,7 +209,7 @@ jobs:
             sleep 5
             xcrun simctl io "$UDID" screenshot proof/simulator-screenshot-2.png
           else
-            echo 'M15 marker did not earn within 360 seconds' >&2
+            echo 'M15 + DXVK D3D9 markers did not earn within 360 seconds' >&2
             xcrun simctl io "$UDID" screenshot proof/simulator-timeout.png || true
           fi
 
@@ -232,6 +252,9 @@ jobs:
               fi
             done < <(find "$REPORT_DIR" -maxdepth 1 -type f -name '*.ips' -print0)
           fi
+          if [[ -f "$CONTAINER/Documents/dxvk_stderr.log" ]]; then
+            cp "$CONTAINER/Documents/dxvk_stderr.log" proof/
+          fi
 
           # HARD ASSERTION: the app only writes this file after successfully
           # presenting a Metal frame. Missing file -> job fails.
@@ -245,6 +268,7 @@ jobs:
           grep -Fqx 'net=Netchan+NET_Init OK — loopback only, 1 sockets, msg subsystem up' proof/metal_first_frame.txt
           grep -Fqx 'event=Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected' proof/metal_first_frame.txt
           grep -Fqx 'cominit=Com_Init OK — 4 subsystems up, no assets' proof/metal_first_frame.txt
+          grep -Fqx 'd3d9=DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present' proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
           tr -d '\r' < proof/app-console.txt \
             | grep -Eq '^KISAK_M15_DETAIL dvars=(2[5-9]|[3-9][0-9]|[1-9][0-9]{2,}) set=closed dvarlist=1 fs=1 event=1 sl=1$'
@@ -274,7 +298,7 @@ jobs:
           checks=(
             "$OUTCOME_CHECKOUT|Checkout repository"
             "$OUTCOME_TOOLCHAIN|Toolchain versions"
-            "$OUTCOME_BUILD_ARCHIVES|Build engine archives (census + smoke + pmove + Com_Init wave)"
+            "$OUTCOME_BUILD_ARCHIVES|Build simulator renderer + engine archives"
             "$OUTCOME_INSTALL_XCODEGEN|Install XcodeGen"
             "$OUTCOME_GENERATE_PROJECT|Generate Xcode project"
             "$OUTCOME_BUILD_SIM|Build (iphonesimulator)"

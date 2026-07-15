@@ -8,18 +8,6 @@
 // reported pixel proves rendering and the Present HRESULT proves the
 // swapchain/presentation path.
 
-#include <TargetConditionals.h>
-
-#if TARGET_OS_SIMULATOR
-
-extern "C" const char *kisak_d3d9_smoke(void *metalLayer)
-{
-    (void)metalLayer;
-    return "device-only (no DXVK simulator build)";
-}
-
-#else
-
 #include <windows.h>
 #include <d3d9.h>
 #include <cstdio>
@@ -99,7 +87,7 @@ static const char *kisak_d3d9_smoke_inner(void *metalLayer)
 
     // Clear to a distinctive color, read the pixel back, THEN present.
     const D3DCOLOR kClear = D3DCOLOR_XRGB(186, 85, 211); // 0x00BA55D3
-    dev->Clear(0, nullptr, D3DCLEAR_TARGET, kClear, 1.0f, 0);
+    const HRESULT clearHr = dev->Clear(0, nullptr, D3DCLEAR_TARGET, kClear, 1.0f, 0);
 
     unsigned pixel = 0;
     HRESULT readHr = E_FAIL;
@@ -127,9 +115,17 @@ static const char *kisak_d3d9_smoke_inner(void *metalLayer)
 
     HRESULT presentHr = dev->Present(nullptr, nullptr, nullptr, nullptr);
 
+    // This exact success string is an earned marker in the simulator lane.
+    // It deliberately proves only this renderer smoke, not an engine frame.
+    constexpr unsigned kExpectedPixel = 0xFFBA55D3u;
+    if (SUCCEEDED(clearHr) && SUCCEEDED(readHr)
+        && pixel == kExpectedPixel && SUCCEEDED(presentHr)) {
+        return "DXVK D3D9 OK — CreateDevice, clear/readback=0xFFBA55D3, Present";
+    }
+
     snprintf(buf, sizeof(buf),
-             "adapter=%s clear=0x%08X read=0x%08X px=0x%08X present=0x%08X",
-             ident.Description, (unsigned)kClear, (unsigned)readHr,
+             "FAIL adapter=%s clear=0x%08X read=0x%08X px=0x%08X present=0x%08X",
+             ident.Description, (unsigned)clearHr, (unsigned)readHr,
              pixel, (unsigned)presentHr);
 
     // Keep device+d3d alive: the swapchain owns the layer's Metal state and
@@ -137,5 +133,3 @@ static const char *kisak_d3d9_smoke_inner(void *metalLayer)
     // smoke-test work.
     return buf;
 }
-
-#endif // TARGET_OS_SIMULATOR
