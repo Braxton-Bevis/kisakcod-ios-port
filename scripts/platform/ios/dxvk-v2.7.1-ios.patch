@@ -162,11 +162,27 @@ index 2f45946..37c0023 100644
  
  d3d9_dep = declare_dependency(
    link_with           : [ d3d9_dll ],
+diff --git a/src/d3d9/d3d9_query.cpp b/src/d3d9/d3d9_query.cpp
+index f1931a9..94b1230 100644
+--- a/src/d3d9/d3d9_query.cpp
++++ b/src/d3d9/d3d9_query.cpp
+@@ -23,9 +23,9 @@ namespace dxvk {
+       case D3DQUERYTYPE_OCCLUSION:
+         m_query[0] = dxvkDevice->createGpuQuery(
+           VK_QUERY_TYPE_OCCLUSION,
+-          VK_QUERY_CONTROL_PRECISE_BIT, 0);
++          dxvkDevice->features().core.features.occlusionQueryPrecise
++            ? VK_QUERY_CONTROL_PRECISE_BIT : 0, 0);
+         break;
+-
+       case D3DQUERYTYPE_TIMESTAMP:
+         m_query[0] = dxvkDevice->createGpuQuery(
+           VK_QUERY_TYPE_TIMESTAMP, 0, 0);
 diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
-index 9a45f10..7e2d10b 100644
+index 9a45f10..9bb115b 100644
 --- a/src/dxvk/dxvk_device_info.cpp
 +++ b/src/dxvk/dxvk_device_info.cpp
-@@ -714,19 +714,47 @@ namespace dxvk {
+@@ -714,19 +714,53 @@ namespace dxvk {
        ENABLE_FEATURE(core.features, fillModeNonSolid, true),
        ENABLE_FEATURE(core.features, fragmentStoresAndAtomics, false),
        ENABLE_FEATURE(core.features, fullDrawIndexUint32, true),
@@ -198,7 +214,13 @@ index 9a45f10..7e2d10b 100644
 +#else
        ENABLE_FEATURE(core.features, multiViewport, true),
 +#endif
++#ifdef __APPLE__
++      // The simulator Metal device exposes occlusion queries but not precise
++      // sample counts. D3D9's query path selects the non-precise flag below.
++      ENABLE_FEATURE(core.features, occlusionQueryPrecise, false),
++#else
        ENABLE_FEATURE(core.features, occlusionQueryPrecise, true),
++#endif
        ENABLE_FEATURE(core.features, pipelineStatisticsQuery, false),
        ENABLE_FEATURE(core.features, robustBufferAccess, true),
        ENABLE_FEATURE(core.features, sampleRateShading, true),
