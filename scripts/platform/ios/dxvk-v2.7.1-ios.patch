@@ -179,10 +179,10 @@ index f1931a9..94b1230 100644
          m_query[0] = dxvkDevice->createGpuQuery(
            VK_QUERY_TYPE_TIMESTAMP, 0, 0);
 diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
-index 9a45f10..9bb115b 100644
+index 9a45f10..a821510 100644
 --- a/src/dxvk/dxvk_device_info.cpp
 +++ b/src/dxvk/dxvk_device_info.cpp
-@@ -714,19 +714,53 @@ namespace dxvk {
+@@ -714,23 +714,63 @@ namespace dxvk {
        ENABLE_FEATURE(core.features, fillModeNonSolid, true),
        ENABLE_FEATURE(core.features, fragmentStoresAndAtomics, false),
        ENABLE_FEATURE(core.features, fullDrawIndexUint32, true),
@@ -236,7 +236,17 @@ index 9a45f10..9bb115b 100644
        ENABLE_FEATURE(core.features, shaderFloat64, false),
        ENABLE_FEATURE(core.features, shaderImageGatherExtended, true),
        ENABLE_FEATURE(core.features, shaderInt16, false),
-@@ -837,9 +865,22 @@ namespace dxvk {
++#ifdef __APPLE__
++      // BMK4 builds D3D9 only. Its core multisample-blit shader is rewritten
++      // below with paired 32-bit words, leaving no reachable 64-bit shader op.
++      ENABLE_FEATURE(core.features, shaderInt64, false),
++#else
+       ENABLE_FEATURE(core.features, shaderInt64, true),
++#endif
+       ENABLE_FEATURE(core.features, shaderSampledImageArrayDynamicIndexing, true),
+       ENABLE_FEATURE(core.features, sparseBinding, false),
+       ENABLE_FEATURE(core.features, sparseResidencyBuffer, false),
+@@ -837,9 +877,22 @@ namespace dxvk {
        ENABLE_EXT_FEATURE(extPageableDeviceLocalMemory, pageableDeviceLocalMemory, false),
  
        /* Robustness, all features effectively required for correctness */
@@ -259,7 +269,7 @@ index 9a45f10..9bb115b 100644
  
        /* Shader module identifier, used for pipeline lifetime management in 32-bit */
        ENABLE_EXT_FEATURE(extShaderModuleIdentifier, shaderModuleIdentifier, false),
-@@ -875,7 +916,13 @@ namespace dxvk {
+@@ -875,7 +928,13 @@ namespace dxvk {
        ENABLE_EXT_FEATURE(khrMaintenance7, maintenance7, false),
  
        /* Dependency for graphics pipeline library */
@@ -273,6 +283,30 @@ index 9a45f10..9bb115b 100644
  
        /* Present wait, used for frame pacing and statistics */
        ENABLE_EXT_FEATURE(khrPresentId, presentId, false),
+diff --git a/src/dxvk/shaders/dxvk_blit_frag_2d_ms.frag b/src/dxvk/shaders/dxvk_blit_frag_2d_ms.frag
+index 7c26e96..ed0a6dd 100644
+--- a/src/dxvk/shaders/dxvk_blit_frag_2d_ms.frag
++++ b/src/dxvk/shaders/dxvk_blit_frag_2d_ms.frag
+@@ -3 +2,0 @@
+-#extension GL_ARB_gpu_shader_int64 : require
+@@ -38,5 +37,5 @@ const uvec2 sample_scale[] = {
+-const uint64_t sample_maps[] = {
+-  0x0000000000000001ul,
+-  0x0000000000003210ul,
+-  0x0000000026147035ul,
+-  0xe58b602c3714d9aful,
++const uvec2 sample_maps[] = {
++  uvec2(0x00000001u, 0x00000000u),
++  uvec2(0x00003210u, 0x00000000u),
++  uvec2(0x26147035u, 0x00000000u),
++  uvec2(0x3714d9afu, 0xe58b602cu),
+@@ -67 +66 @@ void main() {
+-    uint64_t map = sample_maps[lookup_index];
++    uvec2 map = sample_maps[lookup_index];
+@@ -83 +82,2 @@ void main() {
+-      sample_index = uint(map >> (4u * sample_index)) & 0xfu;
++      uint map_word = sample_index < 8u ? map.x : map.y;
++      sample_index = (map_word >> (4u * (sample_index & 7u))) & 0xfu;
 diff --git a/src/util/util_env.cpp b/src/util/util_env.cpp
 index c86c3ab..2b296a1 100644
 --- a/src/util/util_env.cpp
