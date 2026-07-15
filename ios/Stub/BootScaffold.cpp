@@ -11,7 +11,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <pthread.h>
 #include <unistd.h> // sysconf(_SC_NPROCESSORS_ONLN) in Sys_GetCpuCount
 
 // Minimal ABI-identical dvar layout. Only current.enabled is read by the
@@ -172,82 +171,6 @@ void ProfLoad_EndTrackedValue(MapProfileTrackedValue) {}
 void CL_Netchan_AddOOBProfilePacket(int, int) {}
 void SV_Netchan_AddOOBProfilePacket(int) {}
 
-struct BootString
-{
-    char *value;
-    uint32_t refs;
-};
-
-static pthread_mutex_t s_stringLock = PTHREAD_MUTEX_INITIALIZER;
-static BootString s_strings[128];
-
-uint32_t SL_GetString_(const char *str, uint32_t, int)
-{
-    if (!str)
-        BootScaffoldAbort("SL_GetString_(null)");
-
-    pthread_mutex_lock(&s_stringLock);
-    for (uint32_t i = 0; i < 128; ++i) {
-        if (s_strings[i].value && strcmp(s_strings[i].value, str) == 0) {
-            ++s_strings[i].refs;
-            pthread_mutex_unlock(&s_stringLock);
-            return i + 1;
-        }
-    }
-    for (uint32_t i = 0; i < 128; ++i) {
-        if (!s_strings[i].value) {
-            const size_t length = strlen(str) + 1;
-            s_strings[i].value = static_cast<char *>(malloc(length));
-            if (!s_strings[i].value) {
-                pthread_mutex_unlock(&s_stringLock);
-                BootScaffoldAbort("SL_GetString_(out of memory)");
-            }
-            memcpy(s_strings[i].value, str, length);
-            s_strings[i].refs = 1;
-            pthread_mutex_unlock(&s_stringLock);
-            return i + 1;
-        }
-    }
-    pthread_mutex_unlock(&s_stringLock);
-    BootScaffoldAbort("SL_GetString_(table full)");
-}
-
-const char *SL_ConvertToString(uint32_t stringValue)
-{
-    if (stringValue == 0 || stringValue > 128 || !s_strings[stringValue - 1].value)
-        BootScaffoldAbort("SL_ConvertToString(invalid id)");
-    return s_strings[stringValue - 1].value;
-}
-
-uint32_t SL_FindString(const char *str)
-{
-    if (!str)
-        BootScaffoldAbort("SL_FindString(null)");
-    pthread_mutex_lock(&s_stringLock);
-    for (uint32_t i = 0; i < 128; ++i) {
-        if (s_strings[i].value && strcmp(s_strings[i].value, str) == 0) {
-            pthread_mutex_unlock(&s_stringLock);
-            return i + 1;
-        }
-    }
-    pthread_mutex_unlock(&s_stringLock);
-    return 0;
-}
-
-void SL_RemoveRefToString(uint32_t stringValue)
-{
-    if (stringValue == 0 || stringValue > 128)
-        BootScaffoldAbort("SL_RemoveRefToString(invalid id)");
-    pthread_mutex_lock(&s_stringLock);
-    BootString &slot = s_strings[stringValue - 1];
-    if (!slot.value || slot.refs == 0) {
-        pthread_mutex_unlock(&s_stringLock);
-        BootScaffoldAbort("SL_RemoveRefToString(unreferenced id)");
-    }
-    --slot.refs;
-    pthread_mutex_unlock(&s_stringLock);
-}
-
 static dvar_t s_reflectionProbeGenerate = {};
 const dvar_t *r_reflectionProbeGenerate = &s_reflectionProbeGenerate;
 
@@ -397,7 +320,6 @@ void GScr_Shutdown() BOOT_UNREACHED("GScr_Shutdown")
 void PMem_BeginAlloc(const char *, unsigned int) BOOT_UNREACHED("PMem_BeginAlloc")
 void PMem_EndAlloc(const char *, unsigned int) BOOT_UNREACHED("PMem_EndAlloc")
 void PMem_Init() BOOT_UNREACHED("PMem_Init")
-void SL_Init() BOOT_UNREACHED("SL_Init")
 void Scr_CanDrawScript() BOOT_UNREACHED("Scr_CanDrawScript")
 void Scr_Cleanup() BOOT_UNREACHED("Scr_Cleanup")
 void Scr_DrawScript() BOOT_UNREACHED("Scr_DrawScript")

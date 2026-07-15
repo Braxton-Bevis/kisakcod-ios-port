@@ -32,7 +32,13 @@ static dvar_s dvarPool[0x1000];
 static dvar_s* sortedDvars[0x1000];
 static bool areDvarsSorted;
 static LONG isSortedDvars;
+#ifdef KISAK_IOS
+// B5: dvar_cmds.cpp must report the live registry count, not its separate
+// reconstructed zero-valued global. Windows keeps both original owners.
+int dvarCount;
+#else
 static int dvarCount;
+#endif
 
 bool isDvarSystemActive;
 bool isLoadingAutoExecGlobalFlag;

@@ -1,3 +1,4 @@
+# Historical Phase 1 undefined-symbol snapshot; not a live scaffold inventory.
 AngleVectors
 CL_ForwardCommandToServer
 CL_GetUsernameForLocalClient

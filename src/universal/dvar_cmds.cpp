@@ -28,7 +28,13 @@ struct DvarSetConfigInfo // sizeof=0xC
 static_assert(sizeof(DvarDumpInfo) == 16, "DvarDumpInfo LP64 layout drift");
 #endif
 
+#ifdef KISAK_IOS
+// Real owner is dvar.cpp on iOS. This makes dvarlist/dvardump report the
+// registry they actually enumerate while preserving the Windows binary path.
+extern int dvarCount;
+#else
 int dvarCount;
+#endif
 
 char info1[1024];
 char info2[8192];

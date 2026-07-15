@@ -11,6 +11,16 @@
 #include <universal/com_constantconfigstrings.h>
 #include "scr_variable.h"
 
+#ifdef KISAK_IOS
+#include <cstddef>
+static_assert(sizeof(HashEntry) == 8,
+              "script-string hash entries must retain their 32-bit layout");
+static_assert(sizeof(MemoryNode) == 12,
+              "script-string memory nodes must retain their 12-byte stride");
+static_assert(offsetof(RefString, str) == 4,
+              "script-string handle header must remain four bytes on arm64");
+#endif
+
 #ifdef KISAK_MP
 #include <client_mp/client_mp.h>
 #endif
@@ -101,7 +111,11 @@ void SL_AddUserInternal(RefString* refStr, uint32_t user)
 			InterlockedIncrement(&scrStringDebugGlob->refCount[str]);
 		}
 
+#ifdef KISAK_IOS
+		volatile uint32_t Comperand;
+#else
 		volatile int Comperand;
+#endif
 		do
 			Comperand = refStr->data;
 		while (InterlockedCompareExchange(&refStr->data, Comperand | (user << 16), Comperand) != Comperand);
@@ -505,7 +519,11 @@ uint32_t SL_FindString(const char* str)
 
 void __cdecl SL_TransferRefToUser(uint32_t stringValue, uint32_t user)
 {
+#ifdef KISAK_IOS
+	volatile uint32_t Comperand;
+#else
 	volatile LONG Comperand; // [esp+20h] [ebp-28h]
+#endif
 	RefString *refStr; // [esp+44h] [ebp-4h]
 
 	PROF_SCOPED("SL_TransferRefToUser");

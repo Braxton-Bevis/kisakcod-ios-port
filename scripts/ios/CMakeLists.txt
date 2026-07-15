@@ -28,6 +28,8 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/qcommon/msg_mp.cpp"          # network message (de)serialization
     "${SRC_DIR}/qcommon/net_chan_mp.cpp"     # B3 netchan + in-memory loopback owner
     "${SRC_DIR}/qcommon/unzip.cpp"           # IWD reader required by com_files object closure
+    "${SRC_DIR}/script/scr_memorytree.cpp"   # B5 real script-string backing allocator
+    "${SRC_DIR}/script/scr_stringlist.cpp"   # B5 real SL_* owners required by M15
     "${SRC_DIR}/stringed/stringed_hooks.cpp" # language dvars/filesystem integration
     "${SRC_DIR}/stringed/stringed_ingame.cpp"# asset-free localization package startup
     "${SRC_DIR}/universal/com_files.cpp"     # filesystem layer (Objective 3 target)

@@ -1001,3 +1001,49 @@ three existing products plus `bmk4-ff-oracle`; both FF0a steps pass; uploaded
 files and SHA256 file under the allowlisted output tree; exact schema lines and
 the two refusal tests pass. Any B2 red still preempts Slice 2.
 
+## M15 — headless Com_Init closure (simulator verified, 2026-07-15)
+
+**Outcome:** Stage B is closed. The asset-free iOS app now enters the real
+`Com_Init` owner and behaviorally proves four retained subsystem groups before
+emitting the immutable marker
+`cominit=Com_Init OK — 4 subsystems up, no assets`.
+
+**Real-owner graduation:** B5 added `scr_memorytree.cpp` and
+`scr_stringlist.cpp` to the monotonic census and exact Com_Init archive, while
+deleting their former Stub owners. The iOS lane now shares `dvar.cpp`'s live
+registry count with `dvar_cmds.cpp`; the reconstructed Windows definitions are
+unchanged. The guarded headless spine calls real `SL_Init`, and native closeout
+code proves script-string allocation, lookup, conversion, release, and
+reclamation rather than accepting symbol presence alone.
+
+**Behavioral gate:** the closeout retained the earned network/event/filesystem
+state, read the B4 event dvars through the real registry, counted more than 24
+dvars, executed real `set bmk4_b5_probe closed`, captured real filtered
+`dvarlist` output, and required the registry to grow exactly once. Its native
+detail line was
+`KISAK_M15_DETAIL dvars=72 set=closed dvarlist=1 fs=1 event=1 sl=1`.
+
+**Hosted evidence:** implementation commit `b1945b9` passed census run
+`29425591429` at **41/41** (SYNTAX), Windows run `29425591288` in Debug and
+Release, and iOS stub run `29425591377` attempt 2. The iOS run proved exact
+archive membership and real-owner/scaffold separation, linked and ran the
+simulator app (OBJECT+ARCHIVE+LINK+SIM_RUN), and linked/packaged the unsigned
+arm64 device IPA (OBJECT+ARCHIVE+LINK). The marker had launch exit `0`; no
+KisakStub `.ips` report was present. M15's native sequence completed in about
+31 ms after process start.
+
+Attempt 1 of the same iOS run exposed a CI harness race, not an engine failure:
+CoreSimulator created the app process only after the fixed screenshot window,
+and the pending terminate killed it before app code ran. The follow-up gate
+waits for the native M15 marker before screenshots and retains a ten-minute log
+window.
+
+**Screenshot evidence:** the high-contrast simulator frame is committed as
+`docs/media/simulator-m15-headless-boot.png` (SHA-256
+`0884ab8983044b37b3ea5e22237ff49cb277823b44d8f6bbec732226d3fee0cf`). It is
+retained as asset-free headless evidence, not used as the README hero. That
+position is reserved for a frame issued by the real COD4 engine renderer;
+placeholder assets are acceptable for its first proof. Physical-device M15
+runtime remains unclaimed; the next critical-path risk is the synthetic
+fastfile 32→64 translation kernel.
+

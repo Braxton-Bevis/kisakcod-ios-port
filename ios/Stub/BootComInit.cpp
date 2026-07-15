@@ -1,4 +1,4 @@
-// Phase 3 Stage B4: fresh cold-start entry into the real Com_Init owner.
+// Phase 3 Stage B5: fresh cold-start entry into the real Com_Init owner.
 // B1's LP64 preflight stays frozen; common.cpp owns the temporary
 // command/dvar/hunk, net/msg, and event spine instead of a second initializer here.
 
@@ -58,6 +58,18 @@ extern "C" const char *kisak_boot_cominit_stage(void)
     Com_InitThreadData(0);
     Dvar_Init();
 
+    // Real SL_Init now runs inside the guarded Com_Init branch, matching the
+    // production WinMain ordering (Dvar_Init first, then Com_Init). String
+    // dvar probes must wait until that real owner is initialized.
+    FS_iOS_SetHeadlessNoAssets(true);
+    Com_Init(emptyCommandLine);
+    if (!Com_iOS_BootSpineReached() || Dvar_GetBool("useFastFile")
+        || Dvar_GetInt("dedicated") != 2)
+    {
+        snprintf(status, sizeof(status), "common spine FAIL: policy/fence postcondition");
+        return status;
+    }
+
     // Refuse a hollow LP64 pass: both source objects must actually require
     // upper pointer bits in this process before their engine lanes are tested.
     if ((reinterpret_cast<uintptr_t>(enumValues) >> 32) == 0
@@ -108,17 +120,6 @@ extern "C" const char *kisak_boot_cominit_stage(void)
         return status;
     }
 
-    // Explicit headless policy: common.cpp registers useFastFile=0 and
-    // dedicated=2 from this request before its guarded B4 boundary returns.
-    FS_iOS_SetHeadlessNoAssets(true);
-    Com_Init(emptyCommandLine);
-    if (!Com_iOS_BootSpineReached() || Dvar_GetBool("useFastFile")
-        || Dvar_GetInt("dedicated") != 2)
-    {
-        snprintf(status, sizeof(status), "common spine FAIL: policy/fence postcondition");
-        return status;
-    }
-
     snprintf(status, sizeof(status),
              "dvar enum/external string OK — cold Dvar_Init path");
     return status;
@@ -127,7 +128,7 @@ extern "C" const char *kisak_boot_cominit_stage(void)
 extern "C" const char *kisak_boot_common_spine_status(void)
 {
     if (!Com_iOS_BootSpineReached())
-        return "common spine FAIL: Com_Init did not reach B4 fence";
+        return "common spine FAIL: Com_Init did not reach B5 fence";
     if (Dvar_GetBool("useFastFile") || Dvar_GetInt("dedicated") != 2)
         return "common spine FAIL: headless policy drift";
     return "Com_Init entered — useFastFile=0, dedicated=2, sv/cl tails fenced";

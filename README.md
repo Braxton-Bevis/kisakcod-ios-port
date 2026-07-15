@@ -11,10 +11,9 @@ engine decompilation.
 [![Windows Build](https://github.com/Braxton-Bevis/bmk4/actions/workflows/build-kisarcod-win.yaml/badge.svg)](https://github.com/Braxton-Bevis/bmk4/actions/workflows/build-kisarcod-win.yaml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-<img src="docs/media/stub-metal-triangle.png" width="300" alt="Metal render loop live in the iOS Simulator" />&nbsp;&nbsp;
-<img src="docs/media/stub-settings-controller.png" width="300" alt="Graphics settings menu, MetalFX controls, and virtual game controller" />
-
-*CI captured both screenshots from a booted iOS Simulator. Every claim in this repository is machine-verified.*
+*The hero frame is intentionally reserved for output from the real COD4 engine
+renderer. Swift/Metal shell smokes do not qualify; placeholder assets may be
+used for the first engine-rendered proof.*
 
 </div>
 
@@ -39,11 +38,11 @@ There is no macOS/Linux/ARM branch to start from. The engine assumes Windows API
 | Build retarget: `cmake -DKISAK_PLATFORM=ios` + per-file compile census in CI | ✅ complete |
 | Windows→iOS dependency map (every API family → concrete replacement) | ✅ [DEPENDENCY_MAP.md](DEPENDENCY_MAP.md) |
 | Filesystem sandboxing (`fs_basepath` → app bundle, `fs_homepath` → `Documents/`) | ✅ landed |
-| Engine translation units compiling for `arm64-apple-ios` | ✅ **30/30 census TUs** — including the real pmove/jump/slide/mantle closure and `Com_Init`/`Com_Frame` TU |
+| Engine translation units compiling for `arm64-apple-ios` | ✅ **41/41 census TUs** — including the real pmove closure, `Com_Init`, queued-event, dvar-command, and script-string owners |
 | D3D9 header layer absorbed by DXVK native headers on the iOS SDK | ✅ proven |
 | DXVK d3d9 renderer runtime on iOS | ✅ **LIVE ON DEVICE** — native CAMetalLayer WSI + static MoltenVK; `CreateDevice` D3D_OK, Clear readback bit-exact, `Present` D3D_OK on iPad Pro (M5). [Patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch) + [build script](scripts/platform/ios/build-dxvk-ios.sh) |
 | Engine linking / running on device | 🟡 **first engine code executes on iOS** — math/bit-packing/string TUs linked into the stub, verified in simulator **and on iPad Pro (M5)** with MetalFX spatial upscaling live at 120 fps |
-| Staged memory/dvar/command boot | ✅ simulator marker verified; real arm64 device app builds, physical-device M13 runtime still pending |
+| Headless `Com_Init` (M15) | ✅ simulator-verified: 72 real dvars; real `set`/`dvarlist`, filesystem, net/msg, queued event, and script-string lifecycle; arm64 device app links/packages |
 | Real player-movement sandbox | ✅ simulator-proven walk + jump + land + friction on a synthetic flat world; thumbstick/HUD live, physical-iPad feel test pending |
 | win32 build unaffected by all of the above | ✅ full engine builds green (Debug + Release) |
 
@@ -97,10 +96,10 @@ Eight rounds of a CI **compile census** — representative engine files compiled
 
 The Mac bring-up session (journal M7–M11) swept the census from 2/14 to
 23/23, built **DXVK's d3d9 module as an arm64-apple-ios static library**, and
-verified the first linked engine code on an iPad Pro (M5). M14 now tracks
-**30/30** TUs and simulator-verifies real `bg_pmove` walking, jumping, landing,
-and friction on an asset-free synthetic floor while preserving the M13 staged
-boot marker and the Windows build.
+verified the first linked engine code on an iPad Pro (M5). M15 now tracks
+**41/41** TUs and simulator-verifies the headless `Com_Init` closure plus real
+`bg_pmove` walking, jumping, landing, and friction on an asset-free synthetic
+floor while preserving the Windows build.
 
 Full blow-by-blow log with exact compiler errors: **[PORT_JOURNAL.md](PORT_JOURNAL.md)** · Detailed M14 implementation/evidence report: **[docs/M14_PMOVE_SANDBOX_REPORT.md](docs/M14_PMOVE_SANDBOX_REPORT.md)** · Current status & next steps: **[FRONTIER_REPORT.md](FRONTIER_REPORT.md)**
 
@@ -191,13 +190,13 @@ Everything between today's state and *playing Call of Duty 4 on an iPad*, in
 dependency order. Checked items are machine-verified in CI or on device.
 
 - [x] **Toolchain + app shell** — Metal render loop, settings, controllers, signing, device installs
-- [x] **Engine compiles for iOS** — 36/36 census TUs (pmove/jump/slide/mantle closure, the real filesystem, `common.cpp`, `Com_Init`'s own TU)
+- [x] **Engine compiles for iOS** — 41/41 census TUs (pmove closure, real filesystem, `common.cpp`, queued events, dvar commands, and script strings)
 - [x] **Renderer runtime** — D3D9→DXVK→Vulkan→MoltenVK→Metal live on device (Clear/readback/Present verified pixel-exact, journal M12)
 - [x] **First engine code executing on device** — math/bit-packing/string smoke, exact expected values
 - [x] **Engine subsystems boot in simulator** — real memory/dvar/command cold-start init, behavioral markers (journal M13)
 - [x] **Player movement sandbox** — real `bg_pmove` walks, jumps, lands, and stops on a synthetic world; exact simulator proof plus thumbstick/HUD wiring (journal M14)
 - [x] **Real filesystem on iOS** — `FS_InitFilesystem` under an explicit headless policy; engine write/read/delete round trip (Phase 3 Wave 1)
-- [ ] **Headless `Com_Init`** — real `Com_Init` entered on a cold path (in progress); remaining: net/msg loopback, the event-loop probe, the M15 marker
+- [x] **Headless `Com_Init`** — M15 simulator proof earned: 72 live dvars plus behavioral net/msg, queued event, filesystem, `set`/`dvarlist`, and script-string checks
 - [x] **Windows asset oracle** — CI-built dump tool; all five boot zones plus `mp_killhouse.ff` parse clean on first contact (evidence run stays local, never in CI; sanitized findings in [docs/REAL_ZONE_EVIDENCE.md](docs/REAL_ZONE_EVIDENCE.md))
 - [x] **Layout-map generation** — per-struct 32-bit offset/size tables derived two independent ways (OAT's generator and KisakCOD's own headers under MSVC); zero numeric divergence across 17 structures / 155 members, conformance diff now runs in CI
 - [ ] **Fastfile translation kernel** — inflate/staging/32→64 fills proven on synthetic zones against the oracle. *The dominant remaining cost.*
@@ -212,8 +211,8 @@ dependency order. Checked items are machine-verified in CI or on device.
 1. ~~DXVK d3d9 as an arm64-apple-ios library~~ ✅ **done** — `libdxvk_d3d9.a` builds with a [5-hunk patch](scripts/platform/ios/dxvk-v2.7.1-ios.patch); see [build-dxvk-ios.sh](scripts/platform/ios/build-dxvk-ios.sh).
 2. ~~pthreads `threads.cpp` → BSD-sockets `win_net.cpp` → platform layer replacing `win_main.cpp`~~ ✅ **done** — all census-verified (`sys_ios_main.mm` is the entry layer).
 3. ~~Renderer runtime bring-up~~ ✅ **done — D3D9 renders on the iPad** (journal M12): native CAMetalLayer WSI, static MoltenVK, Clear+readback+Present all D3D_OK.
-4. **Engine boot** (current frontier): staged memory/dvar/cmd and the real synthetic-world `bg_pmove` slice are simulator-green; next close the headless `Com_Init` runtime/link frontier.
-5. The 64-bit fastfile wall — load-time struct translation; gates loading real game data. Then AVAudioEngine behind the landed `AIL_*` stub surface.
+4. ~~Headless engine boot~~ ✅ **done** — M15 is simulator-green; the unsigned arm64 device app links and packages the same closure.
+5. **Current frontier: the 64-bit fastfile wall** — load-time 32→64 struct translation gates real game data and the first `mp_killhouse` frame. Then AVAudioEngine behind the landed `AIL_*` stub surface.
 
 ## Credits & legal
 

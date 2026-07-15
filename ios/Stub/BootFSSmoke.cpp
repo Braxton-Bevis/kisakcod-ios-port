@@ -18,6 +18,8 @@ int FS_ReadFile(const char *qpath, void **buffer);
 void FS_FreeFile(char *buffer);
 bool FS_Delete(const char *filename);
 
+static bool s_fsSmokeSucceeded;
+
 extern "C" const char *kisak_fs_smoke(void)
 {
     static char status[512];
@@ -84,7 +86,13 @@ extern "C" const char *kisak_fs_smoke(void)
         return status;
     }
 
+    s_fsSmokeSucceeded = true;
     snprintf(status, sizeof(status),
              "FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets");
     return status;
+}
+
+extern "C" bool kisak_fs_smoke_succeeded(void)
+{
+    return s_fsSmokeSucceeded;
 }

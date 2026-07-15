@@ -80,6 +80,7 @@ final class MetalViewController: UIViewController {
     private var comInitSpineStatus = "pending"
 
     // Retained M13 hunk/dvar/command behavioral marker, now post-init only.
+    private static let bootProofOK = "hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up"
     private var bootStatus = "pending"
 
     // Phase 3 B3: real Netchan/NET init plus msg encode/decode over loopback.
@@ -93,6 +94,11 @@ final class MetalViewController: UIViewController {
     // Phase 3 Wave 1: real FS_InitFilesystem plus a Documents round trip.
     private static let fsProofOK = "FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets"
     private var fsStatus = "waiting for boot"
+
+    // Phase 3 B5/M15: C++ aggregates native proof state and real set/dvarlist
+    // output. Swift may record this result but cannot construct it.
+    private static let m15ProofOK = "Com_Init OK — 4 subsystems up, no assets"
+    private var m15Status = "waiting for filesystem"
 
     // Real COD4 movement on the synthetic flat world. The immutable proof is
     // CI-gated; the live string carries thumbstick-driven origin/velocity.
@@ -228,6 +234,7 @@ final class MetalViewController: UIViewController {
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
         if crashes >= 3 {
             bootStatus = "skipped — crashed \(crashes)x"
+            m15Status = "blocked by boot crash guard"
             return
         }
         // Hunk initialization asserts Sys_IsMainThread(), so keep the crash-
@@ -247,12 +254,13 @@ final class MetalViewController: UIViewController {
                 self.bootStatus = result
                 NSLog("KISAK_BOOT_PROBE %@", result)
                 try? FileManager.default.removeItem(at: sentinel)
-                if result.hasPrefix("hunk OK") {
+                if result == Self.bootProofOK {
                     self.runNetSmoke()
                 } else {
                     self.netStatus = "blocked by boot probe failure"
                     self.eventStatus = "blocked by boot probe failure"
                     self.fsStatus = "blocked by boot probe failure"
+                    self.m15Status = "blocked by boot probe failure"
                     self.pmoveProofStatus = "blocked by boot probe failure"
                 }
             } else {
@@ -261,6 +269,7 @@ final class MetalViewController: UIViewController {
                 self.netStatus = "blocked by Com_Init stage failure"
                 self.eventStatus = "blocked by Com_Init stage failure"
                 self.fsStatus = "blocked by Com_Init stage failure"
+                self.m15Status = "blocked by Com_Init stage failure"
                 self.pmoveProofStatus = "blocked by Com_Init stage failure"
             }
             self.writeFirstFrameMarker()
@@ -276,6 +285,7 @@ final class MetalViewController: UIViewController {
             netStatus = "skipped — crashed \(crashes)x"
             eventStatus = "blocked by network crash guard"
             fsStatus = "blocked by network crash guard"
+            m15Status = "blocked by network crash guard"
             pmoveProofStatus = "blocked by network crash guard"
             return
         }
@@ -290,6 +300,7 @@ final class MetalViewController: UIViewController {
         } else {
             eventStatus = "blocked by network failure"
             fsStatus = "blocked by network failure"
+            m15Status = "blocked by network failure"
             pmoveProofStatus = "blocked by network failure"
         }
         writeFirstFrameMarker()
@@ -303,6 +314,7 @@ final class MetalViewController: UIViewController {
         if crashes >= 3 {
             eventStatus = "skipped — crashed \(crashes)x"
             fsStatus = "blocked by event crash guard"
+            m15Status = "blocked by event crash guard"
             pmoveProofStatus = "blocked by event crash guard"
             return
         }
@@ -316,6 +328,7 @@ final class MetalViewController: UIViewController {
             runFSSmoke()
         } else {
             fsStatus = "blocked by event failure"
+            m15Status = "blocked by event failure"
             pmoveProofStatus = "blocked by event failure"
         }
         writeFirstFrameMarker()
@@ -328,6 +341,7 @@ final class MetalViewController: UIViewController {
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
         if crashes >= 3 {
             fsStatus = "skipped — crashed \(crashes)x"
+            m15Status = "blocked by filesystem crash guard"
             pmoveProofStatus = "blocked by filesystem crash guard"
             return
         }
@@ -338,9 +352,34 @@ final class MetalViewController: UIViewController {
         fsStatus = result
         NSLog("KISAK_FS_SMOKE %@", result)
         if result == Self.fsProofOK {
+            runM15Closeout()
+        } else {
+            m15Status = "blocked by filesystem failure"
+            pmoveProofStatus = "blocked by filesystem failure"
+        }
+        writeFirstFrameMarker()
+    }
+
+    private func runM15Closeout() {
+        NSLog("KISAK_STAGE_ENTER m15")
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("m15_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            m15Status = "skipped — crashed \(crashes)x"
+            pmoveProofStatus = "blocked by M15 crash guard"
+            return
+        }
+
+        try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+        let result = String(cString: kisak_boot_m15_closeout())
+        try? FileManager.default.removeItem(at: sentinel)
+        m15Status = result
+        NSLog("KISAK_M15_CLOSEOUT %@", result)
+        if result == Self.m15ProofOK {
             runPmoveProof()
         } else {
-            pmoveProofStatus = "blocked by filesystem failure"
+            pmoveProofStatus = "blocked by M15 closeout failure"
         }
         writeFirstFrameMarker()
     }
@@ -719,6 +758,7 @@ final class MetalViewController: UIViewController {
             network: \(netStatus)
             event loop: \(eventStatus)
             filesystem: \(fsStatus)
+            M15 closeout: \(m15Status)
             pmove proof: \(pmoveProofStatus)
             pmove live: \(pmoveLiveStatus)
             """
@@ -730,6 +770,11 @@ final class MetalViewController: UIViewController {
     // MetalFX/controller/settings paths were live. Doubles as the first demonstration
     // of the Documents-directory write path that Objective 3 routes the engine through.
     private func writeFirstFrameMarker() {
+        // Subsystem callbacks may finish before CADisplayLink reaches its first
+        // drawable. They can update state, but only renderFrame may arm this
+        // evidence file after committing the first Metal present.
+        guard wroteFirstFrameMarker else { return }
+
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let marker = docs.appendingPathComponent("metal_first_frame.txt")
         let qualityName = ["low", "med", "high"][min(max(shaderQuality, 0), 2)]
@@ -752,6 +797,7 @@ final class MetalViewController: UIViewController {
         net=\(netStatus)
         event=\(eventStatus)
         fs=\(fsStatus)
+        cominit=\(m15Status)
         pmove=\(pmoveProofStatus)
         pmoveLive=\(pmoveLiveStatus)
         date=\(ISO8601DateFormatter().string(from: Date()))

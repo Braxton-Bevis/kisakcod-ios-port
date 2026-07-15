@@ -1,4 +1,4 @@
-# NEXT_SESSION - BMK4 live state (2026-07-15, B4 event-loop gate)
+# NEXT_SESSION - BMK4 live state (2026-07-15, M15 earned)
 
 Read `docs/HANDOFF_TO_CODEX.md`, the ratified roadmap in
 `docs/reviews/roadmap-sol.md` plus
@@ -6,49 +6,49 @@ Read `docs/HANDOFF_TO_CODEX.md`, the ratified roadmap in
 entries before continuing. Re-reference this file before each edit and refresh
 it whenever work pauses.
 
-## Active seat state — B4 real queued-console event earned on staging
+## Active seat state — M15 headless Com_Init earned on staging
 
-- Implementation commit `7627e75` passed its first full staging round. iOS
-  census run `29420998757` is **39/39** (SYNTAX). Stub run `29420998738`
-  built the exact 14-member Com_Init archive, linked simulator and unsigned
-  arm64-device apps, and earned the event proof in the simulator
-  (OBJECT+ARCHIVE+LINK+SIM_RUN). Windows run `29420998733` passed Debug and
-  Release, FF0a, and layout conformance with both Windows coordinator verdicts
-  green.
-- The proof artifact has launch exit `0`, no `.ips` report, all prior markers,
-  and the exact new line:
-  `event=Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected`.
-  The real invalid `set` syntax printed its usage line, left the probe at
-  `alive`, and a following witness command changed a second dvar to prove
-  execution continued.
-- `sys_ios_events.cpp` now owns the typed LP64 event ring. `dvar_cmds.cpp`
-  owns real `set`/`seta`/dump commands plus `info1`/`info2`; the takeover audit
-  removed the stale scaffold globals that would have duplicated them. Artifact
-  `nm` evidence shows the real owners in `libkisakcominit.a` and none in the
-  app/Stub objects.
-- The follow-up tree permanently requires the exact event marker, raises the
-  monotonic census floor to 39, and adds B4 archive allowlist plus Stub
-  denylist assertions. That gate commit must itself pass all staging steps
-  before the staging-to-main promotion PR is opened.
-- B4 is simulator evidence, not physical-device runtime evidence. The unsigned
-  IPA proves arm64 device compilation/link/package only. M15 remains open until
-  B5 earns `cominit=Com_Init OK — 4 subsystems up, no assets` and journals the
-  milestone.
-- B5 must resolve a latent source-reconstruction defect before claiming
-  behavioral `dvarlist`: `dvar.cpp` keeps the real registry count in a private
-  `static dvarCount`, while `dvar_cmds.cpp` currently reports from a separate
-  external `dvarCount` that remains zero.
+- B4 was permanently gated and promoted through PR #5. Protected `main` merge
+  `b113cdd` passed both hard iOS jobs, the 39/39 census, and Windows Debug and
+  Release.
+- B5 implementation commit `b1945b9` graduates the real script string-list and
+  memory-tree owners, fixes the iOS shared dvar registry count without changing
+  the Windows branches, and adds a native closeout that behaviorally exercises
+  `set`, filtered `dvarlist`, dvar enumeration, script-string allocate/find/
+  convert/release, retained filesystem state, and the queued-event witness.
+- Census run `29425591429` is **41/41** (SYNTAX). Windows run `29425591288`
+  passed Debug and Release plus FF0a and layout conformance. Stub run
+  `29425591377`, attempt 2, passed the exact archive/owner checks, simulator
+  runtime, unsigned arm64 device link, and IPA packaging
+  (OBJECT+ARCHIVE+LINK+SIM_RUN).
+- The simulator proof has launch exit `0`, zero `.ips` reports, 72 live dvars,
+  and the exact lines
+  `KISAK_M15_DETAIL dvars=72 set=closed dvarlist=1 fs=1 event=1 sl=1` and
+  `cominit=Com_Init OK — 4 subsystems up, no assets`. The native B5 sequence
+  completed in about 31 ms after process start.
+- Attempt 1 of the same run was red because CoreSimulator delayed process
+  creation until after the workflow's fixed screenshot window. No app code ran
+  in that window. The permanent-gate follow-up waits up to six minutes for the
+  native-earned M15 line before capturing or terminating, and retains ten
+  minutes of diagnostic logs.
+- `docs/media/simulator-m15-headless-boot.png` is the high-contrast screenshot
+  from the green attempt (SHA-256
+  `0884ab8983044b37b3ea5e22237ff49cb277823b44d8f6bbec732226d3fee0cf`).
+  It is retained as asset-free simulator evidence, not used as the README hero;
+  that position is reserved for the first real engine-rendered frame.
+- M15 is SIM_RUN evidence. The unsigned device IPA is compile/link/package
+  evidence only; it is not a physical-device M15 runtime claim.
 
 ## Current next actions
 
-1. Push the permanent B4 gate commit to `staging`; require Windows Debug and
-   Release, 39/39 census, both iOS jobs, every coordinator verdict, the exact
-   marker, zero relevant crash reports, and real-owner/Stub-denylist closure.
-2. Only after that exact staging SHA is green, open the staging-to-main PR and
-   arm auto-merge. Verify the protected PR checks and resulting hard main run.
-3. Begin B5 on staging: dvar count >24, behavioral real `set` and `dvarlist`,
-   retained FS round trip and B4 event proof, then the immutable M15 marker.
-   Append M15 to `PORT_JOURNAL.md` only after it earns.
+1. Commit and push the permanent B5 gate/doc/screenshot follow-up to `staging`.
+   Require 41/41, both iOS jobs, both Windows builds, exact M15 marker/detail,
+   launch exit 0, zero relevant `.ips`, and every per-step staging verdict.
+2. Only after that exact staging SHA is green, open the staging-to-main PR,
+   arm auto-merge, and verify the hard PR/main checks.
+3. Begin slice 7 with the smallest synthetic FF1/FF2 RawFile valid+malformed
+   twin. The 32→64 fastfile translation kernel is now the critical path to the
+   first real `mp_killhouse` frame.
 
 ## Historical checkpoint — Stage B2 119-symbol link closure
 

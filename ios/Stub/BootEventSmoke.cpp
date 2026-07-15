@@ -8,6 +8,8 @@
 #include <qcommon/qcommon.h>
 #include <win32/win_local.h>
 
+static bool s_eventSmokeSucceeded;
+
 static bool QueueConsoleEvent(const char *command)
 {
     const int length = static_cast<int>(strlen(command)) + 1;
@@ -86,7 +88,13 @@ extern "C" const char *kisak_boot_event_smoke(void)
         return status;
     }
 
+    s_eventSmokeSucceeded = true;
     snprintf(status, sizeof(status),
              "Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected");
     return status;
+}
+
+extern "C" bool kisak_boot_event_smoke_succeeded(void)
+{
+    return s_eventSmokeSucceeded;
 }
