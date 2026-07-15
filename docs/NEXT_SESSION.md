@@ -46,9 +46,13 @@ it whenever work pauses.
 - Staging-to-main PR #6 auto-merged as protected `main` merge `0cc70dd` after
   required PR run `29430079226` passed Debug and Release. The hard workflows
   triggered by that main merge still need exact-SHA verification.
-- Local branch `renderer-placeholder-work` has a simulator-DXVK plumbing wave.
-  It is SOURCE-only: it has not compiled or run in CI and its
-  direct D3D9 clear is not an engine/game screenshot or a D1 runtime probe.
+- Staging renderer-plumbing commit `f780d19` passed 41/41 and built all 215
+  DXVK simulator targets with the iOS WSI plus D1 patch. Its first iOS run
+  `29431163115` stopped before app link because the pinned `MoltenVK-ios.tar`
+  contains only the device slice. The follow-up switches only the simulator
+  download to the hash-pinned `MoltenVK-all.tar`, which carries the simulator
+  xcframework slice. No simulator app runtime is claimed yet. The direct D3D9
+  clear remains plumbing evidence, not an engine/game screenshot or D1 probe.
 
 ## Current next actions
 

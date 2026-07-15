@@ -49,13 +49,15 @@ jobs:
           cp -R dxvk-ios-simulator-work/dxvk/include/native/windows ios/libs/dxvk-include/
 
           curl -L --fail --retry 3 \
-            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-ios.tar \
-            -o MoltenVK-ios.tar
-          echo "54336b90212c390ed5935c96460aed3bf651ad7d3c0f0e956586ce18e9c0b701  MoltenVK-ios.tar" \
+            https://github.com/KhronosGroup/MoltenVK/releases/download/v1.4.1/MoltenVK-all.tar \
+            -o MoltenVK-all.tar
+          echo "2c498bf8c98b88ba1e84c1f153403d4c1a8490c122d9e2a3df238b25d4e10557  MoltenVK-all.tar" \
             | shasum -a 256 -c -
-          tar -xf MoltenVK-ios.tar
-          cp MoltenVK/MoltenVK/static/MoltenVK.xcframework/ios-arm64_x86_64-simulator/libMoltenVK.a \
-            ios/libs/iphonesimulator/
+          tar -xf MoltenVK-all.tar
+          mvk_sim=$(find MoltenVK/MoltenVK/static/MoltenVK.xcframework \
+            -type f -path '*/ios-*-simulator/libMoltenVK.a' -print -quit)
+          test -n "$mvk_sim"
+          cp "$mvk_sim" ios/libs/iphonesimulator/
 
           ./scripts/platform/ios/build-engine-lib.sh \
             "$PWD/dxvk-ios-simulator-work/dxvk/include/native" iphonesimulator
