@@ -211,6 +211,9 @@ void QDECL RefreshQuitOnErrorCondition();
 void Com_Init(char* commandLine);
 #ifdef KISAK_IOS
 bool Com_iOS_BootSpineReached();
+bool Com_iOS_BootNetInitialized();
+bool Com_iOS_BootEventReady();
+bool Com_iOS_RunBootEventLoopOnce();
 #endif
 void Com_Frame(void);
 

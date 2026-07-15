@@ -111,8 +111,15 @@ struct XZoneInfo;
 // Real-minimal dependencies reached by the staged boot.
 // -------------------------------------------------------------------------
 
-void Dvar_AddCommands() {}
 bool Sys_IsRenderThread() { return false; }
+
+// Real owner scr_debugger.cpp:808 only asserts that text is non-null. Keep
+// that complete behavior without graduating the debugger/UI tail in B4.
+void Scr_MonitorCommand(const char *text)
+{
+    if (!text)
+        BootScaffoldAbort("Scr_MonitorCommand(null)");
+}
 
 // Real owner: src/ios/sys_ios_main.mm:136 (joins when the platform entry
 // layer enters the link; that wave MUST delete this). Same observable
@@ -267,8 +274,6 @@ void track_z_commit(int, int) {}
 
 // Globals owned by TUs outside the current leaf archive.
 fileData_s *com_fileDataHashTable[1024] = {};
-char info1[1024] = {};
-char info2[8192] = {};
 uint32_t s_affinityMaskForProcess = 1;
 uint32_t s_cpuCount = 1;
 uint32_t s_affinityMaskForCpu[4] = { static_cast<uint32_t>(-1), 0, 0, 0 };
@@ -322,7 +327,6 @@ void CCS_InitConstantConfigStrings() BOOT_UNREACHED("CCS_InitConstantConfigStrin
 void CM_Shutdown() BOOT_UNREACHED("CM_Shutdown")
 void Com_CheckSetRecommended(int) BOOT_UNREACHED("Com_CheckSetRecommended")
 void Com_CleanupBsp() BOOT_UNREACHED("Com_CleanupBsp")
-void Com_DvarDump(int, const char *) BOOT_UNREACHED("Com_DvarDump")
 void Com_HasPlayerProfile() BOOT_UNREACHED("Com_HasPlayerProfile")
 void Com_InitDObj() BOOT_UNREACHED("Com_InitDObj")
 void Com_InitPlayerProfiles(int) BOOT_UNREACHED("Com_InitPlayerProfiles")
@@ -332,8 +336,6 @@ void Com_ShutdownWorld() BOOT_UNREACHED("Com_ShutdownWorld")
 void Con_InitChannels() BOOT_UNREACHED("Con_InitChannels")
 void Con_IsChannelVisible(print_msg_dest_t, unsigned int, int) BOOT_UNREACHED("Con_IsChannelVisible")
 void Con_WriteFilterConfigString(int) BOOT_UNREACHED("Con_WriteFilterConfigString")
-void Dvar_SetA_f() BOOT_UNREACHED("Dvar_SetA_f(B4 dvar_cmds owner)")
-void Dvar_Set_f() BOOT_UNREACHED("Dvar_Set_f(B4 dvar_cmds owner)")
 void FS_ShutdownServerIwdNames() BOOT_UNREACHED("FS_ShutdownServerIwdNames")
 void FS_ShutdownServerReferencedFFs() BOOT_UNREACHED("FS_ShutdownServerReferencedFFs")
 void FS_ShutdownServerReferencedIwds() BOOT_UNREACHED("FS_ShutdownServerReferencedIwds")
@@ -435,7 +437,6 @@ void SCR_UpdateScreen() BOOT_UNREACHED("SCR_UpdateScreen")
 void SND_ErrorCleanup() BOOT_UNREACHED("SND_ErrorCleanup")
 void SND_ShutdownChannels() BOOT_UNREACHED("SND_ShutdownChannels")
 void Sys_DestroySplashWindow() BOOT_UNREACHED("Sys_DestroySplashWindow")
-void Sys_GetEvent(sysEvent_t *) BOOT_UNREACHED("Sys_GetEvent")
 void Sys_Init() BOOT_UNREACHED("Sys_Init")
 void Sys_IsRemoteDebugClient() BOOT_UNREACHED("Sys_IsRemoteDebugClient")
 void Sys_Print(const char *) BOOT_UNREACHED("Sys_Print")
@@ -470,8 +471,8 @@ void SND_Init() BOOT_UNREACHED("SND_Init")
 void SND_StopSounds(snd_stopsounds_arg_t) BOOT_UNREACHED("SND_StopSounds")
 void SV_Init() BOOT_UNREACHED("SV_Init")
 int SV_GameCommand() BOOT_UNREACHED("SV_GameCommand")
+void SV_SetConfigValueForKey(int, int, char *, char *) BOOT_UNREACHED("SV_SetConfigValueForKey(dvar server-config tail)")
 void SV_WaitServer() BOOT_UNREACHED("SV_WaitServer")
-void Scr_MonitorCommand(const char *) BOOT_UNREACHED("Scr_MonitorCommand")
 bool Sys_IsDatabaseThread() BOOT_UNREACHED("Sys_IsDatabaseThread")
 void Sys_OutOfMemErrorInternal(const char *, int) BOOT_UNREACHED("Sys_OutOfMemErrorInternal")
 void XAnimFree(XAnimParts *) BOOT_UNREACHED("XAnimFree")

@@ -24,6 +24,9 @@ struct DvarSetConfigInfo // sizeof=0xC
     int max;                            // ...
     int bit;                            // ...
 };
+#ifdef KISAK_IOS
+static_assert(sizeof(DvarDumpInfo) == 16, "DvarDumpInfo LP64 layout drift");
+#endif
 
 int dvarCount;
 
@@ -432,8 +435,16 @@ void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
     const char *v4; // [esp-4h] [ebp-810h]
     char message[2052]; // [esp+4h] [ebp-808h] BYREF
 
+#ifdef KISAK_IOS
+    // DvarDumpInfo grows from 12 to 16 bytes on LP64. The decompiled pointer-
+    // array cast below advances 16 bytes instead of reaching match at offset 8.
+    DvarDumpInfo *dumpInfo = static_cast<DvarDumpInfo *>(userData);
+    ++dumpInfo->count;
+    if (!dumpInfo->match || Com_Filter(dumpInfo->match, (char *)dvar->name, 0))
+#else
     ++*(uint32_t *)userData;
     if (!*((uint32_t *)userData + 2) || Com_Filter(*((const char **)userData + 2), (char *)dvar->name, 0))
+#endif
     {
         if (Dvar_HasLatchedValue(dvar))
         {
@@ -446,7 +457,11 @@ void __cdecl Com_DvarDumpSingle(const dvar_s *dvar, void *userData)
             v3 = Dvar_DisplayableValue(dvar);
             Com_sprintf(message, 0x800u, "      %s \"%s\"\n", dvar->name, v3);
         }
+#ifdef KISAK_IOS
+        Com_PrintMessage(dumpInfo->channel, message, 0);
+#else
         Com_PrintMessage(*((uint32_t *)userData + 1), message, 0);
+#endif
     }
 }
 
@@ -717,4 +732,3 @@ void __cdecl Dvar_SetToTime_f()
         Com_Printf(0, "USAGE: set <variable>\n");
     }
 }
-

@@ -89,9 +89,11 @@ build_one_sdk() {
     src_universal_com_shared.cpp.o
     src_universal_win_common.cpp.o
     src_ios_sys_ios_paths.mm.o
+    src_ios_sys_ios_events.cpp.o
     src_qcommon_com_fileaccess.cpp.o
     src_qcommon_unzip.cpp.o
     src_qcommon_common.cpp.o
+    src_universal_dvar_cmds.cpp.o
     src_qcommon_net_chan_mp.cpp.o
     src_win32_win_net.cpp.o
     src_stringed_stringed_hooks.cpp.o

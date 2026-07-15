@@ -70,11 +70,14 @@ int getBuildNumberAsInt();
 #define CPUSTRING "ios-arm64"
 #endif
 
-// Stage B3 stops after the real early common spine and loopback network owners
-// initialize. Later waves move this fence toward the unmodified tail as their
-// real owners join the exact archive.
+// Stage B4 stops after the real early common spine and loopback network owners
+// initialize, then permits exactly one real event-loop/command-buffer pass.
+// Later waves move this fence toward the unmodified tail as their real owners
+// join the exact archive.
 static bool com_iOSBootSpineReached;
 static bool com_iOSBootNetInitialized;
+static bool com_iOSBootEventReady;
+static bool com_iOSBootEventPassRan;
 
 bool Com_iOS_BootSpineReached()
 {
@@ -84,6 +87,21 @@ bool Com_iOS_BootSpineReached()
 bool Com_iOS_BootNetInitialized()
 {
     return com_iOSBootNetInitialized;
+}
+
+bool Com_iOS_BootEventReady()
+{
+    return com_iOSBootEventReady;
+}
+
+bool Com_iOS_RunBootEventLoopOnce()
+{
+    if (!com_iOSBootEventReady || com_iOSBootEventPassRan)
+        return false;
+    com_iOSBootEventPassRan = true;
+    Com_EventLoop();
+    Cbuf_Execute(0, 0);
+    return true;
 }
 #endif
 
@@ -1142,6 +1160,8 @@ void __cdecl Com_Init(char* commandLine)
 #ifdef KISAK_IOS
     com_iOSBootSpineReached = false;
     com_iOSBootNetInitialized = false;
+    com_iOSBootEventReady = false;
+    com_iOSBootEventPassRan = false;
 #endif
     Value = (jmp_buf *)Sys_GetValue(2);
 
@@ -1355,11 +1375,12 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
 #ifdef KISAK_IOS
     if (FS_iOS_HeadlessNoAssetsRequested())
     {
-        // Explicit, temporary Stage B3 boundary. The production script-string,
+        // Explicit, temporary Stage B4 boundary. The production script-string,
         // filesystem, server, client, renderer, sound, and database tails are
         // outside this wave and remain forbidden at runtime. This path enters
         // real Com_Init, command/dvar/endian/hunk initialization, Netchan_Init,
-        // and NET_Init under the iOS loopback-only socket policy.
+        // and NET_Init under the iOS loopback-only socket policy, then arms one
+        // real Com_EventLoop plus command-buffer execution pass.
         Swap_Init();
         Cbuf_Init();
         Cmd_Init();
@@ -1376,6 +1397,7 @@ void __cdecl Com_Init_Try_Block_Function(char* commandLine)
         if (!NET_iOS_IsLoopbackOnly() || NET_iOS_GetOpenSocketCount() != 1)
             return;
         com_iOSBootNetInitialized = true;
+        com_iOSBootEventReady = true;
         return;
     }
 #endif

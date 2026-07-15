@@ -17,6 +17,9 @@ const char *kisak_boot_probe_after_init(void);
 // BootNetSmoke.cpp sends and decodes one real msg through NET's loopback queue.
 const char *kisak_boot_net_smoke(void);
 
+// BootEventSmoke.cpp proves the real queue/event/command/dvar path.
+const char *kisak_boot_event_smoke(void);
+
 // BootFSSmoke.cpp runs real FS_InitFilesystem and a sandbox file round trip.
 const char *kisak_fs_smoke(void);
 

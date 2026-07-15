@@ -74,12 +74,23 @@ jobs:
           xcrun ar -t libs/iphonesimulator/libkisakcominit.a \
             | tee ../proof/cominit-archive-members.txt
           grep -Fqx 'src_qcommon_common.cpp.o' ../proof/cominit-archive-members.txt
+          grep -Fqx 'src_ios_sys_ios_events.cpp.o' ../proof/cominit-archive-members.txt
+          grep -Fqx 'src_universal_dvar_cmds.cpp.o' ../proof/cominit-archive-members.txt
           xcrun nm -gU libs/iphonesimulator/libkisakcominit.a \
             | c++filt | tee ../proof/cominit-defined-symbols.txt
           grep -F 'FS_InitFilesystem()' ../proof/cominit-defined-symbols.txt
           grep -F 'Com_Init(char*)' ../proof/cominit-defined-symbols.txt
           grep -F 'Com_iOS_BootSpineReached()' ../proof/cominit-defined-symbols.txt
           grep -F '_copyDWord(unsigned int*, unsigned int, unsigned int)' ../proof/cominit-defined-symbols.txt
+          grep -F 'Sys_QueEvent(unsigned int, sysEventType_t, int, int, int, void*)' \
+            ../proof/cominit-defined-symbols.txt
+          grep -F 'Sys_GetEvent(sysEvent_t*)' ../proof/cominit-defined-symbols.txt
+          grep -F 'Dvar_AddCommands()' ../proof/cominit-defined-symbols.txt
+          grep -F 'Dvar_Set_f()' ../proof/cominit-defined-symbols.txt
+          grep -F 'Dvar_SetA_f()' ../proof/cominit-defined-symbols.txt
+          grep -F 'Com_DvarDump(int, char const*)' ../proof/cominit-defined-symbols.txt
+          grep -E ' [A-Za-z] _?info1$' ../proof/cominit-defined-symbols.txt
+          grep -E ' [A-Za-z] _?info2$' ../proof/cominit-defined-symbols.txt
           grep -E ' [A-Za-z] _?(com_dedicated|com_sv_running|useFastFile|com_errorEntered)$' \
             ../proof/cominit-defined-symbols.txt
           xcrun nm -gU libs/iphonesimulator/libkisaksmoke.a \
@@ -95,8 +106,12 @@ jobs:
               done | c++filt | tee ../proof/app-object-defined-symbols.txt
           grep -F 'kisak_boot_cominit_stage' ../proof/app-object-defined-symbols.txt
           grep -F 'kisak_boot_probe_after_init' ../proof/app-object-defined-symbols.txt
+          grep -F 'kisak_boot_event_smoke' ../proof/app-object-defined-symbols.txt
           ! grep -E ' [Tt] Dvar_(Init|RegisterEnum|EnumToString|RegisterString|SetStringFromSource|GetString)\(' \
             ../proof/app-object-defined-symbols.txt
+          ! grep -E ' [Tt] (Sys_QueEvent|Sys_GetEvent|Dvar_AddCommands|Dvar_Set_f|Dvar_SetA_f|Com_DvarDump)\(' \
+            ../proof/app-object-defined-symbols.txt
+          ! grep -E ' [A-Za-z] _?info[12]$' ../proof/app-object-defined-symbols.txt
           ! grep -E ' [Tt] (Com_Error|Com_Printf|Com_PrintError|Com_PrintWarning|Com_DPrintf|Com_StartupVariable|Com_LogFileOpen|Com_Memset|Com_Memcpy|_copyDWord)\(' \
             ../proof/app-object-defined-symbols.txt
           ! grep -E ' [A-Za-z] _?(com_dedicated|com_sv_running|useFastFile|com_errorEntered)$' \
@@ -173,6 +188,7 @@ jobs:
           grep -Fqx 'boot=hunk OK (4KB tmp alloc rw), dvar OK (bmk4_boot=ipad), cmd OK — 3 stages up' proof/metal_first_frame.txt
           grep -Fqx 'fs=FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets' proof/metal_first_frame.txt
           grep -Fqx 'net=Netchan+NET_Init OK — loopback only, 1 sockets, msg subsystem up' proof/metal_first_frame.txt
+          grep -Fqx 'event=Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected' proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
 
       - id: upload_proof

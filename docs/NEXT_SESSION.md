@@ -1,11 +1,56 @@
-# NEXT_SESSION - BMK4 context handoff (2026-07-14, Stage B2 runtime diagnostics)
+# NEXT_SESSION - BMK4 live state (2026-07-15, B4 event-loop gate)
 
-Read `FRONTIER_REPORT.md`, the latest `PORT_JOURNAL.md` entries,
-`docs/M14_PMOVE_SANDBOX_REPORT.md`, and `docs/FASTFILE_PLAN.md` before
-continuing. Re-reference this plan before each edit and refresh it whenever
-work pauses.
+Read `docs/HANDOFF_TO_CODEX.md`, the ratified roadmap in
+`docs/reviews/roadmap-sol.md` plus
+`docs/reviews/roadmap-claude-response.md`, and the latest `PORT_JOURNAL.md`
+entries before continuing. Re-reference this file before each edit and refresh
+it whenever work pauses.
 
-## Active seat state — Stage B2 119-symbol link closure
+## Active seat state — B4 real queued-console event earned on staging
+
+- Implementation commit `7627e75` passed its first full staging round. iOS
+  census run `29420998757` is **39/39** (SYNTAX). Stub run `29420998738`
+  built the exact 14-member Com_Init archive, linked simulator and unsigned
+  arm64-device apps, and earned the event proof in the simulator
+  (OBJECT+ARCHIVE+LINK+SIM_RUN). Windows run `29420998733` passed Debug and
+  Release, FF0a, and layout conformance with both Windows coordinator verdicts
+  green.
+- The proof artifact has launch exit `0`, no `.ips` report, all prior markers,
+  and the exact new line:
+  `event=Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected`.
+  The real invalid `set` syntax printed its usage line, left the probe at
+  `alive`, and a following witness command changed a second dvar to prove
+  execution continued.
+- `sys_ios_events.cpp` now owns the typed LP64 event ring. `dvar_cmds.cpp`
+  owns real `set`/`seta`/dump commands plus `info1`/`info2`; the takeover audit
+  removed the stale scaffold globals that would have duplicated them. Artifact
+  `nm` evidence shows the real owners in `libkisakcominit.a` and none in the
+  app/Stub objects.
+- The follow-up tree permanently requires the exact event marker, raises the
+  monotonic census floor to 39, and adds B4 archive allowlist plus Stub
+  denylist assertions. That gate commit must itself pass all staging steps
+  before the staging-to-main promotion PR is opened.
+- B4 is simulator evidence, not physical-device runtime evidence. The unsigned
+  IPA proves arm64 device compilation/link/package only. M15 remains open until
+  B5 earns `cominit=Com_Init OK — 4 subsystems up, no assets` and journals the
+  milestone.
+- B5 must resolve a latent source-reconstruction defect before claiming
+  behavioral `dvarlist`: `dvar.cpp` keeps the real registry count in a private
+  `static dvarCount`, while `dvar_cmds.cpp` currently reports from a separate
+  external `dvarCount` that remains zero.
+
+## Current next actions
+
+1. Push the permanent B4 gate commit to `staging`; require Windows Debug and
+   Release, 39/39 census, both iOS jobs, every coordinator verdict, the exact
+   marker, zero relevant crash reports, and real-owner/Stub-denylist closure.
+2. Only after that exact staging SHA is green, open the staging-to-main PR and
+   arm auto-merge. Verify the protected PR checks and resulting hard main run.
+3. Begin B5 on staging: dvar count >24, behavioral real `set` and `dvarlist`,
+   retained FS round trip and B4 event proof, then the immutable M15 marker.
+   Append M15 to `PORT_JOURNAL.md` only after it earns.
+
+## Historical checkpoint — Stage B2 119-symbol link closure
 
 - Authoritative B2 commit `b6f2861` passed the 35/35 census and Windows
   Debug/Release. Its stub job exposed the expected whole-object closure:
@@ -253,7 +298,10 @@ M15, as the corrected contract already requires. The B2 candidate deletes the
 manual hunk/Cbuf/Cmd tail and moves those calls behind real `Com_Init`; hosted
 link/runtime proof is still required before that replacement is accepted.
 
-## Next actions, in order
+## Historical B2 next actions (superseded)
+
+This list is retained as provenance. The active actions are at the top of this
+file and the ratified ten-slice ordering overrides this older checkpoint.
 
 1. When the personal Mac/iPad is available, install a signed M14 build, pull
    `Documents/metal_first_frame.txt`, require both exact boot and pmove lines,

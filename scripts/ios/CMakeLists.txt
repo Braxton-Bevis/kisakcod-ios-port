@@ -11,6 +11,7 @@ include(${PLATFORM_DIR}/${KISAK_PLATFORM}/platform.cmake)
 set(IOS_PROBE_SOURCES
     "${SRC_DIR}/ios/sys_ios_paths.mm"        # new iOS platform layer (must compile clean)
     "${SRC_DIR}/ios/sys_ios_main.mm"         # iOS platform entry layer (replaces win32/win_main.cpp)
+    "${SRC_DIR}/ios/sys_ios_events.cpp"       # B4 real Sys_QueEvent/Sys_GetEvent ring
     "${SRC_DIR}/ios/msvc_crt_compat.cpp"     # MSVC CRT functions with no libc equivalent
     "${SRC_DIR}/ios/snd_ios_stub.cpp"        # no-op Miles (AIL_*) backend, pre-AVAudioEngine
     "${SRC_DIR}/bgame/bg_pmove.cpp"          # real player movement entry point
@@ -36,6 +37,7 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/universal/com_math.cpp"      # math library
     "${SRC_DIR}/universal/com_math_anglevectors.cpp" # real per-frame pmove basis vectors
     "${SRC_DIR}/universal/dvar.cpp"          # dvar system (Com_Init dependency)
+    "${SRC_DIR}/universal/dvar_cmds.cpp"     # B4 real set/seta command owners
     "${SRC_DIR}/universal/com_memory.cpp"    # zone/hunk memory (mmap under KISAK_IOS)
     "${SRC_DIR}/qcommon/common.cpp"          # Com_Init / Com_Frame — the boot path itself
     "${SRC_DIR}/buildnumber.cpp"             # getBuildNumber — reached by Com_Init version dvar

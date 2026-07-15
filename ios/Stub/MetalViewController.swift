@@ -83,7 +83,12 @@ final class MetalViewController: UIViewController {
     private var bootStatus = "pending"
 
     // Phase 3 B3: real Netchan/NET init plus msg encode/decode over loopback.
+    private static let netProofOK = "Netchan+NET_Init OK — loopback only, 1 sockets, msg subsystem up"
     private var netStatus = "waiting for boot"
+
+    // Phase 3 B4: real Sys_QueEvent -> Com_EventLoop -> Cbuf/Cmd -> dvar.
+    private static let eventProofOK = "Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected"
+    private var eventStatus = "waiting for network"
 
     // Phase 3 Wave 1: real FS_InitFilesystem plus a Documents round trip.
     private static let fsProofOK = "FS_InitFilesystem OK — bundle base, Documents home, write/read/delete OK, no assets"
@@ -244,9 +249,9 @@ final class MetalViewController: UIViewController {
                 try? FileManager.default.removeItem(at: sentinel)
                 if result.hasPrefix("hunk OK") {
                     self.runNetSmoke()
-                    self.runFSSmoke()
                 } else {
                     self.netStatus = "blocked by boot probe failure"
+                    self.eventStatus = "blocked by boot probe failure"
                     self.fsStatus = "blocked by boot probe failure"
                     self.pmoveProofStatus = "blocked by boot probe failure"
                 }
@@ -254,6 +259,7 @@ final class MetalViewController: UIViewController {
                 try? FileManager.default.removeItem(at: sentinel)
                 self.bootStatus = "blocked by Com_Init stage failure"
                 self.netStatus = "blocked by Com_Init stage failure"
+                self.eventStatus = "blocked by Com_Init stage failure"
                 self.fsStatus = "blocked by Com_Init stage failure"
                 self.pmoveProofStatus = "blocked by Com_Init stage failure"
             }
@@ -268,6 +274,9 @@ final class MetalViewController: UIViewController {
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
         if crashes >= 3 {
             netStatus = "skipped — crashed \(crashes)x"
+            eventStatus = "blocked by network crash guard"
+            fsStatus = "blocked by network crash guard"
+            pmoveProofStatus = "blocked by network crash guard"
             return
         }
 
@@ -276,6 +285,39 @@ final class MetalViewController: UIViewController {
         try? FileManager.default.removeItem(at: sentinel)
         netStatus = result
         NSLog("KISAK_NET_SMOKE %@", result)
+        if result == Self.netProofOK {
+            runEventSmoke()
+        } else {
+            eventStatus = "blocked by network failure"
+            fsStatus = "blocked by network failure"
+            pmoveProofStatus = "blocked by network failure"
+        }
+        writeFirstFrameMarker()
+    }
+
+    private func runEventSmoke() {
+        NSLog("KISAK_STAGE_ENTER event")
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("event_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            eventStatus = "skipped — crashed \(crashes)x"
+            fsStatus = "blocked by event crash guard"
+            pmoveProofStatus = "blocked by event crash guard"
+            return
+        }
+
+        try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+        let result = String(cString: kisak_boot_event_smoke())
+        try? FileManager.default.removeItem(at: sentinel)
+        eventStatus = result
+        NSLog("KISAK_EVENT_SMOKE %@", result)
+        if result == Self.eventProofOK {
+            runFSSmoke()
+        } else {
+            fsStatus = "blocked by event failure"
+            pmoveProofStatus = "blocked by event failure"
+        }
         writeFirstFrameMarker()
     }
 
@@ -675,6 +717,7 @@ final class MetalViewController: UIViewController {
             Com_Init spine: \(comInitSpineStatus)
             boot: \(bootStatus)
             network: \(netStatus)
+            event loop: \(eventStatus)
             filesystem: \(fsStatus)
             pmove proof: \(pmoveProofStatus)
             pmove live: \(pmoveLiveStatus)
@@ -707,6 +750,7 @@ final class MetalViewController: UIViewController {
         cominit-spine=\(comInitSpineStatus)
         boot=\(bootStatus)
         net=\(netStatus)
+        event=\(eventStatus)
         fs=\(fsStatus)
         pmove=\(pmoveProofStatus)
         pmoveLive=\(pmoveLiveStatus)
