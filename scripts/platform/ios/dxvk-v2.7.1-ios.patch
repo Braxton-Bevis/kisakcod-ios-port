@@ -163,10 +163,10 @@ index 2f45946..37c0023 100644
  d3d9_dep = declare_dependency(
    link_with           : [ d3d9_dll ],
 diff --git a/src/dxvk/dxvk_device_info.cpp b/src/dxvk/dxvk_device_info.cpp
-index 9a45f10..45796b3 100644
+index 9a45f10..7e2d10b 100644
 --- a/src/dxvk/dxvk_device_info.cpp
 +++ b/src/dxvk/dxvk_device_info.cpp
-@@ -714,7 +714,22 @@ namespace dxvk {
+@@ -714,19 +714,47 @@ namespace dxvk {
        ENABLE_FEATURE(core.features, fillModeNonSolid, true),
        ENABLE_FEATURE(core.features, fragmentStoresAndAtomics, false),
        ENABLE_FEATURE(core.features, fullDrawIndexUint32, true),
@@ -189,7 +189,18 @@ index 9a45f10..45796b3 100644
 +#endif
        ENABLE_FEATURE(core.features, independentBlend, true),
        ENABLE_FEATURE(core.features, logicOp, false),
-@@ -726,7 +741,13 @@ namespace dxvk {
+       ENABLE_FEATURE(core.features, multiDrawIndirect, true),
++#ifdef __APPLE__
++      // D3D9 exposes exactly one viewport. MoltenVK's simulator GPU lacks
++      // Vulkan multiViewport, but count=1 remains valid and is the only count
++      // used by the D3D9 frontend.
++      ENABLE_FEATURE(core.features, multiViewport, false),
++#else
+       ENABLE_FEATURE(core.features, multiViewport, true),
++#endif
+       ENABLE_FEATURE(core.features, occlusionQueryPrecise, true),
+       ENABLE_FEATURE(core.features, pipelineStatisticsQuery, false),
+       ENABLE_FEATURE(core.features, robustBufferAccess, true),
        ENABLE_FEATURE(core.features, sampleRateShading, true),
        ENABLE_FEATURE(core.features, samplerAnisotropy, false),
        ENABLE_FEATURE(core.features, shaderClipDistance, true),
@@ -203,7 +214,7 @@ index 9a45f10..45796b3 100644
        ENABLE_FEATURE(core.features, shaderFloat64, false),
        ENABLE_FEATURE(core.features, shaderImageGatherExtended, true),
        ENABLE_FEATURE(core.features, shaderInt16, false),
-@@ -837,9 +858,22 @@ namespace dxvk {
+@@ -837,9 +865,22 @@ namespace dxvk {
        ENABLE_EXT_FEATURE(extPageableDeviceLocalMemory, pageableDeviceLocalMemory, false),
  
        /* Robustness, all features effectively required for correctness */
@@ -226,7 +237,7 @@ index 9a45f10..45796b3 100644
  
        /* Shader module identifier, used for pipeline lifetime management in 32-bit */
        ENABLE_EXT_FEATURE(extShaderModuleIdentifier, shaderModuleIdentifier, false),
-@@ -875,7 +909,13 @@ namespace dxvk {
+@@ -875,7 +916,13 @@ namespace dxvk {
        ENABLE_EXT_FEATURE(khrMaintenance7, maintenance7, false),
  
        /* Dependency for graphics pipeline library */
