@@ -49,6 +49,36 @@ it whenever work pauses.
   04/05 offsets (block<<28|offset-1 conversion + alias table). K4 SPLITS:
   K4a delayed streams, K4b union arms — separate gates. Then real
   common_mp.ff locally.
+- K2 DELIVERED (Lane A, branch ff-kernel-k2): fixture 02 engine-qualified
+  and regenerated (static trace tools/zone_fixtures/ENGINE_TRACE_02.md,
+  independently CONFIRMED by Lane C's Oracle 1 runtime trace — two methods,
+  same block-4 answer); FFKStream context (block-0 pop rewind, high-water
+  accounting); typed dispatch walker; frontier-ruling P0 header-first
+  exact-size reader (256 MiB policy bound, payload_size_mismatch appended;
+  the old 64 MiB cap refused mp_killhouse's own size class); three Sol
+  rounds answered in docs/reviews/k2-lane-a-notes.md; marker extended and
+  hard-gated; desk-check harness committed at tools/ffk_deskcheck/.
+- K3 PRECONDITIONS (corpus adjudications banked by the K2/Oracle-1 waves —
+  settle each BEFORE its mechanism's kernel code):
+  1. **Fixture 04 is CORPUS-BROKEN (Lane C, runtime-proven).** Its
+     same-name alias insert is refused by the real engine at
+     db_registry.cpp:1900 while the manifest wrongly says accept. Fix
+     pattern: a DISTINCT aliased name (as fixture 05 does). Engine-trace
+     mechanism 04, fix the builder, regenerate, and re-pin the Oracle 1
+     expectation in the same commit.
+  2. **Fixture 06's malformed twin declares its PRE-truncation size**
+     (Lane A, K2). Under the exact-size container reader that refuses at
+     the CONTAINER layer (payload_size_mismatch), not the delayed-drain
+     layer its manifest claims. Regenerate with a truthful declared size
+     when K4a engine-qualifies mechanism 06 (same fix pattern as the K2
+     twin-01 regeneration).
+  3. **Pool-clone redirect (Lane C).** DB_LinkXAssetEntry returns a POOL
+     COPY: committed asset header pointers live OUTSIDE the zone blocks in
+     registry pool structs. K3's alias/offset graph model must distinguish
+     zone-block payload addresses from registry pool structs — an offset
+     token can only target zone-block space; the alias table holds
+     pool-side values. Design the K3 interval map (frontier ruling item 5)
+     with that split explicit.
 - Lane 1 (device-enablement of the placeholder renderer) queued behind the
   kernel wave per Sol amendment 2.
 

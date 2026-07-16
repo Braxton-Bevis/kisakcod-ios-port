@@ -1,4 +1,8 @@
 #include "database.h"
+#ifdef BMK4_ORACLE1
+#include <bmk4_oracle1_instr.h>
+#endif
+#line 2
 
 #include <qcommon/threads.h>
 #include <win32/win_local.h>
@@ -95,6 +99,10 @@ void __cdecl DB_LoadXFileData(uint8_t *pos, uint32_t size)
     const char *v2; // eax
     uint32_t err; // [esp+0h] [ebp-4h]
 
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_XFileData(pos, size);
+#endif
+#line 98
     iassert(size);
     iassert(g_load.f);
     iassert(!g_load.stream.avail_out);
@@ -264,6 +272,10 @@ void __cdecl DB_LoadXFileInternal()
     }
     
     DB_LoadXFileData((uint8_t *)&file, sizeof(XFile));
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_XFileHeader(&file);
+#endif
+#line 267
     if (g_trackLoadProgress)
     {
         fileSize = GetFileSize(g_load.f, 0);
@@ -307,6 +319,10 @@ void Load_XAssetListCustom()
     varXAssetList = &g_varXAssetList;
     
     DB_LoadXFileData((uint8_t *)&g_varXAssetList, sizeof(XAssetList));
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_AssetList(&g_varXAssetList);
+#endif
+#line 310
     DB_PushStreamPos(4);
     varScriptStringList = &varXAssetList->stringList;
     Load_ScriptStringList(0);

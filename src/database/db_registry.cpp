@@ -1,4 +1,8 @@
 #include "database.h"
+#ifdef BMK4_ORACLE1
+#include <bmk4_oracle1_instr.h>
+#endif
+#line 2
 
 #include <qcommon/files.h>
 #include <qcommon/mem_track.h>
@@ -1830,6 +1834,10 @@ XAssetHeader __cdecl DB_AddXAsset(XAssetType type, XAssetHeader header)
     Sys_LockWrite(&db_hashCritSect);
     existingEntry = DB_LinkXAssetEntry(&newEntry, 0);
     Sys_UnlockWrite(&db_hashCritSect);
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_AssetInsert(type, header.data, &existingEntry->entry.asset);
+#endif
+#line 1833
     DB_SyncLostDevice();
     return existingEntry->entry.asset.header;
 }

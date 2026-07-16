@@ -496,17 +496,23 @@ final class MetalViewController: UIViewController {
             return
         }
         // The oracle-qualified synthetic fixtures ship in the app bundle
-        // (tools/zone_fixtures/01_rawfile_inline — generated, zero game data).
+        // (tools/zone_fixtures/01_rawfile_inline + 02_stringtable_script_remap
+        // — generated, zero game data). Fixture 02 uses namespaced basenames
+        // because bundle resources are flat.
         guard let validPath = Bundle.main.path(forResource: "valid", ofType: "ff"),
               let malformedPath = Bundle.main.path(forResource: "malformed_truncated_buffer",
-                                                   ofType: "ff") else {
+                                                   ofType: "ff"),
+              let valid02Path = Bundle.main.path(forResource: "fixture02_valid", ofType: "ff"),
+              let malformed02Path = Bundle.main.path(
+                  forResource: "fixture02_malformed_bad_script_count", ofType: "ff") else {
             ffkStatus = "FF kernel FAIL: fixtures missing from bundle"
             writeFirstFrameMarker()
             return
         }
 
         try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
-        let result = String(cString: kisak_ff_kernel_smoke(validPath, malformedPath))
+        let result = String(cString: kisak_ff_kernel_smoke(validPath, malformedPath,
+                                                           valid02Path, malformed02Path))
         try? FileManager.default.removeItem(at: sentinel)
         ffkStatus = result
         NSLog("KISAK_FFK_SMOKE %@", result)

@@ -1,9 +1,9 @@
 {
   "container": {
-    "decompressed_sha256": "a361b600a8188cb08a4aeda922047c07e82754ff09c5bdca9beff9a1e1af281d",
-    "file": "malformed_bad_script_count.ff",
+    "decompressed_sha256": "f6afd022746d0f56f10e0ee3ba5a6c5a3db12075130941e3b6c656ce9372ddc2",
+    "file": "fixture02_malformed_bad_script_count.ff",
     "magic": "IWffu100",
-    "sha256": "1613072ba02158a6b0e11b9f1558336b7d72bd4f4ca77c24942291316ce700aa",
+    "sha256": "259a63741b372648065c802e51f225c00f7e6bf52fa1dad7856bea0d2cec471c",
     "version": 5
   },
   "expectation": "refuse",

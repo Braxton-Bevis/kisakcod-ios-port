@@ -34,9 +34,12 @@ const char *kisak_fs_smoke(void);
 const char *kisak_boot_m15_closeout(void);
 
 // BootFFSmoke.cpp proves the slice-7 fastfile kernel (K0 container spine +
-// K1 RawFile wire walk) against oracle-qualified synthetic fixture 01.
+// K1 RawFile wire walk + K2 StringTable/script-string dispatch) against
+// oracle-qualified synthetic fixtures 01 and 02.
 const char *kisak_ff_kernel_smoke(const char *validPath,
-                                  const char *malformedPath);
+                                  const char *malformedPath,
+                                  const char *valid02Path,
+                                  const char *malformed02Path);
 
 // PmoveSandbox.cpp drives the real bg_pmove closure in a synthetic z=0 world.
 void kisak_pmove_init(void);
