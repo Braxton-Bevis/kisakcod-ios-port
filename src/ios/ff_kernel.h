@@ -49,11 +49,16 @@ enum FFKRefusal : uint32_t
     FFK_REFUSE_BUFFER_UNTERMINATED,        // buffer[len] != 0
     FFK_REFUSE_STREAM_NOT_CONSUMED,        // leftover payload after last asset
     FFK_REFUSE_BLOCK_ACCOUNTING,           // per-block use != XFile block table
+    // appended (stable codes never renumber)
+    FFK_REFUSE_INPUT_TOO_LARGE,            // input exceeds the 32-bit zlib lane
+    FFK_REFUSE_UNSUPPORTED_ASSET_COUNT,    // K1 scope: exactly one asset
+    FFK_REFUSE_STALE_CONTAINER,            // container is not for the current payload
 };
 
 struct FFKContainer // K0 result
 {
     uint32_t refusal;            // FFKRefusal; fields below valid when FFK_OK
+    uint32_t generation;         // binds this result to the loaded payload
     uint32_t version;
     uint64_t inputBytes;
     uint64_t compressedBytes;
@@ -71,13 +76,15 @@ struct FFKContainer // K0 result
     uint64_t hashScriptStringMeta; // FNV-1a64 payload[44..52)
 };
 
-struct FFKRawFileK1 // K1 result (single-RawFile zone)
+struct FFKRawFileK1 // K1 result (single-RawFile zone; assetCount must be 1)
 {
     uint32_t refusal;            // FFKRefusal; fields below valid when FFK_OK
     uint32_t rawfileLen;         // declared len field
+    uint32_t bufferPresent;      // engine truthiness of the wire buffer field
     uint64_t hashName;           // FNV-1a64 name bytes incl NUL (utf8_nul)
     uint64_t hashLenField;       // FNV-1a64 of the 4 little-endian len bytes
-    uint64_t hashBuffer;         // FNV-1a64 buffer bytes incl NUL
+    uint64_t hashBuffer;         // FNV-1a64 buffer bytes incl NUL; ONLY
+                                 // meaningful when bufferPresent != 0
     uint32_t blockUse[9];        // per-block bytes consumed by the walk
 };
 

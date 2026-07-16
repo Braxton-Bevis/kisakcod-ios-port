@@ -25,17 +25,28 @@ constexpr size_t kXFileSize = 44;
 constexpr size_t kXAssetListSize = 16;
 constexpr size_t kMinimumPayloadSize = kXFileSize + kXAssetListSize;
 constexpr size_t kInflateChunkSize = 64 * 1024;
-// Boot-stage fixtures are hundreds of bytes; real zones come much later and
-// will re-derive this bound from the XFile header. 64 MiB fails closed long
-// before an iOS allocation does.
+// EXPLICIT KERNEL POLICY (documented divergence from the oracle's 2 GiB
+// bound): the iOS boot lane caps decompressed payloads at 64 MiB, enforced
+// exactly at the boundary. Real zones re-derive their budget from the XFile
+// header in a later wave; until then anything larger fails closed here.
 constexpr size_t kMaximumPayloadSize = 64ull * 1024 * 1024;
 constexpr uint32_t kExpectedVersion = 5;
 constexpr uint32_t kInlineToken = 0xffffffffu; // -1: payload follows in stream
 constexpr uint32_t kAssetTypeRawFile = 31;     // IW3 ASSET_TYPE_RAWFILE
 
-// Single-threaded boot-stage state: the decompressed image K1 walks.
+// Single-threaded boot-stage state: the decompressed image K1 walks, plus a
+// generation stamp binding each successful FFKContainer to the payload it
+// describes (a stale container may not walk a newer payload).
 uint8_t* s_payload;
 size_t s_payloadSize;
+uint32_t s_generation;
+
+void ReleasePayload()
+{
+    free(s_payload);
+    s_payload = nullptr;
+    s_payloadSize = 0;
+}
 
 uint64_t Fnv1a64(const uint8_t* bytes, const size_t size)
 {
@@ -58,10 +69,6 @@ uint32_t ReadU32(const uint8_t* bytes, const size_t offset)
 
 uint32_t InflateOuterPayload(const uint8_t* bytes, const size_t size)
 {
-    free(s_payload);
-    s_payload = nullptr;
-    s_payloadSize = 0;
-
     z_stream stream;
     memset(&stream, 0, sizeof(stream));
     stream.next_in = const_cast<Bytef*>(bytes + kOuterHeaderSize);
@@ -77,11 +84,6 @@ uint32_t InflateOuterPayload(const uint8_t* bytes, const size_t size)
 
     while (payload && result != Z_STREAM_END)
     {
-        if (produced > kMaximumPayloadSize)
-        {
-            refusal = FFK_REFUSE_PAYLOAD_LIMIT;
-            break;
-        }
         if (capacity - produced < kInflateChunkSize)
         {
             capacity *= 2;
@@ -99,6 +101,12 @@ uint32_t InflateOuterPayload(const uint8_t* bytes, const size_t size)
         const size_t chunk = kInflateChunkSize - stream.avail_out;
         produced += chunk;
 
+        // Exact boundary: the cap is a policy, not a fuzzy chunk multiple.
+        if (produced > kMaximumPayloadSize)
+        {
+            refusal = FFK_REFUSE_PAYLOAD_LIMIT;
+            break;
+        }
         if (result != Z_OK && result != Z_STREAM_END)
         {
             refusal = FFK_REFUSE_ZLIB_DATA;
@@ -165,9 +173,21 @@ struct StreamWalk
 bool FFK_LoadContainer(const uint8_t* bytes, const size_t size, FFKContainer* out)
 {
     memset(out, 0, sizeof(*out));
+    // Every load attempt — including one that will be refused — invalidates
+    // the previous payload, so no failure path can leave stale bytes exposed.
+    ReleasePayload();
+    ++s_generation;
+
     if (size < kOuterHeaderSize + 1)
     {
         out->refusal = FFK_REFUSE_TOO_SHORT;
+        return false;
+    }
+    // The IW3 zlib lane is 32-bit; the oracle rejects larger inputs
+    // explicitly and so must we (never narrow silently into uInt).
+    if (size - kOuterHeaderSize > 0xffffffffull)
+    {
+        out->refusal = FFK_REFUSE_INPUT_TOO_LARGE;
         return false;
     }
     if (memcmp(bytes, "IWffu100", 8) != 0)
@@ -185,11 +205,13 @@ bool FFK_LoadContainer(const uint8_t* bytes, const size_t size, FFKContainer* ou
     const uint32_t inflateRefusal = InflateOuterPayload(bytes, size);
     if (inflateRefusal != FFK_OK)
     {
+        ReleasePayload();
         out->refusal = inflateRefusal;
         return false;
     }
     if (s_payloadSize < kMinimumPayloadSize)
     {
+        ReleasePayload();
         out->refusal = FFK_REFUSE_PAYLOAD_SHORT;
         return false;
     }
@@ -209,6 +231,7 @@ bool FFK_LoadContainer(const uint8_t* bytes, const size_t size, FFKContainer* ou
     out->hashAssetList = Fnv1a64(s_payload + kXFileSize, kXAssetListSize);
     out->hashPayload = Fnv1a64(s_payload, s_payloadSize);
     out->hashScriptStringMeta = Fnv1a64(s_payload + kXFileSize, 8);
+    out->generation = s_generation;
     out->refusal = FFK_OK;
     return true;
 }
@@ -220,8 +243,23 @@ bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out)
 {
     memset(out, 0, sizeof(*out));
 
-    // K1 scope fence: a single inline RawFile, no script strings. Anything
-    // else is a later mechanism (02..07) and must fail closed here.
+    // The container must describe the CURRENTLY loaded payload — a result
+    // from an earlier (or refused) load may not walk newer bytes.
+    if (!s_payload || container->refusal != FFK_OK
+        || container->generation != s_generation)
+    {
+        out->refusal = FFK_REFUSE_STALE_CONTAINER;
+        return false;
+    }
+
+    // K1 scope fence: exactly ONE inline RawFile, no script strings. The
+    // scalar result type can only honestly represent one asset; zero or
+    // many are later mechanisms and must fail closed here.
+    if (container->assetCount != 1)
+    {
+        out->refusal = FFK_REFUSE_UNSUPPORTED_ASSET_COUNT;
+        return false;
+    }
     if (container->scriptStringCount != 0 || container->scriptStringsToken != 0)
     {
         out->refusal = FFK_REFUSE_UNSUPPORTED_SCRIPT_STRINGS;
@@ -301,10 +339,13 @@ bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out)
             return false;
         }
 
-        // Inline buffer: len + 1 bytes in the virtual block (4), and the
-        // final byte must be the NUL the engine's loader relies on. The
+        // Inline buffer: len + 1 bytes in the virtual block (4). The
         // malformed fixture-01 twin removes the last byte; this Take is the
-        // stream_truncation refusal its manifest demands.
+        // stream_truncation refusal its manifest demands. The trailing-NUL
+        // check is KERNEL-ADDED validation, stricter than the engine (which
+        // reads len+1 bytes without inspecting the terminator) — kept
+        // deliberately because a non-NUL final byte on this path means the
+        // producer and the len field disagree.
         const uint8_t* buffer = nullptr;
         if (hasBuffer)
         {
@@ -320,6 +361,7 @@ bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out)
             }
         }
 
+        out->bufferPresent = hasBuffer ? 1u : 0u;
         out->rawfileLen = len;
         out->hashName = Fnv1a64(name, nameBytes);
         uint8_t lenLE[4] = {
@@ -377,6 +419,9 @@ const char* FFK_RefusalName(const uint32_t refusal)
     case FFK_REFUSE_BUFFER_UNTERMINATED: return "buffer_unterminated";
     case FFK_REFUSE_STREAM_NOT_CONSUMED: return "stream_not_consumed";
     case FFK_REFUSE_BLOCK_ACCOUNTING: return "block_accounting";
+    case FFK_REFUSE_INPUT_TOO_LARGE: return "input_too_large";
+    case FFK_REFUSE_UNSUPPORTED_ASSET_COUNT: return "unsupported_asset_count";
+    case FFK_REFUSE_STALE_CONTAINER: return "stale_container";
     default: return "unknown";
     }
 }

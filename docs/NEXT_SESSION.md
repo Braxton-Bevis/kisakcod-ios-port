@@ -36,13 +36,18 @@ it whenever work pauses.
   kernel promotes via its own PR (ff-kernel → main) with the required
   Windows checks on the PR; iOS lanes verified green on the exact SHA via
   workflow_dispatch. Staging merges main afterward.
-- NEXT kernel waves: K2 = mechanism 02 (StringTable + script-string
-  interning + XAnimParts u16 remap — first script-string handling in the
-  kernel); then K3 = 03/-2 alias + 04/05 offset mechanisms (these need the
-  block<<28|offset-1 conversion and an alias table); K4 = 06 delayed
-  streams + 07 union arms. Each wave: extend FFK_WalkRawFileZone into a
-  general dispatcher, bundle the fixture pair, extend BootFFSmoke, gate the
-  updated marker. After 07: Oracle 1 instrumentation on Windows, then real
+- NEXT kernel waves (REVISED per Sol's ff-kernel review,
+  docs/reviews/ff-kernel-k01-claude-response.md): every mechanism is
+  ENGINE-QUALIFIED immediately before its wave (trace the real loader path,
+  regenerate the fixture from engine truth if it disagrees — fixture 02's
+  StringTable block assignment is already known-suspect: Load_StringTablePtr
+  pushes no block, builder claims block 0). K2 preconditions: engine-trace
+  fixture 02 + regenerate; replace StreamWalk with a context separating the
+  physical cursor from nine ALIGNED logical block cursors with reservation
+  support; namespaced fixture resource names; `FFK_WalkZone` becomes a
+  type-indexed dispatch table with typed handlers. Then K3 = 03 alias +
+  04/05 offsets (block<<28|offset-1 conversion + alias table). K4 SPLITS:
+  K4a delayed streams, K4b union arms — separate gates. Then real
   common_mp.ff locally.
 - Lane 1 (device-enablement of the placeholder renderer) queued behind the
   kernel wave per Sol amendment 2.

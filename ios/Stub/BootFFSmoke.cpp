@@ -126,8 +126,8 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
     {
         if (!FFK_WalkRawFileZone(&container, &rawfile))
             failure = Fail("K1 walk", FFK_RefusalName(rawfile.refusal));
-        else if (rawfile.rawfileLen != kRawFileLen)
-            failure = Fail("K1 len", "declared len diverges from manifest");
+        else if (rawfile.rawfileLen != kRawFileLen || rawfile.bufferPresent != 1)
+            failure = Fail("K1 len", "declared len/presence diverges from manifest");
         else if (rawfile.hashName != kHashName
             || rawfile.hashLenField != kHashLenField
             || rawfile.hashBuffer != kHashBuffer)
@@ -175,6 +175,7 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
     // --- K1 negative: the malformed twin. Container must ACCEPT (the
     // oracle does); the wire walk must refuse with stream_truncation. ---
     int streamRefusals = 0;
+    int staleRefusals = 0;
     if (!failure)
     {
         FFKContainer twinContainer;
@@ -188,6 +189,19 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
             failure = Fail("K1 twin code", FFK_RefusalName(twinWalk.refusal));
         else
             streamRefusals = 1;
+
+        // Generation binding: the VALID container is now stale (the twin
+        // load owns the payload); walking it must be refused, not honored.
+        FFKRawFileK1 staleWalk;
+        if (!failure)
+        {
+            if (FFK_WalkRawFileZone(&container, &staleWalk))
+                failure = Fail("K1 stale", "stale container walked a newer payload");
+            else if (staleWalk.refusal != FFK_REFUSE_STALE_CONTAINER)
+                failure = Fail("K1 stale code", FFK_RefusalName(staleWalk.refusal));
+            else
+                staleRefusals = 1;
+        }
     }
 
     free(valid);
@@ -197,7 +211,7 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
 
     snprintf(s_status, sizeof(s_status),
              "FF kernel K0+K1 OK — fixture01 hashes match oracle, RawFile round trip, "
-             "refused %d container + %d stream",
-             containerRefusals, streamRefusals);
+             "refused %d container + %d stream + %d stale",
+             containerRefusals, streamRefusals, staleRefusals);
     return s_status;
 }
