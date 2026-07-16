@@ -238,3 +238,37 @@ presumed dead after a session interruption (0 bytes of output at check time)
 and a foreground retry was started per the empty-output rule; the original
 then completed in full and the duplicate was cancelled before producing
 output. The adjudicated text above is the original's complete verdict.
+
+## CI rounds (dispatched on renderer-device-enable, budget 4 fix rounds)
+
+| Round | Head | Runs (stub / census / windows) | Outcome | Cause fixed |
+|---|---|---|---|---|
+| 1 | 3f28882 | 29520723859 / 29520726110 / 29520728044 | census 51/52; both stub lanes red at the exact-archive step; windows green | `tagRECT` unknown to DXVK's windows_base.h (rb_backend.cpp:641) → KISAK_IOS `RECT` fence |
+| 2 | 26f1734 | 29521649969 / 29521651821 / 29521654160 | census 52/52 green; SIM JOB FULLY GREEN (existing exact gates intact); device link red: exactly two undefineds | `r_outdoorAwayBias`/`r_outdoorDownBias` (r_dvars.cpp owners kept live via R_DeriveCodeMatrix) → fail-closed NULL definitions in RendererProofScaffold.cpp |
+| 3 | 40aae18 | 29522657717 / 29522659638 / 29522661344 | device LINKED; red at the new nm gate; sim+census+windows green | gate used `nm -gU`, but app-target TUs build with Release symbols-hidden-by-default → dump with `nm -U`, accept `[Tt]` |
+| 4 | c11d1cb | 29523541997 / 29523543682 / 29523545455 | red only at the demangled for-loop: `R_GetCommandBuffer` inlined into its same-TU seam caller and dead-stripped as a standalone atom | binary-level list reduced to the six symtab-stable symbols; producer ownership remains archive-gated (green) |
+| final | 1e1007e | 29524410781 / 29524412448 / 29524414225 | **ALL GREEN** — stub (sim job + device job), census 52/52, windows Debug/Release | — |
+
+(A connectivity flicker after round 2's commit dispatched runs
+29522554439/29522556498/29522558633 on the stale head 26f1734; they were
+cancelled — the probe completed green before cancellation — and re-dispatched
+on 40aae18.)
+
+Evidence pulled from the green run 29524410781 artifacts:
+
+- `KisakStub-unsigned-ipa/proof-device/device-app-defined-symbols.txt` —
+  packaged IPA binary contains `t _kisak_renderer_placeholder`,
+  `t _kisak_renderer_placeholder_detail`, `t _kisak_d3d9_smoke`, and the
+  dead-strip roots held: `T _vkGetInstanceProcAddr`, `T _vkCreateInstance`,
+  `T _vkCreateDevice`.
+- `...-demangled.txt` — live R/RB path in the IPA binary:
+  `kisak_renderer_placeholder_run(IDirect3D9*, IDirect3DDevice9*)`,
+  `R_iOS_QueueDrawTrianglesCommand(...)`, `RB_DrawTrianglesCmd(...)`,
+  `RB_EndTessSurface()`, `R_DrawTessTechnique(...)`,
+  `R_DrawIndexedPrimitive(...)`.
+- `renderer-archive-members.txt` — exact 11 members.
+- `simulator-launch-proof/metal_first_frame.txt` — every existing earned
+  marker intact plus the honest observation lines
+  `render=device-only stage, not run (no DXVK simulator build)` and
+  `render-detail=IW3 R/RB placeholder detail — device-only stage, not run
+  (simulator)`.

@@ -110,6 +110,18 @@ render-detail=IW3 R/RB placeholder detail — vertices=339 indices=483 triangles
   NOT-EARNED detail prefix above, stale fence comment; round 2 verified the
   round-1 remedy, sim-job byte-identity, marker honesty, and LP64 producer
   seam clean).
+- EARNED (2026-07-16): evidence SHA `1e1007e` is ALL GREEN — stub run
+  `29524410781` (simulator job with every pre-existing exact gate intact AND
+  the device job: DXVK+MoltenVK build, 52-TU archives, exact 11-member
+  libkisakrenderer, device app LINKED under dead-strip+root, packaged
+  unsigned IPA carrying the scene entries, the live R/RB path, and the three
+  Vulkan root symbols), census run `29524412448` (52/52), Windows run
+  `29524414225` (Debug+Release byte-identity). Four fix rounds used
+  (tagRECT fence → outdoor-bias fail-closed dvar definitions → nm -U for
+  Release-hidden app symbols → drop the inlined R_GetCommandBuffer from the
+  binary-level gate, archive gate unchanged); full table in the review log.
+  DEVICE_RUN remains open by design: next step is the owner's Sideloadly
+  sitting per the instructions above.
 
 ## Active seat state — M15 headless Com_Init earned on staging
 
