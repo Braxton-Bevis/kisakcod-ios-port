@@ -133,15 +133,29 @@ mp_killhouse 76,935,387 decompressed). Adopted in this wave:
   reader loads a killhouse-size zone`, `refused 6 container ... + 1
   overflow ...`), ios-stub.yml grep updated in the same commit.
 
-## Round 3 (belt-and-braces on the P0 reader) — SERVICE-DEGRADED
+## Round 3 (belt-and-braces on the P0 reader) — completed on retry
 
-A third Sol round was attempted twice on commit 1e77e8f (the exact reader
-+ round-2 fixes). Attempt 1 ran ~4h: its transcript shows it actively
-verifying the DeflateZone helper against the vendored zlib source before
-the API stream stalled with no verdict; attempt 2 stalled with near-zero
-progress (Codex service degradation). Per the lane protocol ("if output is
-empty, retry once"), the round is recorded as ATTEMPTED-NO-VERDICT. The
-protocol's two mandatory rounds (trace/corpus; implementation) both
-completed with full verdicts and every sustained item is fixed and
-desk-checked; dispatch proceeds on that evidence. If a later Sol pass
-finds a defect in the P0 reader, it lands as a follow-up on this branch.
+Attempt 1 stalled against a degraded Codex API after ~4h with no verdict
+(its transcript shows it mid-verification of the DeflateZone helper
+against the vendored zlib source). The protocol retry completed
+decisively. Verdict: **NEEDS-FIX with exactly one code finding**, the
+rest of the P0 reader upheld:
+
+1. **Probe-path misclassification (my claim REFUTED) — FIXED.** The
+   window-full one-byte probe treated every `Z_OK` as over-production. A
+   CUT DEFLATE TRAILER at exactly the declared boundary consumes input,
+   emits nothing, and returns `Z_OK` — that input class is a TRUNCATION,
+   not a size mismatch. The probe is now a loop: only an actually-emitted
+   byte proves over-production (`payload_size_mismatch`); trailer bytes
+   consumed without output continue; no-progress with exhausted input is
+   `zlib_truncated`; anything else is `zlib_data`. Both classifications
+   fail closed — the fix corrects the refusal CODE for a hostile edge, no
+   gate weakens.
+2. Upheld with file:line evidence: the four fixture-01 mutation probes
+   keep their old codes under the exact reader; the twin-01 regeneration
+   is coherent (container accepts declared=66, walk refuses
+   stream_truncation) — noting correctly that the builder +
+   MALFORMED_MANIFEST changed alongside the twin bytes and SHA256SUMS;
+   DeflateZone is sound (uInt casts safe, chunked zero fill, finish
+   sequencing); the marker snprintf with counts 6/1/1/2/1/1 byte-matches
+   the ios-stub.yml grep (239-byte UTF-8 line).

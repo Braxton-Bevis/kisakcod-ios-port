@@ -160,24 +160,43 @@ uint32_t InflateOuterPayload(const uint8_t* bytes, const size_t size)
             if (stream.avail_out == 0)
             {
                 // Window filled to the declared size with the stream still
-                // open: probe one byte to distinguish a clean end from a
-                // stream that wants to produce MORE than it declared.
+                // open: probe with a one-byte window to distinguish a clean
+                // end from a stream that wants to produce MORE than it
+                // declared. The probe may need several calls that consume
+                // trailer bytes without emitting output (Sol K2 round 3:
+                // a cut trailer here is a TRUNCATION, not a size mismatch —
+                // only an actually-emitted byte proves over-production).
                 uint8_t probe;
                 stream.next_out = &probe;
                 stream.avail_out = 1;
-                result = inflate(&stream, Z_NO_FLUSH);
-                if (result == Z_STREAM_END && stream.avail_out == 1)
-                    break; // ended exactly at the declared size
-                free(payload);
-                uint32_t refusal;
-                if (result == Z_OK || result == Z_STREAM_END)
-                    refusal = FFK_REFUSE_PAYLOAD_SIZE_MISMATCH; // over-produce
-                else if (result == Z_BUF_ERROR && stream.avail_in == 0)
-                    refusal = FFK_REFUSE_ZLIB_TRUNCATED;
-                else
-                    refusal = FFK_REFUSE_ZLIB_DATA;
-                inflateEnd(&stream);
-                return refusal;
+                uint32_t refusal = FFK_OK;
+                for (;;)
+                {
+                    const uInt beforeIn = stream.avail_in;
+                    result = inflate(&stream, Z_NO_FLUSH);
+                    if (result == Z_STREAM_END && stream.avail_out == 1)
+                        break; // ended exactly at the declared size
+                    if (stream.avail_out == 0)
+                    {
+                        // A byte materialized past the declared size.
+                        refusal = FFK_REFUSE_PAYLOAD_SIZE_MISMATCH;
+                        break;
+                    }
+                    if (result == Z_OK && stream.avail_in != beforeIn)
+                        continue; // trailer bytes consumed, no output: retry
+                    refusal = (stream.avail_in == 0
+                               && (result == Z_OK || result == Z_BUF_ERROR))
+                        ? FFK_REFUSE_ZLIB_TRUNCATED
+                        : FFK_REFUSE_ZLIB_DATA;
+                    break;
+                }
+                if (refusal != FFK_OK)
+                {
+                    free(payload);
+                    inflateEnd(&stream);
+                    return refusal;
+                }
+                break; // clean Z_STREAM_END at the declared boundary
             }
             const uInt beforeIn = stream.avail_in;
             const uInt beforeOut = stream.avail_out;
