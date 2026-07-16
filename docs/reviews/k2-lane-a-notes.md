@@ -63,6 +63,72 @@ Kernel-code consequences carried forward from this round:
 - Alignment is a logical-only advance (never consumes payload bytes) —
   reservation semantics per `DB_AllocStreamPos`.
 
-## Round 2 (b) — implementation review before CI dispatch
+## Round 2 (b) — implementation review before CI dispatch (2026-07-16)
 
-(To be appended after the implementation round runs.)
+Sol STANDING: **NEEDS-FIX** — 14 challenges: 7 REFUTED (stream-model
+fidelity, K1 parity's public contract, bad_count implementation, handler
+placement, enum stability, constexpr dispatch portability, marker/grep/
+bridge byte agreement), 6 SUSTAINED + 1 latent. Rulings and actions:
+
+1. **StringTable cell-count multiply wrap (SUSTAINED — real OOB read in
+   commit 350c443) — FIXED + REGRESSION.** `cellCount * 4` wraps u64 at
+   rows = cols = 2^31, passing the bound and over-reading the token array.
+   Fixed with the division form (`cellCount > remaining / 4`); the smoke
+   gains a synthetic 2^31 x 2^31 StringTable probe that must refuse
+   `stream_truncation` without crashing, and the desk check mirrors it.
+   (Found independently in self-audit minutes after the commit; Sol's
+   catch confirms it and demanded the regression leg — added.)
+2. **XAnim fence broader than documented (SUSTAINED) — SETTLED AS
+   DOCUMENTED FENCE.** The fence now explicitly claims an EXACT-ZERO
+   METADATA SHAPE, deliberately stricter than the engine's
+   pointer-truthiness gating (a nonzero count with a null pointer is
+   engine-ignored, kernel-refused), applied BEFORE the name token as a
+   scope decision, not engine order. Header comment updated to match.
+3. **RAWFILE-only mask never exercised (SUSTAINED) — FIXED.** The
+   two-asset scope leg exits at the count fence before the mask. Added a
+   synthetic ONE-asset StringTable zone that `FFK_WalkRawFileZone` must
+   refuse with `unsupported_asset_type`; widening the mask now fails the
+   marker. Marker counts 2 scope refusals.
+4. **K1 public blockUse unbound (SUSTAINED) — FIXED.** The K1 positive leg
+   now memcmps `rawfile.blockUse` against the manifest block table.
+5. **Marker overstates bad_count ordering proof (SUSTAINED) — CONCEDED in
+   wording.** The marker binds the refusal CODE; the before-allocation
+   ordering is desk-checked and review-verified, not marker-proven. Smoke
+   comment reworded; no behavioral change (Sol confirmed the code order is
+   correct).
+6. **Unchecked smoke malloc (SUSTAINED) — FIXED.** The mutant allocation is
+   now null-checked; new probe allocations check too.
+14. **Fixture-only pushes bypass the smoke (SUSTAINED, latent) — FIXED.**
+   `tools/zone_fixtures/**` added to ios-stub.yml's push path filter.
+
+## Frontier ruling P0 folded into K2 (coordinator directive, 2026-07-16)
+
+docs/reviews/frontier-plan-claude-ruling.md (external frontier-model
+review) confirmed a P0 the two-model loop missed: the kernel's 64 MiB
+payload cap refuses the goal artifact's own zones
+(docs/REAL_ZONE_EVIDENCE.md: localized_common_mp 70,269,481;
+mp_killhouse 76,935,387 decompressed). Adopted in this wave:
+
+- `InflateOuterPayload` is now the HEADER-FIRST EXACT-SIZE reader: inflate
+  the 44-byte XFile header only, read declared xfile.size, 64-bit
+  checked-add +44, validate against an explicit 256 MiB policy bound
+  (> 3x the largest real zone), allocate EXACTLY ONCE, continue the same
+  zlib stream, require exact final length + Z_STREAM_END + no trailing
+  input. New appended refusal `payload_size_mismatch` for produced !=
+  declared in either direction.
+- CONSEQUENCE ADJUDICATED: fixture 01's malformed twin used to declare its
+  PRE-truncation size; under the exact reader that is a container-layer
+  `payload_size_mismatch`, which would have destroyed the twin's frozen
+  contract (container-accept + walk stream_truncation). The twin was
+  regenerated with a TRUTHFUL declared size (66), preserving the walk-layer
+  refusal exactly; the walk gate stays behaviorally tested.
+- LATENT for K4a: fixture 06's malformed twin still declares its
+  pre-truncation size and would now refuse at the container layer, not the
+  delayed-drain layer its manifest claims. Fixture 06 is not bundled or
+  gated yet; the K4a wave must engine-qualify mechanism 06 and regenerate
+  that twin the same way (recorded here so it is not rediscovered).
+- Smoke: killhouse-size acceptance leg (zeros-only synthetic zone declaring
+  exactly 76,935,387 bytes — no game data) + declared-size mismatch
+  refusals in both directions; marker extended accordingly (`exact-size
+  reader loads a killhouse-size zone`, `refused 6 container ... + 1
+  overflow ...`), ios-stub.yml grep updated in the same commit.

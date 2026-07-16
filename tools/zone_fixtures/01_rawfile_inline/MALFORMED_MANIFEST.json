@@ -1,9 +1,9 @@
 {
   "container": {
-    "decompressed_sha256": "cf556f3dcc745c77f2e1062b2a39556dea421d4a538af55734b49347b4022d35",
+    "decompressed_sha256": "f328a4106605a3cdf4373ab55fdcc6d4be0be6bb7aaba721dae263001690285a",
     "file": "malformed_truncated_buffer.ff",
     "magic": "IWffu100",
-    "sha256": "ec7dcaedffbc2d9f598fd963c37d8733ce8e2709b2ddb8c48bd4a1549a33543a",
+    "sha256": "b5d5d155aaeb16138baad83b3dc8b7357ec09fb0468e9ee2b02f84ac323e3d48",
     "version": 5
   },
   "expectation": "refuse",
@@ -15,7 +15,7 @@
   "fixture": "rawfile_inline",
   "mechanism": 1,
   "notes": [
-    "Final RawFile buffer byte removed; declared len remains 5."
+    "Final RawFile buffer byte removed; declared len remains 5; xfile.size states the truncated stream truthfully so the exact-size container reader accepts and the WALK refuses."
   ],
   "oracle_v1_static_parser_may_accept": true,
   "schema": "bmk4.zone-fixture-refusal.v1"

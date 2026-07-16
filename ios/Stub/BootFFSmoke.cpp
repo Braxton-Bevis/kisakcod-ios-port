@@ -14,22 +14,32 @@
 // include their NUL; len is 4 LE bytes; the remap index is 2 LE bytes).
 //
 // The marker is formatted ONLY after every leg passes: (a) K0 accepts both
-// valid fixtures with every field equal to the manifests', (b) four
+// valid fixtures with every field equal to the manifests', (b) SIX
 // container-level corruptions derived in memory from fixture 01 are REFUSED
-// with the expected codes, (c) K1 round-trips the RawFile fields and block
-// accounting, (d) fixture 01's malformed twin — which the container layer
-// must ACCEPT, exactly as the oracle does — is REFUSED by the wire walk
-// with stream_truncation, (e) K2 walks fixture 02 through the typed
-// dispatch (script-string interning, StringTable cells, XAnimParts u16
-// remap, high-water block accounting), (f) the K1 entry point REFUSES
-// fixture 02 (scope fence: gates must be able to fail), and (g) fixture
-// 02's malformed twin is REFUSED with bad_count BEFORE allocation, the code
-// its MALFORMED_MANIFEST.json demands.
+// with the expected codes (magic, version, cut byte, trailing byte, and the
+// exact-size reader's declared-size mismatch in BOTH directions), (c) K1
+// round-trips the RawFile fields, targeted hashes, AND the public blockUse
+// table, (d) fixture 01's malformed twin — whose xfile.size truthfully
+// declares its truncated stream, so the container must ACCEPT it — is
+// REFUSED by the wire walk with stream_truncation, (e) K2 walks fixture 02
+// through the typed dispatch (script-string interning, StringTable cells,
+// XAnimParts u16 remap, high-water block accounting), (f) the K1 entry
+// point REFUSES fixture 02 (two assets) AND a synthetic one-asset
+// StringTable zone (exercising the RAWFILE-only dispatch mask, not just the
+// count fence), (g) a synthetic StringTable declaring 2^31 x 2^31 cells is
+// REFUSED without crashing (the u64 multiply-wrap regression), (h) fixture
+// 02's malformed twin is REFUSED with bad_count, and (i) the header-first
+// exact-size reader (frontier ruling P0) ACCEPTS a synthetic zeros-only
+// zone declaring mp_killhouse's exact decompressed size — the class the
+// old 64 MiB cap refused (docs/REAL_ZONE_EVIDENCE.md; no game data is
+// involved). Gates must be able to fail.
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#include <zlib/zlib.h>
 
 #include <ios/ff_kernel.h>
 
@@ -112,6 +122,87 @@ const char* Fail(const char* stage, const char* detail)
     snprintf(s_status, sizeof(s_status), "FF kernel FAIL: %s (%s)", stage, detail);
     return s_status;
 }
+
+void WriteU32(uint8_t* bytes, const size_t offset, const uint32_t value)
+{
+    bytes[offset] = static_cast<uint8_t>(value);
+    bytes[offset + 1] = static_cast<uint8_t>(value >> 8);
+    bytes[offset + 2] = static_cast<uint8_t>(value >> 16);
+    bytes[offset + 3] = static_cast<uint8_t>(value >> 24);
+}
+
+// Deflate a synthetic decompressed image (prefix bytes, then zeroFill zero
+// bytes) into a fresh IWffu100 v5 container. Streaming: the zero fill is
+// fed from a fixed chunk, so building the killhouse-size probe never
+// materializes a 76 MB input buffer. Only used to build in-memory probe
+// zones — the compressed byte pattern itself is irrelevant to the probes.
+uint8_t* DeflateZone(const uint8_t* prefix, const size_t prefixSize,
+                     const uint64_t zeroFill, size_t* outSize)
+{
+    z_stream zs;
+    memset(&zs, 0, sizeof(zs));
+    if (deflateInit(&zs, Z_BEST_SPEED) != Z_OK)
+        return nullptr;
+    size_t capacity = 256 * 1024;
+    uint8_t* out = static_cast<uint8_t*>(malloc(capacity));
+    if (!out)
+    {
+        deflateEnd(&zs);
+        return nullptr;
+    }
+    memcpy(out, "IWffu100", 8);
+    WriteU32(out, 8, 5);
+    size_t written = 12;
+    static uint8_t s_zeros[65536];
+    const uint64_t totalInput = prefixSize + zeroFill;
+    uint64_t fed = 0;
+    int result = Z_OK;
+    do
+    {
+        if (zs.avail_in == 0 && fed < totalInput)
+        {
+            if (fed < prefixSize)
+            {
+                zs.next_in = const_cast<Bytef*>(prefix) + fed;
+                zs.avail_in = static_cast<uInt>(prefixSize - fed);
+            }
+            else
+            {
+                const uint64_t left = totalInput - fed;
+                zs.next_in = s_zeros;
+                zs.avail_in = static_cast<uInt>(
+                    left < sizeof(s_zeros) ? left : sizeof(s_zeros));
+            }
+            fed += zs.avail_in;
+        }
+        if (capacity - written < 64 * 1024)
+        {
+            capacity *= 2;
+            uint8_t* grown = static_cast<uint8_t*>(realloc(out, capacity));
+            if (!grown)
+            {
+                free(out);
+                deflateEnd(&zs);
+                return nullptr;
+            }
+            out = grown;
+        }
+        zs.next_out = out + written;
+        const uInt window = static_cast<uInt>(capacity - written);
+        zs.avail_out = window;
+        result = deflate(&zs, fed == totalInput ? Z_FINISH : Z_NO_FLUSH);
+        written += window - zs.avail_out;
+        if (result == Z_STREAM_ERROR)
+        {
+            free(out);
+            deflateEnd(&zs);
+            return nullptr;
+        }
+    } while (result != Z_STREAM_END);
+    deflateEnd(&zs);
+    *outSize = written;
+    return out;
+}
 } // namespace
 
 extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
@@ -168,8 +259,11 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
         || container.hashScriptStringMeta != kHashScriptStringMeta)
         failure = Fail("K0 hashes", "FNV domains diverge from oracle");
 
-    // --- K1 positive: RawFile round trip + block accounting. ---
+    // --- K1 positive: RawFile round trip + block accounting. The PUBLIC
+    // blockUse table is bound to the manifest's block sizes directly, so a
+    // wrapper that dropped or corrupted the copy could not earn the marker.
     FFKRawFileK1 rawfile;
+    uint8_t payloadSnapshot[kDecompressedBytes];
     if (!failure)
     {
         if (!FFK_WalkRawFileZone(&container, &rawfile))
@@ -180,6 +274,18 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
             || rawfile.hashLenField != kHashLenField
             || rawfile.hashBuffer != kHashBuffer)
             failure = Fail("K1 hashes", "targeted-field hashes diverge from manifest");
+        else if (memcmp(rawfile.blockUse, kBlockSizes, sizeof(kBlockSizes)) != 0)
+            failure = Fail("K1 accounting", "public blockUse diverges from manifest");
+
+        // Snapshot the decompressed image while fixture 01 owns the payload:
+        // the declared-size mismatch probes below re-deflate mutations of it.
+        if (!failure)
+        {
+            if (FFK_PayloadSize() != sizeof(payloadSnapshot))
+                failure = Fail("K1 snapshot", "payload size diverges from manifest");
+            else
+                memcpy(payloadSnapshot, FFK_PayloadBytes(), sizeof(payloadSnapshot));
+        }
     }
 
     // --- K0 negatives: in-memory container corruptions must be refused. ---
@@ -188,6 +294,8 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
     {
         FFKContainer probe;
         uint8_t* mutant = static_cast<uint8_t*>(malloc(validSize + 1));
+        if (!mutant)
+            return Fail("K0 negatives", "mutant allocation failed");
         memcpy(mutant, valid, validSize);
 
         mutant[0] ^= 0xff; // not IWffu100
@@ -216,12 +324,37 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
             ++containerRefusals;
 
         free(mutant);
-        if (containerRefusals != 4)
+
+        // Exact-size reader negatives (frontier ruling P0): a declared
+        // xfile.size that lies in EITHER direction must refuse
+        // payload_size_mismatch. Rebuilt from the snapshotted image with
+        // only the declared-size word changed, then re-deflated.
+        uint8_t lying[sizeof(payloadSnapshot)];
+        for (int delta = -1; delta <= 1; delta += 2)
+        {
+            memcpy(lying, payloadSnapshot, sizeof(payloadSnapshot));
+            WriteU32(lying, 0, kXFileSize + static_cast<uint32_t>(delta));
+            size_t zoneSize = 0;
+            uint8_t* zone = DeflateZone(lying, sizeof(lying), 0, &zoneSize);
+            if (!zone)
+            {
+                failure = Fail("K0 size mismatch", "probe deflate failed");
+                break;
+            }
+            if (!FFK_LoadContainer(zone, zoneSize, &probe)
+                && probe.refusal == FFK_REFUSE_PAYLOAD_SIZE_MISMATCH)
+                ++containerRefusals;
+            free(zone);
+        }
+
+        if (!failure && containerRefusals != 6)
             failure = Fail("K0 negatives", "a container corruption was not refused");
     }
 
-    // --- K1 negative: the malformed twin. Container must ACCEPT (the
-    // oracle does); the wire walk must refuse with stream_truncation. ---
+    // --- K1 negative: the malformed twin. Its xfile.size truthfully
+    // declares the truncated stream, so the container must ACCEPT it; the
+    // wire walk must refuse with stream_truncation (RawFile.len still
+    // demands the removed byte). ---
     int streamRefusals = 0;
     int staleRefusals = 0;
     if (!failure)
@@ -318,7 +451,9 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
 
     // --- K2 negative: the bad-count twin. Container must ACCEPT (the
     // static parser does; oracle_v1_static_parser_may_accept); the walk
-    // must refuse bad_count BEFORE any allocation, per its manifest.
+    // must refuse bad_count per its manifest (the check-before-allocation
+    // ordering is desk-checked and review-verified; the marker binds the
+    // refusal code, not the internal ordering).
     int badCountRefusals = 0;
     if (!failure)
     {
@@ -335,18 +470,131 @@ extern "C" const char* kisak_ff_kernel_smoke(const char* validPath,
             badCountRefusals = 1;
     }
 
+    // --- Dispatch-mask scope: a synthetic ONE-asset StringTable zone. The
+    // K1 entry point must refuse it with unsupported_asset_type — this is
+    // the leg that fails if the RAWFILE-only mask is ever widened (the
+    // two-asset leg above exits at the count fence and cannot see it).
+    if (!failure)
+    {
+        uint8_t maskPayload[68];
+        memset(maskPayload, 0, sizeof(maskPayload));
+        WriteU32(maskPayload, 0, 24);          // xfile.size = XAssetList + array
+        WriteU32(maskPayload, 52, 1);          // assetCount = 1
+        WriteU32(maskPayload, 56, 0xffffffffu); // assets inline
+        WriteU32(maskPayload, 60, 32);         // ASSET_TYPE_STRINGTABLE
+        WriteU32(maskPayload, 64, 0xffffffffu); // header inline
+        size_t zoneSize = 0;
+        uint8_t* zone = DeflateZone(maskPayload, sizeof(maskPayload), 0, &zoneSize);
+        if (!zone)
+            failure = Fail("K1 mask", "probe deflate failed");
+        else
+        {
+            FFKContainer maskContainer;
+            FFKRawFileK1 maskWalk;
+            if (!FFK_LoadContainer(zone, zoneSize, &maskContainer))
+                failure = Fail("K1 mask container", FFK_RefusalName(maskContainer.refusal));
+            else if (FFK_WalkRawFileZone(&maskContainer, &maskWalk))
+                failure = Fail("K1 mask", "K1 walker accepted a StringTable zone");
+            else if (maskWalk.refusal != FFK_REFUSE_UNSUPPORTED_ASSET_TYPE)
+                failure = Fail("K1 mask code", FFK_RefusalName(maskWalk.refusal));
+            else
+                ++scopeRefusals;
+            free(zone);
+        }
+    }
+
+    // --- Overflow regression (Sol round 2, challenge 1): a StringTable
+    // declaring 2^31 x 2^31 cells once wrapped the u64 cell-byte product to
+    // zero and over-read the token array. The division-form bound must
+    // refuse it — and not crash.
+    int overflowRefusals = 0;
+    if (!failure)
+    {
+        uint8_t overflowPayload[86];
+        memset(overflowPayload, 0, sizeof(overflowPayload));
+        WriteU32(overflowPayload, 0, 42);          // xfile.size
+        WriteU32(overflowPayload, 52, 1);          // assetCount = 1
+        WriteU32(overflowPayload, 56, 0xffffffffu); // assets inline
+        WriteU32(overflowPayload, 60, 32);         // ASSET_TYPE_STRINGTABLE
+        WriteU32(overflowPayload, 64, 0xffffffffu); // header inline
+        WriteU32(overflowPayload, 68, 0xffffffffu); // name inline
+        WriteU32(overflowPayload, 72, 0x80000000u); // columnCount
+        WriteU32(overflowPayload, 76, 0x80000000u); // rowCount
+        WriteU32(overflowPayload, 80, 1);           // values truthy
+        overflowPayload[84] = 'x';                  // name "x\0"
+        size_t zoneSize = 0;
+        uint8_t* zone = DeflateZone(overflowPayload, sizeof(overflowPayload), 0, &zoneSize);
+        if (!zone)
+            failure = Fail("K2 overflow", "probe deflate failed");
+        else
+        {
+            FFKContainer overflowContainer;
+            FFKZoneK2 overflowZone;
+            if (!FFK_LoadContainer(zone, zoneSize, &overflowContainer))
+                failure = Fail("K2 overflow container",
+                               FFK_RefusalName(overflowContainer.refusal));
+            else if (FFK_WalkZone(&overflowContainer, &overflowZone))
+                failure = Fail("K2 overflow", "2^62-cell StringTable was ACCEPTED");
+            else if (overflowZone.refusal != FFK_REFUSE_STREAM_TRUNCATION)
+                failure = Fail("K2 overflow code", FFK_RefusalName(overflowZone.refusal));
+            else
+                overflowRefusals = 1;
+            free(zone);
+        }
+    }
+
+    // --- P0 acceptance (frontier ruling): the exact-size reader must FIT
+    // the goal artifact's own zone class. Build a zeros-only zone declaring
+    // mp_killhouse's exact decompressed size (docs/REAL_ZONE_EVIDENCE.md:
+    // 76,935,387 bytes; xfile.size 76,935,343) — no game data — and require
+    // container acceptance with the exact size. The old 64 MiB cap refused
+    // this class. The walk must still fail closed on its empty asset list.
+    int largeAccepts = 0;
+    if (!failure)
+    {
+        constexpr uint64_t kKillhouseDecompressed = 76935387ull;
+        uint8_t bigHeader[44];
+        memset(bigHeader, 0, sizeof(bigHeader));
+        WriteU32(bigHeader, 0, static_cast<uint32_t>(kKillhouseDecompressed - 44));
+        size_t zoneSize = 0;
+        uint8_t* zone = DeflateZone(bigHeader, sizeof(bigHeader),
+                                    kKillhouseDecompressed - 44, &zoneSize);
+        if (!zone)
+            failure = Fail("P0 large zone", "probe deflate failed");
+        else
+        {
+            FFKContainer bigContainer;
+            FFKZoneK2 bigZone;
+            if (!FFK_LoadContainer(zone, zoneSize, &bigContainer))
+                failure = Fail("P0 large accept", FFK_RefusalName(bigContainer.refusal));
+            else if (bigContainer.decompressedBytes != kKillhouseDecompressed
+                || bigContainer.xfileSize != kKillhouseDecompressed - 44)
+                failure = Fail("P0 large size", "exact reader size diverges");
+            else if (FFK_WalkZone(&bigContainer, &bigZone))
+                failure = Fail("P0 large walk", "empty asset list was ACCEPTED");
+            else if (bigZone.refusal != FFK_REFUSE_UNSUPPORTED_ASSET_COUNT)
+                failure = Fail("P0 large walk code", FFK_RefusalName(bigZone.refusal));
+            else
+                largeAccepts = 1;
+            free(zone);
+        }
+    }
+
     free(valid);
     free(malformed);
     free(valid02);
     free(malformed02);
     if (failure)
         return failure;
+    if (largeAccepts != 1)
+        return Fail("P0 large zone", "killhouse-size acceptance did not run");
 
     snprintf(s_status, sizeof(s_status),
-             "FF kernel K0+K1+K2 OK — fixture01+02 hashes match oracle, RawFile round trip, "
-             "StringTable + script-string remap, "
-             "refused %d container + %d stream + %d stale + %d scope + %d bad_count",
+             "FF kernel K0+K1+K2 OK — fixture01+02 hashes match oracle, exact-size reader "
+             "loads a killhouse-size zone, RawFile round trip, StringTable + script-string "
+             "remap, refused %d container + %d stream + %d stale + %d scope + %d overflow "
+             "+ %d bad_count",
              containerRefusals, streamRefusals, staleRefusals, scopeRefusals,
-             badCountRefusals);
+             overflowRefusals, badCountRefusals);
     return s_status;
 }

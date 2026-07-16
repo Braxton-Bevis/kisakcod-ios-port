@@ -291,9 +291,20 @@ def build_raw_inline(*, truncate: bool = False) -> BuiltZone:
     declared = None
     notes: list[str] = []
     if truncate:
-        declared = XASSETLIST_SIZE + len(stream.reads)
         stream.reads.pop()
-        notes.append("Final RawFile buffer byte removed; declared len remains 5.")
+        # xfile.size states the TRUNCATED stream truthfully: the kernel's
+        # header-first exact-size reader (frontier ruling P0,
+        # docs/reviews/frontier-plan-claude-ruling.md) allocates and requires
+        # exactly the declared bytes, so a lying declared size would be a
+        # CONTAINER-layer payload_size_mismatch. This twin's contract is the
+        # WALK-layer stream_truncation (RawFile.len still demands the
+        # missing byte), so the container must accept it.
+        declared = XASSETLIST_SIZE + len(stream.reads)
+        notes.append(
+            "Final RawFile buffer byte removed; declared len remains 5; "
+            "xfile.size states the truncated stream truthfully so the "
+            "exact-size container reader accepts and the WALK refuses."
+        )
     return assemble(
         stream,
         script_strings=[],

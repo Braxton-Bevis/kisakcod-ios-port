@@ -8,6 +8,10 @@ on:
       - 'src/**'
       - 'deps/**'
       - 'scripts/**'
+      # The smoke bundles and behaviorally gates the synthetic fixtures, so
+      # fixture-only regeneration must re-run it (Sol K2 round 2, latent
+      # challenge 14).
+      - 'tools/zone_fixtures/**'
       - '.github/workflows/ios-stub.yml'
   workflow_dispatch:
 
@@ -263,7 +267,7 @@ jobs:
           grep -Fqx 'event=Com_EventLoop OK — queued console event set bmk4_b4_probe=alive, invalid cmd rejected' proof/metal_first_frame.txt
           grep -Fqx 'cominit=Com_Init OK — 4 subsystems up, no assets' proof/metal_first_frame.txt
           grep -Fqx 'pmove=real bg_pmove OK: walk+jump+land+friction on synthetic z=0' proof/metal_first_frame.txt
-          grep -Fqx 'ffk=FF kernel K0+K1+K2 OK — fixture01+02 hashes match oracle, RawFile round trip, StringTable + script-string remap, refused 4 container + 1 stream + 1 stale + 1 scope + 1 bad_count' proof/metal_first_frame.txt
+          grep -Fqx 'ffk=FF kernel K0+K1+K2 OK — fixture01+02 hashes match oracle, exact-size reader loads a killhouse-size zone, RawFile round trip, StringTable + script-string remap, refused 6 container + 1 stream + 1 stale + 2 scope + 1 overflow + 1 bad_count' proof/metal_first_frame.txt
           tr -d '\r' < proof/app-console.txt \
             | grep -Eq '^KISAK_M15_DETAIL dvars=(2[5-9]|[3-9][0-9]|[1-9][0-9]{2,}) set=closed dvarlist=1 fs=1 event=1 sl=1$'
           ! find proof -maxdepth 1 -type f -name '*.ips' -print -quit | grep -q .

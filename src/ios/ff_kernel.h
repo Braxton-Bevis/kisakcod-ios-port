@@ -1,10 +1,18 @@
 // BMK4 slice 7 — fastfile translation kernel, stages K0 + K1 + K2.
 //
 // K0 (container spine): IWffu100 v5 outer header parse + zlib inflate +
-// oracle-domain FNV-1a64 hashing of the decompressed image. Byte-for-byte
-// the same acceptance rules and hash domains as tools/ff_oracle (the Windows
-// Oracle 0 container inspector), so a K0 result on iOS is directly
-// comparable to an oracle dump of the same zone.
+// oracle-domain FNV-1a64 hashing of the decompressed image. Same magic/
+// version rules and hash domains as tools/ff_oracle (the Windows Oracle 0
+// container inspector), so a K0 result on iOS is directly comparable to an
+// oracle dump of the same zone. The inflate lane is the HEADER-FIRST
+// EXACT-SIZE reader (frontier ruling P0, docs/reviews/
+// frontier-plan-claude-ruling.md): inflate the 44-byte XFile header, read
+// xfile.size, allocate declared+44 exactly once (256 MiB policy bound —
+// the old 64 MiB cap refused the goal artifact's own zones, see
+// docs/REAL_ZONE_EVIDENCE.md), continue the same zlib stream, and require
+// exact final length + Z_STREAM_END + no trailing input. This is a RULED
+// divergence from the oracle's doubling reader: acceptance narrows to
+// truthfully-declared zones (all six real zones declare truthfully).
 //
 // K1 (RawFile vertical slice): the first 32-bit wire walk. Interprets the
 // decompressed image of a single-RawFile zone (fixture mechanism 01):
@@ -47,7 +55,8 @@ enum FFKRefusal : uint32_t
     FFK_REFUSE_ZLIB_TRUNCATED,   // stream ended before Z_STREAM_END
     FFK_REFUSE_TRAILING_BYTES,   // bytes after the zlib stream
     FFK_REFUSE_PAYLOAD_SHORT,    // decompressed < XFile + XAssetList
-    FFK_REFUSE_PAYLOAD_LIMIT,    // decompressed > safety limit
+    FFK_REFUSE_PAYLOAD_LIMIT,    // declared size > 256 MiB policy bound
+                                 // (or the single exact allocation failed)
     // K1 stream layer
     FFK_REFUSE_UNSUPPORTED_SCRIPT_STRINGS, // K1 scope: none allowed
     FFK_REFUSE_ASSET_ARRAY_NOT_INLINE,     // assets ptr != 0xffffffff
@@ -73,8 +82,14 @@ enum FFKRefusal : uint32_t
     FFK_REFUSE_SCRIPT_STRING_INDEX_RANGE,  // u16 remap index >= script-string count
                                            // (KERNEL-ADDED: engine does not bounds-check,
                                            // db_stringtable_load.cpp:3-6)
-    FFK_REFUSE_UNSUPPORTED_ASSET_FIELD,    // K2 scope: an XAnimParts field that would
-                                           // drive reads of an unimplemented mechanism
+    FFK_REFUSE_UNSUPPORTED_ASSET_FIELD,    // K2 scope: an XAnimParts field outside the
+                                           // qualified EXACT-ZERO metadata shape (see
+                                           // WalkXAnimParts; deliberately stricter than
+                                           // the engine's pointer-truthiness gating)
+    // appended for the header-first exact-size reader (frontier ruling P0,
+    // docs/reviews/frontier-plan-claude-ruling.md)
+    FFK_REFUSE_PAYLOAD_SIZE_MISMATCH,      // zlib stream produced != declared
+                                           // xfile.size + 44 bytes
 };
 
 struct FFKContainer // K0 result

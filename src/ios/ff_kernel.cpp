@@ -1,10 +1,12 @@
 // BMK4 slice 7 — fastfile translation kernel, stages K0 + K1 + K2. See
 // ff_kernel.h.
 //
-// K0 mirrors tools/ff_oracle/ff_oracle.cpp acceptance rules and hash domains
-// exactly (same magic/version checks, same chunked inflate with truncation
-// and trailing-byte detection, same FNV-1a64 offsets). Divergence between
-// this file and the oracle IS the bug the round-trip gate exists to catch.
+// K0 mirrors tools/ff_oracle/ff_oracle.cpp magic/version rules and hash
+// domains exactly (same FNV-1a64 offsets); divergence between this file and
+// the oracle on those is the bug the round-trip gate exists to catch. The
+// inflate lane is a RULED divergence: the header-first exact-size reader
+// (frontier ruling P0, docs/reviews/frontier-plan-claude-ruling.md)
+// replaces the oracle's grow-as-you-go reader — see InflateOuterPayload.
 //
 // K1/K2 are the deliberate 32-bit wire walks. All wire fields are read as
 // explicit little-endian u16/u32 from byte offsets — never by casting wire
@@ -32,12 +34,13 @@ constexpr size_t kOuterHeaderSize = 12;
 constexpr size_t kXFileSize = 44;
 constexpr size_t kXAssetListSize = 16;
 constexpr size_t kMinimumPayloadSize = kXFileSize + kXAssetListSize;
-constexpr size_t kInflateChunkSize = 64 * 1024;
-// EXPLICIT KERNEL POLICY (documented divergence from the oracle's 2 GiB
-// bound): the iOS boot lane caps decompressed payloads at 64 MiB, enforced
-// exactly at the boundary. Real zones re-derive their budget from the XFile
-// header in a later wave; until then anything larger fails closed here.
-constexpr size_t kMaximumPayloadSize = 64ull * 1024 * 1024;
+// EXPLICIT KERNEL POLICY bound on the DECLARED payload size (frontier
+// ruling P0, docs/reviews/frontier-plan-claude-ruling.md): the previous
+// 64 MiB cap REFUSED the goal artifact's own zones —
+// docs/REAL_ZONE_EVIDENCE.md records localized_common_mp = 70,269,481 and
+// mp_killhouse = 76,935,387 decompressed bytes. 256 MiB is more than 3x
+// the largest real zone and still refuses hostile multi-GiB declarations.
+constexpr uint64_t kMaximumDeclaredPayloadSize = 256ull * 1024 * 1024;
 constexpr uint32_t kExpectedVersion = 5;
 constexpr uint32_t kInlineToken = 0xffffffffu; // -1: payload follows in stream
 constexpr uint32_t kAssetTypeXAnimParts = 2;   // IW3 ASSET_TYPE_XANIMPARTS
@@ -78,6 +81,13 @@ uint32_t ReadU32(const uint8_t* bytes, const size_t offset)
         | (static_cast<uint32_t>(bytes[offset + 3]) << 24);
 }
 
+// HEADER-FIRST EXACT-SIZE reader (frontier ruling P0): inflate only the
+// 44-byte XFile header, read the declared xfile.size, validate the checked
+// total against the policy bound, allocate EXACTLY ONCE, continue the SAME
+// zlib stream into the allocation, and require exact final length +
+// Z_STREAM_END + no trailing input. produced != declared refuses
+// payload_size_mismatch (either direction: a stream that under-produces or
+// wants to over-produce is lying about its shape — fail closed).
 uint32_t InflateOuterPayload(const uint8_t* bytes, const size_t size)
 {
     z_stream stream;
@@ -87,61 +97,124 @@ uint32_t InflateOuterPayload(const uint8_t* bytes, const size_t size)
     if (inflateInit(&stream) != Z_OK)
         return FFK_REFUSE_ZLIB_INIT;
 
-    size_t capacity = kInflateChunkSize;
-    uint8_t* payload = static_cast<uint8_t*>(malloc(capacity));
-    size_t produced = 0;
+    // Phase 1: exactly the XFile header, before any payload allocation.
+    uint8_t header[kXFileSize];
+    stream.next_out = header;
+    stream.avail_out = static_cast<uInt>(kXFileSize);
     int result = Z_OK;
-    uint32_t refusal = FFK_OK;
-
-    while (payload && result != Z_STREAM_END)
+    while (result == Z_OK && stream.avail_out != 0)
     {
-        if (capacity - produced < kInflateChunkSize)
-        {
-            capacity *= 2;
-            uint8_t* grown = static_cast<uint8_t*>(realloc(payload, capacity));
-            if (!grown)
-            {
-                refusal = FFK_REFUSE_PAYLOAD_LIMIT;
-                break;
-            }
-            payload = grown;
-        }
-        stream.next_out = payload + produced;
-        stream.avail_out = static_cast<uInt>(kInflateChunkSize);
+        const uInt beforeIn = stream.avail_in;
+        const uInt beforeOut = stream.avail_out;
         result = inflate(&stream, Z_NO_FLUSH);
-        const size_t chunk = kInflateChunkSize - stream.avail_out;
-        produced += chunk;
-
-        // Exact boundary: the cap is a policy, not a fuzzy chunk multiple.
-        if (produced > kMaximumPayloadSize)
-        {
-            refusal = FFK_REFUSE_PAYLOAD_LIMIT;
-            break;
-        }
-        if (result != Z_OK && result != Z_STREAM_END)
-        {
-            refusal = FFK_REFUSE_ZLIB_DATA;
-            break;
-        }
-        if (result == Z_OK && chunk == 0 && stream.avail_in == 0)
-        {
-            refusal = FFK_REFUSE_ZLIB_TRUNCATED;
-            break;
-        }
+        if (result == Z_OK && stream.avail_in == beforeIn
+            && stream.avail_out == beforeOut)
+            result = Z_BUF_ERROR; // no progress possible
     }
-    if (!payload)
-        refusal = FFK_REFUSE_PAYLOAD_LIMIT;
-    if (refusal == FFK_OK && stream.avail_in != 0)
-        refusal = FFK_REFUSE_TRAILING_BYTES;
-    inflateEnd(&stream);
-
-    if (refusal != FFK_OK)
+    if (result == Z_STREAM_END && stream.avail_out != 0)
     {
-        free(payload);
+        // The whole decompressed stream is shorter than the XFile header.
+        inflateEnd(&stream);
+        return FFK_REFUSE_PAYLOAD_SHORT;
+    }
+    if (result != Z_OK && result != Z_STREAM_END)
+    {
+        const uint32_t refusal = (result == Z_BUF_ERROR && stream.avail_in == 0)
+            ? FFK_REFUSE_ZLIB_TRUNCATED
+            : FFK_REFUSE_ZLIB_DATA;
+        inflateEnd(&stream);
         return refusal;
     }
+
+    // Declared size = xfile.size (u32 LE at payload[0]) + the 44-byte
+    // header itself. The add is performed in 64-bit, so it cannot wrap;
+    // the policy bound then rejects hostile declarations.
+    const uint32_t declaredXFileSize = ReadU32(header, 0);
+    const uint64_t declaredTotal =
+        static_cast<uint64_t>(declaredXFileSize) + kXFileSize;
+    if (declaredTotal > kMaximumDeclaredPayloadSize)
+    {
+        inflateEnd(&stream);
+        return FFK_REFUSE_PAYLOAD_LIMIT;
+    }
+    if (declaredTotal < kMinimumPayloadSize)
+    {
+        inflateEnd(&stream);
+        return FFK_REFUSE_PAYLOAD_SHORT;
+    }
+
+    // Phase 2: the single exact allocation; the SAME stream continues.
+    uint8_t* payload = static_cast<uint8_t*>(malloc(static_cast<size_t>(declaredTotal)));
+    if (!payload)
+    {
+        inflateEnd(&stream);
+        return FFK_REFUSE_PAYLOAD_LIMIT;
+    }
+    memcpy(payload, header, kXFileSize);
+    if (result != Z_STREAM_END)
+    {
+        stream.next_out = payload + kXFileSize;
+        stream.avail_out = static_cast<uInt>(declaredTotal - kXFileSize);
+        while (result == Z_OK)
+        {
+            if (stream.avail_out == 0)
+            {
+                // Window filled to the declared size with the stream still
+                // open: probe one byte to distinguish a clean end from a
+                // stream that wants to produce MORE than it declared.
+                uint8_t probe;
+                stream.next_out = &probe;
+                stream.avail_out = 1;
+                result = inflate(&stream, Z_NO_FLUSH);
+                if (result == Z_STREAM_END && stream.avail_out == 1)
+                    break; // ended exactly at the declared size
+                free(payload);
+                uint32_t refusal;
+                if (result == Z_OK || result == Z_STREAM_END)
+                    refusal = FFK_REFUSE_PAYLOAD_SIZE_MISMATCH; // over-produce
+                else if (result == Z_BUF_ERROR && stream.avail_in == 0)
+                    refusal = FFK_REFUSE_ZLIB_TRUNCATED;
+                else
+                    refusal = FFK_REFUSE_ZLIB_DATA;
+                inflateEnd(&stream);
+                return refusal;
+            }
+            const uInt beforeIn = stream.avail_in;
+            const uInt beforeOut = stream.avail_out;
+            result = inflate(&stream, Z_NO_FLUSH);
+            if (result == Z_OK && stream.avail_in == beforeIn
+                && stream.avail_out == beforeOut)
+                result = Z_BUF_ERROR; // no progress possible
+        }
+        if (result != Z_STREAM_END)
+        {
+            const uint32_t refusal = (result == Z_BUF_ERROR && stream.avail_in == 0)
+                ? FFK_REFUSE_ZLIB_TRUNCATED
+                : FFK_REFUSE_ZLIB_DATA;
+            free(payload);
+            inflateEnd(&stream);
+            return refusal;
+        }
+    }
+
+    // Exact-final-length + no-trailing-input gates.
+    const uint64_t produced = static_cast<uint64_t>(stream.total_out);
+    const bool trailing = stream.avail_in != 0;
+    inflateEnd(&stream);
+    if (trailing)
+    {
+        free(payload);
+        return FFK_REFUSE_TRAILING_BYTES;
+    }
+    if (produced != declaredTotal)
+    {
+        // Under-produce: the stream ended cleanly but yielded fewer bytes
+        // than the header declared.
+        free(payload);
+        return FFK_REFUSE_PAYLOAD_SIZE_MISMATCH;
+    }
     s_payload = payload;
-    s_payloadSize = produced;
+    s_payloadSize = static_cast<size_t>(declaredTotal);
     return FFK_OK;
 }
 
@@ -346,7 +419,10 @@ uint32_t WalkStringTable(FFKStream* stream, const FFKScriptStrings* scripts,
     {
         const uint64_t cellCount =
             static_cast<uint64_t>(rowCount) * static_cast<uint64_t>(columnCount);
-        if (cellCount * 4 > stream->size - stream->file)
+        // Division form: cellCount*4 could wrap u64 (rows and cols are both
+        // attacker-controlled u32), silently passing a multiplied check and
+        // then over-reading the token array below.
+        if (cellCount > (stream->size - stream->file) / 4)
             return FFK_REFUSE_STREAM_TRUNCATION;
         stream->Align(3); // AllocLoad_FxElemVisStateSample
         const uint8_t* cellTokens = nullptr;
@@ -395,10 +471,17 @@ uint32_t WalkXAnimParts(FFKStream* stream, const FFKScriptStrings* scripts,
     const uint8_t notifyCount = parts[28];
     const uint32_t indexCount = ReadU32(parts, 36);
     const uint32_t namesToken = ReadU32(parts, 48);
-    // K2 scope fence: refuse any field that would drive reads of an
-    // unimplemented mechanism (Load_XAnimParts db_load.cpp:931-980 and the
-    // XAnimIndices union arm selector db_load.cpp:683-700 / K4b). Unknown
-    // semantics fail closed.
+    // K2 scope fence — EXACT-ZERO METADATA SHAPE (deliberately STRICTER
+    // than the engine, adjudicated with Sol round 2): the engine gates each
+    // mechanism on its POINTER's truthiness (Load_XAnimParts
+    // db_load.cpp:931-980; Load_XAnimIndices db_load.cpp:683-700), so a
+    // nonzero count with a zero pointer is engine-ignored. The kernel's K2
+    // result can only represent the traced fixture shape, so it requires
+    // the unimplemented pointers AND their selector metadata (indexCount,
+    // notifyCount, the K4b numframes union selector) to be exactly zero,
+    // and applies this shape fence BEFORE the name-token check. That
+    // precedence is a scope decision, not engine order. Unknown semantics
+    // fail closed.
     const uint32_t unsupportedPointers =
         ReadU32(parts, 52)      // dataByte
         | ReadU32(parts, 56)    // dataShort
@@ -818,6 +901,7 @@ const char* FFK_RefusalName(const uint32_t refusal)
     case FFK_REFUSE_STRING_NOT_INLINE: return "string_not_inline";
     case FFK_REFUSE_SCRIPT_STRING_INDEX_RANGE: return "script_string_index_range";
     case FFK_REFUSE_UNSUPPORTED_ASSET_FIELD: return "unsupported_asset_field";
+    case FFK_REFUSE_PAYLOAD_SIZE_MISMATCH: return "payload_size_mismatch";
     default: return "unknown";
     }
 }
