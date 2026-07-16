@@ -277,18 +277,22 @@ bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out)
         const uint32_t nameToken = ReadU32(rawfile, 0);
         const uint32_t len = ReadU32(rawfile, 4);
         const uint32_t bufferToken = ReadU32(rawfile, 8);
+        // name is a pointer-typed field (engine loads it via Load_XString):
+        // -1 = inline-follows. Offset/alias forms are mechanisms 04/05 and
+        // refuse here until K3 implements them.
         if (nameToken != kInlineToken)
         {
             out->refusal = FFK_REFUSE_NAME_NOT_INLINE;
             return false;
         }
-        if (bufferToken != kInlineToken)
-        {
-            out->refusal = FFK_REFUSE_BUFFER_NOT_INLINE;
-            return false;
-        }
+        // buffer is NOT a tokened pointer on this path. The engine's own
+        // loader (src/database/db_load.cpp:5643-5656, Load_RawFile) tests it
+        // for TRUTHINESS only: any nonzero wire value means len+1 bytes
+        // follow inline in block 4; zero means no buffer bytes at all.
+        const bool hasBuffer = bufferToken != 0;
 
-        // Inline name: NUL-terminated in the virtual block (4).
+        // Inline name: NUL-terminated in the virtual block (4) — the engine
+        // pushes stream block 4 for both name and buffer (DB_PushStreamPos).
         const uint8_t* name = nullptr;
         size_t nameBytes = 0;
         if (!walk.TakeString(4, &name, &nameBytes))
@@ -302,15 +306,18 @@ bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out)
         // malformed fixture-01 twin removes the last byte; this Take is the
         // stream_truncation refusal its manifest demands.
         const uint8_t* buffer = nullptr;
-        if (!walk.Take(4, static_cast<size_t>(len) + 1, &buffer))
+        if (hasBuffer)
         {
-            out->refusal = FFK_REFUSE_STREAM_TRUNCATION;
-            return false;
-        }
-        if (buffer[len] != 0)
-        {
-            out->refusal = FFK_REFUSE_BUFFER_UNTERMINATED;
-            return false;
+            if (!walk.Take(4, static_cast<size_t>(len) + 1, &buffer))
+            {
+                out->refusal = FFK_REFUSE_STREAM_TRUNCATION;
+                return false;
+            }
+            if (buffer[len] != 0)
+            {
+                out->refusal = FFK_REFUSE_BUFFER_UNTERMINATED;
+                return false;
+            }
         }
 
         out->rawfileLen = len;
@@ -322,7 +329,9 @@ bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out)
             static_cast<uint8_t>(len >> 24),
         };
         out->hashLenField = Fnv1a64(lenLE, 4);
-        out->hashBuffer = Fnv1a64(buffer, static_cast<size_t>(len) + 1);
+        out->hashBuffer = hasBuffer
+            ? Fnv1a64(buffer, static_cast<size_t>(len) + 1)
+            : 0;
     }
 
     if (walk.cursor != walk.size)
