@@ -411,25 +411,30 @@ jobs:
           cp -R "$APP" Payload/
           # Lane B device-enablement: the binary that ships in the IPA must
           # carry the scene entry points and the live IW3 R/RB path.
+          # nm -U (defined, INCLUDING locals): app-target TUs are built with
+          # Xcode Release's symbols-hidden-by-default, so the kisak_* bridges
+          # land in the symtab as local 't' — present and live, just not
+          # external (CI round 3). Archive-built engine and MoltenVK symbols
+          # stay external; the [Tt] class covers both.
           mkdir -p ../proof-device
-          xcrun nm -gU Payload/KisakStub.app/KisakStub \
+          xcrun nm -U Payload/KisakStub.app/KisakStub \
             | tee ../proof-device/device-app-defined-symbols.txt
-          grep -E ' [A-Za-z] _kisak_renderer_placeholder$' \
+          grep -E ' [Tt] _kisak_renderer_placeholder$' \
             ../proof-device/device-app-defined-symbols.txt
-          grep -E ' [A-Za-z] _kisak_renderer_placeholder_detail$' \
+          grep -E ' [Tt] _kisak_renderer_placeholder_detail$' \
             ../proof-device/device-app-defined-symbols.txt
-          grep -E ' [A-Za-z] _kisak_d3d9_smoke$' \
+          grep -E ' [Tt] _kisak_d3d9_smoke$' \
             ../proof-device/device-app-defined-symbols.txt
           # The device now dead-strips (bounds the renderer closure); MoltenVK
           # is reached only via dlsym, so prove the explicit -u root held and
           # the Vulkan entries survived stripping BEFORE anyone sideloads.
-          grep -E ' [A-Za-z] _vkGetInstanceProcAddr$' \
+          grep -E ' [Tt] _vkGetInstanceProcAddr$' \
             ../proof-device/device-app-defined-symbols.txt
-          grep -E ' [A-Za-z] _vkCreateInstance$' \
+          grep -E ' [Tt] _vkCreateInstance$' \
             ../proof-device/device-app-defined-symbols.txt
-          grep -E ' [A-Za-z] _vkCreateDevice$' \
+          grep -E ' [Tt] _vkCreateDevice$' \
             ../proof-device/device-app-defined-symbols.txt
-          xcrun nm -gU Payload/KisakStub.app/KisakStub | c++filt \
+          xcrun nm -U Payload/KisakStub.app/KisakStub | c++filt \
             | tee ../proof-device/device-app-defined-symbols-demangled.txt
           for symbol in 'kisak_renderer_placeholder_run(' 'R_GetCommandBuffer(' \
                         'R_iOS_QueueDrawTrianglesCommand(' 'RB_DrawTrianglesCmd(' \
