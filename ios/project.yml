@@ -14,6 +14,13 @@ targets:
     platform: iOS
     sources:
       - Stub
+      # Slice 7 K0/K1 proof inputs: SYNTHETIC oracle-qualified zone fixtures
+      # (tools/zone_fixtures — generated, zero game data, CI-legal). Bundled
+      # so BootFFSmoke.cpp can round-trip them against the manifest anchors.
+      - path: ../tools/zone_fixtures/01_rawfile_inline/valid.ff
+        buildPhase: resources
+      - path: ../tools/zone_fixtures/01_rawfile_inline/malformed_truncated_buffer.ff
+        buildPhase: resources
     info:
       path: Stub/Info.plist
       properties:
@@ -44,7 +51,7 @@ targets:
         GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "KISAK_MP=1", "KISAK_IOS=1"]
         CLANG_CXX_LANGUAGE_STANDARD: gnu++20
         OTHER_CPLUSPLUSFLAGS: ["$(inherited)", "-fno-strict-aliasing", "-fwrapv", "-fms-extensions", "-fdelayed-template-parsing", "-Wno-c++11-narrowing"]
-        OTHER_LDFLAGS: ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lz"]
+        OTHER_LDFLAGS: ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lkisakff", "-lz"]
         # The engine is arm64-only (sse2neon absorbs the SSE layer) — no
         # x86_64 simulator slice exists or is wanted.
         "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
@@ -57,4 +64,4 @@ targets:
         # would remove the symbols even after -force_load (learned on device:
         # signal 5 inside Direct3DCreate9, zero vk* symbols in the binary).
         DEAD_CODE_STRIPPING: NO
-        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lz", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]
+        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lkisakff", "-lz", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]

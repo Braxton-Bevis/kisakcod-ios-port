@@ -26,6 +26,11 @@ const char *kisak_fs_smoke(void);
 // BootM15Closeout.cpp verifies all four native closeout behaviors.
 const char *kisak_boot_m15_closeout(void);
 
+// BootFFSmoke.cpp proves the slice-7 fastfile kernel (K0 container spine +
+// K1 RawFile wire walk) against oracle-qualified synthetic fixture 01.
+const char *kisak_ff_kernel_smoke(const char *validPath,
+                                  const char *malformedPath);
+
 // PmoveSandbox.cpp drives the real bg_pmove closure in a synthetic z=0 world.
 void kisak_pmove_init(void);
 const char *kisak_pmove_proof(void);
