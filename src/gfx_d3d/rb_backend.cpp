@@ -2669,24 +2669,28 @@ void __cdecl RB_Draw3D()
 }
 
 #ifdef KISAK_IOS
-// LP64 sweep (Lane B device wave): the recovered 32-bit register pattern
-// below writes only LODWORD(v0) of an uninitialized 64-bit local and then
-// tests/returns the full 64-bit value — on arm64 the upper half is garbage
-// and can flip the branch. Typed 32-bit locals reproduce the original x86
-// semantics; the #else branch stays byte-identical for Windows.
+// LP64 sweep (Lane B device wave, hardened per Sol round 2): the recovered
+// 32-bit register pattern in the #else branch writes only LODWORD(v0) of an
+// uninitialized 64-bit local and then tests/returns the full 64-bit value —
+// on arm64 the upper half is garbage and can flip the branch. This typed
+// rewrite reproduces the original x86 semantics exactly: the fence flag,
+// spin-elapsed delta, and return value are 32-bit register quantities with a
+// signed sign-bit timeout test (the delta math must be uint32 wraparound,
+// NOT a 64-bit unsigned compare, or RB_AbandonGpuFence is unreachable),
+// while the dx.gpuSyncDelay accumulator keeps its full 64-bit width.
 int RB_AdaptiveGpuSyncFinal()
 {
-    uint32_t v0;
-    int waitedTime;
-    int startTime;
+    uint32_t result;
 
-    v0 = RB_IsGpuFenceFinished();
-    if (v0)
+    result = RB_IsGpuFenceFinished();
+    if (result)
     {
         if (dx.gpuSyncDelay > 0x4E20)
         {
-            v0 = 127 * ((dx.gpuSyncDelay - 20000) / 0x80);
-            dx.gpuSyncDelay = v0;
+            const unsigned long long decayed =
+                127ull * ((dx.gpuSyncDelay - 20000ull) / 0x80u);
+            dx.gpuSyncDelay = decayed;
+            result = static_cast<uint32_t>(decayed);
         }
         else
         {
@@ -2695,24 +2699,27 @@ int RB_AdaptiveGpuSyncFinal()
     }
     else
     {
-        startTime = __rdtsc();
+        const uint32_t startTime = static_cast<uint32_t>(__rdtsc());
         while (!RB_IsGpuFenceFinished())
         {
-            if ((__rdtsc() - startTime) < 0)
+            const uint32_t spinElapsed =
+                static_cast<uint32_t>(__rdtsc()) - startTime;
+            if (static_cast<int32_t>(spinElapsed) < 0)
             {
                 RB_AbandonGpuFence();
                 break;
             }
         }
-        v0 = __rdtsc() - startTime;
-        waitedTime = v0;
-        if ((v0 & 0x80000000) == 0)
+        const uint32_t waitedTime =
+            static_cast<uint32_t>(__rdtsc()) - startTime;
+        result = waitedTime;
+        if ((waitedTime & 0x80000000u) == 0)
         {
-            v0 = LODWORD(dx.gpuSyncDelay) + v0 / 16;
+            result = static_cast<uint32_t>(dx.gpuSyncDelay) + waitedTime / 16;
             dx.gpuSyncDelay += waitedTime / 16;
         }
     }
-    return v0;
+    return static_cast<int>(result);
 }
 #else
 int RB_AdaptiveGpuSyncFinal()

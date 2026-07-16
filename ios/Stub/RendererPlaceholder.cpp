@@ -857,11 +857,20 @@ const char *kisak_renderer_placeholder_run(IDirect3D9 *d3d9,
 
     const HRESULT presentHr = device->Present(nullptr, nullptr, nullptr, nullptr);
 
+    // Evaluate every gate BEFORE formatting the detail line: an unearned
+    // attempt must never produce a detail line that matches the exact earned
+    // shape (Sol round 2 — a failed Present previously left an
+    // earned-looking render-detail= beside a failing render=).
+    const bool proofEarned = !(FAILED(endHr) || !exactAdvance || !statsEarned
+        || !tessDrained || !uploadsEarned || !readbackEarned
+        || FAILED(presentHr));
+
     std::snprintf(
         g_detail, sizeof(g_detail),
-        "IW3 R/RB placeholder detail — vertices=%d indices=%d triangles=%d "
+        "IW3 R/RB placeholder detail — %svertices=%d indices=%d triangles=%d "
         "cmdBytes=%u stats=%d/%d/%d/%d changedPixels=%u fnv1a=0x%08X "
         "center=0x%08X uploads=%u/%d",
+        proofEarned ? "" : "NOT EARNED (see render= failure) ",
         scene.vertexCount, scene.indexCount, expectedTriangles,
         static_cast<unsigned>(commandBytes), stats.primCount, stats.triCount,
         stats.dynamicVertexCount, stats.dynamicIndexCount, changedPixels,
@@ -870,8 +879,7 @@ const char *kisak_renderer_placeholder_run(IDirect3D9 *d3d9,
         gfxBuf.dynamicIndexBuffer ? gfxBuf.dynamicIndexBuffer->used : 0);
     g_detailHasEvidence = true;
 
-    if (FAILED(endHr) || !exactAdvance || !statsEarned || !tessDrained
-        || !uploadsEarned || !readbackEarned || FAILED(presentHr)) {
+    if (!proofEarned) {
         return Fail(
             "FAIL renderer placeholder: end=0x%08X advance=%d stats=%d "
             "tess=%d uploads=%d read=0x%08X changed=%u fnv=0x%08X "

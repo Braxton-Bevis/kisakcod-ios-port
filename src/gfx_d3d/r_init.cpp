@@ -2841,9 +2841,10 @@ void __cdecl SetGfxConfig(const GfxConfiguration *config)
 void __cdecl R_InitThreads()
 {
 #ifdef KISAK_IOS
-    // The bounded simulator proof is deliberately single-threaded. Keep this
-    // real owner fail-closed until r_workercmds.cpp and qcommon/threads.cpp
-    // graduate with the complete renderer-thread lifecycle.
+    // The bounded device placeholder proof is deliberately single-threaded.
+    // Keep this real owner fail-closed until r_workercmds.cpp and
+    // qcommon/threads.cpp graduate with the complete renderer-thread
+    // lifecycle.
     R_iOS_InitProofBoundaryAbort("R_InitThreads");
 #else
     iassert(!r_glob.isRenderingRemoteUpdate);

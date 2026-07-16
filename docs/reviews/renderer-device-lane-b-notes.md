@@ -187,6 +187,54 @@ challenge; the plan is amended, not defended.
    (`total >= 52`) plus `pass == total`; "52/52" describes the expected
    green outcome, not the assertion's shape.
 
-## Round 2 — implementation review
+## Round 2 — implementation review (Sol, ultra) and answers
 
-(appended after the review)
+Reviewed range: `6475ec7..f231181` (4 commits). Sol standing: **NEEDS-FIX**
+(1 MAJOR, 3 MINOR, 1 NIT), with the round-1 remedy explicitly verified as
+implemented. Verified-clean list from Sol: device dead-strip + `-u` root +
+three-symbol Vulkan nm gates present; workflow working directories and
+`proof-device/` paths correct; nm regexes match Darwin `ADDR T _symbol`
+format; simulator workflow text byte-identical to `6475ec7`; `clearHr` in the
+admission predicate; no duplicate/missing renderer symbols in either lane's
+scaffold ownership; Swift/C++ success literals byte-identical (U+2014);
+no path can emit the exact `render=` success marker without the full native
+draw/stats/uploads/tess/readback/Present verification; Windows `#else`
+bodies identical apart from EOF normalization; producer seam LP64-sound;
+census exactly 52.
+
+Findings, adjudicated — all five ACCEPTED and fixed in the round-2 commit:
+
+1. **MAJOR — adaptive-sync spin timeout unreachable.** My round-1 rewrite
+   kept `(__rdtsc() - startTime) < 0` where iOS `__rdtsc()` returns
+   `unsigned long long` → unsigned comparison, always false,
+   `RB_AbandonGpuFence()` dead. Fixed: explicit `uint32_t` wraparound delta
+   (`(uint32_t)__rdtsc() - startTime`) with an `int32_t` sign test — the
+   faithful 32-bit-register semantic. (Unreached by the bounded proof path,
+   but the sweep's own claim demanded correctness.)
+2. **MINOR — 64-bit delay decay truncated.** `dx.gpuSyncDelay` is
+   `unsigned __int64` (r_init.h:306); making the whole temporary `uint32_t`
+   narrowed the `127 * ((delay - 20000) / 0x80)` decay before the 64-bit
+   store. Fixed: the decay computes in `unsigned long long` and stores full
+   width; only the fence flag, spin delta, and the function's return value
+   remain 32-bit register quantities, matching the original exactly.
+3. **MINOR — caught-exception verdict not cached.** The bridge's catch paths
+   returned strings the native `g_attempted` cache never records, so a
+   hypothetical repeat call would report "not run" instead of the first
+   exception verdict. Fixed: the bridge latches its FIRST verdict (including
+   exception verdicts) in a static and returns it to any repeat caller; the
+   detail pointer is likewise preserved by the early return.
+4. **MINOR — unearned `render-detail=` could look earned.** The detail line
+   was formatted before gate evaluation, so a failed `Present` could sit
+   beside an earned-shaped detail line. Fixed: all gates evaluate first and
+   an unearned attempt prefixes the detail with
+   `NOT EARNED (see render= failure) `, which can never match the exact
+   earned shape. (Sol confirmed the `render=` success marker itself was
+   never forgeable; this hardens the secondary line to the same standard.)
+5. **NIT — stale "simulator proof" comment** in r_init.cpp's `R_InitThreads`
+   fence. Fixed to "bounded device placeholder proof".
+
+Process note: round 2 ran twice — the first background invocation was
+presumed dead after a session interruption (0 bytes of output at check time)
+and a foreground retry was started per the empty-output rule; the original
+then completed in full and the duplicate was cancelled before producing
+output. The adjudicated text above is the original's complete verdict.

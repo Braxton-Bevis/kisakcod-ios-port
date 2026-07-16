@@ -88,6 +88,9 @@ render-detail=IW3 R/RB placeholder detail — vertices=339 indices=483 triangles
   Both are written natively by C++ only after exact command-cursor advance,
   prim stats 1/161/339/483, tess drain, dynamic-buffer upload accounting,
   ≥50% non-background readback of the 640×480 target, and successful Present.
+  An unearned attempt prefixes the detail line with
+  `NOT EARNED (see render= failure)` so it can never match the exact earned
+  shape (Sol round 2 hardening).
   On the simulator the marker carries the honest `render=device-only stage,
   not run (no DXVK simulator build)` line — an expected observation, not a
   gated assertion; the sim job's existing exact greps are untouched.
@@ -101,7 +104,12 @@ render-detail=IW3 R/RB placeholder detail — vertices=339 indices=483 triangles
   NEEDS-FIX adjudicated: dead-strip+root remedy adopted, Clear HRESULT added
   to the admission predicate, one-shot bridge semantics documented,
   sim-archive build-step strengthening acknowledged as intentional compile
-  coverage, `Sys_DestroySplashWindow` graduation exception documented).
+  coverage, `Sys_DestroySplashWindow` graduation exception documented.
+  Sol round 2 NEEDS-FIX adjudicated: adaptive-sync spin-timeout wraparound
+  and 64-bit delay-accumulator fixes, bridge verdict latching, the
+  NOT-EARNED detail prefix above, stale fence comment; round 2 verified the
+  round-1 remedy, sim-job byte-identity, marker honesty, and LP64 producer
+  seam clean).
 
 ## Active seat state — M15 headless Com_Init earned on staging
 

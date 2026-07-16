@@ -174,18 +174,25 @@ static const char *kisak_d3d9_smoke_inner(void *metalLayer)
 }
 
 // One-shot Swift bridge for the generated IW3 R/RB placeholder scene. The
-// native attempt runs at most once per launch (RendererPlaceholder.cpp caches
-// its verdict); repeat calls return the cached result of that single attempt.
+// bridge latches its FIRST verdict — including a caught-exception verdict,
+// which the native cache in RendererPlaceholder.cpp cannot record — so a
+// repeat caller always sees the real first-attempt result (Sol round 2).
 extern "C" const char *kisak_renderer_placeholder(void)
 {
+    static const char *latchedVerdict;
+    if (latchedVerdict)
+        return latchedVerdict;
     g_rendererBridgeDetail = nullptr;
     if (!g_earnedD3D9 || !g_earnedD3D9Device) {
         g_rendererBridgeDetail =
             "FAIL renderer placeholder detail: earned D3D9 smoke required first";
-        return "FAIL renderer placeholder: earned D3D9 smoke required first";
+        latchedVerdict =
+            "FAIL renderer placeholder: earned D3D9 smoke required first";
+        return latchedVerdict;
     }
     try {
-        return kisak_renderer_placeholder_run(g_earnedD3D9, g_earnedD3D9Device);
+        latchedVerdict =
+            kisak_renderer_placeholder_run(g_earnedD3D9, g_earnedD3D9Device);
     } catch (const std::exception &e) {
         static char ebuf[256];
         snprintf(ebuf, sizeof(ebuf),
@@ -193,12 +200,13 @@ extern "C" const char *kisak_renderer_placeholder(void)
         snprintf(g_rendererExceptionDetail,
                  sizeof(g_rendererExceptionDetail), "%s", ebuf);
         g_rendererBridgeDetail = g_rendererExceptionDetail;
-        return ebuf;
+        latchedVerdict = ebuf;
     } catch (...) {
         g_rendererBridgeDetail =
             "FAIL renderer placeholder detail: non-std C++ exception";
-        return "FAIL renderer placeholder: non-std C++ exception";
+        latchedVerdict = "FAIL renderer placeholder: non-std C++ exception";
     }
+    return latchedVerdict;
 }
 
 extern "C" const char *kisak_renderer_placeholder_detail(void)
