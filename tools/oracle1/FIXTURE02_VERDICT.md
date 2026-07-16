@@ -35,38 +35,58 @@ demand, and its 144-byte block 0 receives only XAnimParts' 88-byte struct
 
 **RUNTIME CONFIRMATION (Oracle 1 trace, CI).**
 
-> Status: **PENDING** — this section is filled in from the first green
-> `Oracle 1 engine loader gate` CI run on `oracle1-instrument` (run ID and
-> the literal trace excerpt go here; the desk prediction above is
-> STATIC-tier until then). Gate c (`tools/oracle1/check_trace.py --gate c`)
-> is the mechanized form of this check: it goes red if the runtime trace
-> contradicts the block-4 placement, forcing reconciliation of this
-> document before any merge.
+> Status: **CONFIRMED** — GitHub Actions run **29522138080** on
+> `oracle1-instrument` head `f7a105e`, step `Oracle 1 engine loader gate`
+> GREEN in BOTH configs. The fixture-02 refusal trace is byte-identical
+> across the double runs AND across Debug/Release (sha256 prefix
+> `35673d636f17` for all four traces). Exit code 4 (engine assert), as
+> pinned by the workflow. Gate c (`tools/oracle1/check_trace.py --gate c`,
+> adjacency-hardened per Sol round-2) is GREEN and remains the mechanized
+> guard: it goes red if any future trace contradicts this section.
 
-Predicted trace shape to be confirmed
-(`02_stringtable_script_remap-a.txt`, both configs, deterministic):
+Observed trace excerpt (`02_stringtable_script_remap-a.txt`, verbatim
+except eliding per-byte inflate runs):
 
 ```
+ev=assetlist strings=2 strings_token=0xffffffff assets=2 assets_token=0xffffffff
+  ...script-string bytes fill block 4 [0,31); handles 1,2 interned...
+ev=alloc block=4 align=3 offset=32          <- asset array (cursor 31 aligned to 32)
+ev=fill block=4 offset=32 size=16 src=file
 ev=asset_dispatch index=0 type=32 name=stringtable
 ev=alloc block=4 align=3 offset=48          <- StringTable struct, ACTIVE block 4
 ev=fill block=4 offset=48 size=16 src=file
 ev=inc block=4 offset=48 size=16
 ev=alloc block=4 align=0 offset=64          <- name bytes, still block 4
-ev=inc block=4 offset=64 size=20            <- ATTEMPT (hook fires at entry;
-                                               the cursor never commits)
-ev=error kind=assert detail=...db_stream.cpp:91...    (exit 4)
+ev=inflate size=1 dest=block4+64 ... dest=block4+71    (8 in-budget bytes)
+ev=inflate size=1 dest=external ... (x12)              (bytes 72..83, beyond the
+                                                        declared 72-byte block 4)
+ev=inc block=4 offset=64 size=20            <- fence ATTEMPT (cursor never commits)
+ev=error kind=assert detail=...db_stream.cpp:91 g_streamPos + size <=
+    g_streamZoneMem->blocks[g_streamPosIndex].data + ...size        (exit 4)
 ```
 
-**Verdict (static tier, runtime confirmation pending).** The engine puts
-the StringTable body in the **active block 4**, not block 0. The builder's
-block-0 claim is refuted at the STATIC tier now, and becomes refuted at
-the RUNTIME tier the moment the pending section above is filled from a
-green CI trace — the tier claimed by this document is exactly the tier of
-the evidence recorded in it (no forward-dated claims). Lane A's
-regeneration must (i) move the StringTable struct, name, values array,
-and value strings into block-4 accounting, (ii) resize the declared block
-sizes accordingly (block 0 carries only the XAnimParts struct), and (iii)
-regenerate `stream_events` / `oracle_v1.blocks.bytes` / container hashes.
-The coordinator reconciles this document against Lane A's static-derived
-regeneration; once the runtime section is filled, the runtime trace is
-the final word (RUNTIME > static reading).
+Gate c verdict line (identical both configs):
+`FIXTURE02_VERDICT: stringtable_struct_block=4 stringtable_struct_offset=48
+name_block=4 name_offset=64 builder_claim_block=0
+engine_contradicts_builder=true load_completed=false
+engine_fence_tripped=true`
+
+Block 0 (declared 144 bytes) received **zero** bytes before the refusal;
+the XAnimParts asset (index 1) was never dispatched. The desk-computed
+walk above and the Sol pair's independent round-1 recomputation are
+confirmed byte-for-byte, under the documented evidence label "real loader
+walk under Oracle assert/scaffold policy" (RELEASE_ASSERTS keeps the
+db_stream.cpp:91 fence observable that shipping Release compiles out; the
+walk itself is unmodified engine code).
+
+**Verdict (RUNTIME tier).** The engine puts the StringTable body in the
+**active block 4**, not block 0. The builder's block-0 claim is **refuted
+at RUNTIME tier**. Lane A's regeneration must (i) move the StringTable
+struct, name, values array, and value strings into block-4 accounting,
+(ii) resize the declared block sizes accordingly (block 0 carries only
+the XAnimParts struct), and (iii) regenerate `stream_events` /
+`oracle_v1.blocks.bytes` / container hashes. This section was written
+from the CI artifacts alone — Lane A's regeneration was NOT consulted
+(independence preserved for the coordinator's reconciliation). On any
+disagreement, this runtime trace is the final word (RUNTIME > static
+reading).

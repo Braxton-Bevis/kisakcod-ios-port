@@ -156,6 +156,54 @@ and actions (Lane C):
     pointer/clock/thread/padding value reaches trace bytes on the pinned
     walks.
 
+## CI evidence (round 1 of 4 — GREEN, no further rounds needed)
+
+Run **29522138080** (`workflow_dispatch`, head `f7a105e`): every step
+GREEN in both configs — Configure, Build (nine engine TUs + bmk4-oracle1
+compiled and linked first try; the census plus Sol's two round-2 link
+blockers held), FF0a gate, **Oracle 1 engine loader gate**, layout gate,
+uploads. From the `oracle1-traces-{Debug,Release}` artifacts:
+
+- Determinism: all 9 traces (7 valid + 2 malformed) byte-identical across
+  double runs AND across Debug/Release.
+- Fixture 01: exit 0, gate b GREEN — runtime events match the shipped
+  kernel model exactly, including `asset_link redirected=1` (the
+  DB_LinkXAssetEntry pool-clone redirect is now RUNTIME-tier fact).
+- Fixture 02: exit 4, gate c GREEN — StringTable body in ACTIVE block 4;
+  runtime section of tools/oracle1/FIXTURE02_VERDICT.md filled from these
+  artifacts (Lane A's parallel work not consulted — independence kept).
+- Fixture 03 (alias_forward): exit 0 — `-2` alias insert, back-patch and
+  `ptr_alias` resolution engine-qualified.
+- **Fixture 04 (cross_block_offset): exit 4 — NEW runtime corpus
+  discovery.** Its second RawFile's name offset-token (`0x40000011` →
+  block4+16) resolves to the SAME string as asset[0]'s name
+  ("cross_block_name"), and DB_LinkXAssetEntry refuses a same-name
+  same-type entry within one zone at the db_registry.cpp:1900 assert
+  (`existingEntry->entry.zoneIndex != newEntry->entry.zoneIndex`).
+  Manifest says `expectation: accept` — the fixture needs a name token
+  aliasing DIFFERENT bytes (fixture 05's interior-offset pattern, which
+  loads clean, shows the correct construction). Assert-tier note: retail
+  Release (asserts off) would fall into the override path instead — the
+  assert documents engine intent; oracle policy refuses loudly.
+- Fixture 05 (interior_offset): exit 0 — interior-offset name resolution
+  engine-qualified.
+- Fixture 06 (delayed_stream_order): exit 0 — CLIPMAP_PVS walk with the
+  real block-1 zero-fill (`fill block=1 offset=0 size=32 src=zerofill`).
+  No block-2/3 events, consistent with the corpus README: no stock
+  walker pushes blocks 2/3; the manifest's delayed_read_plan is for
+  kernel replay, not engine observation.
+- Fixture 07 (tagged_union_arm): exit 0 — numframes<256 byte-arm
+  consumption engine-qualified. Note: no green fixture currently
+  exercises `scriptstring_remap` (07's XAnimParts declares no names; 02
+  fences before XAnimParts) — the remap hook becomes observable once
+  Lane A's regenerated fixture 02 lands.
+- Malformed 01 exit 4 (zlib-short `err == Z_OK` assert,
+  db_file_load.cpp:402) and malformed 02 exit 4 (Load_Stream
+  stream-start assert after the 4*count wrap) — both deterministic,
+  engine-native, distinct from allowlist exit 3; allowlist input/output
+  probes exited 3 with no output file created. Gates demonstrably fail
+  (doctrine rule 5) at tool, checker, and CI tiers.
+
 ## Lane C desk evidence gathered independently of Sol
 
 - `#line` discipline mechanically verified: a script strips every
