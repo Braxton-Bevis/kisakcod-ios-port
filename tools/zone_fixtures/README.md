@@ -20,8 +20,13 @@ python tools/zone_fixtures/build_zone_fixtures.py \
   --fixture cross_block_offset --output-root scratch/zone-fixtures
 ```
 
-Each numbered directory contains `valid.ff`, `MANIFEST.json`, one
-`malformed_*.ff`, and `MALFORMED_MANIFEST.json`. `MANIFEST.json` records the
+Each numbered directory contains one valid zone, `MANIFEST.json`, one
+malformed twin, and `MALFORMED_MANIFEST.json`. Zone basenames are recorded
+in each manifest's `container.file`: fixtures bundled flat into the iOS app
+use namespaced basenames (fixture 02: `fixture02_valid.ff` /
+`fixture02_malformed_bad_script_count.ff`); fixture 01 keeps its frozen
+`valid.ff` / `malformed_truncated_buffer.ff`, and 03-07 keep `valid.ff` /
+`malformed_*.ff` until the wave that bundles each one. `MANIFEST.json` records the
 current `bmk4.ff-oracle.v1` container/hash fields as well as the runtime values
 the Windows loader oracle must validate: per-type counts, normalized script
 string content hash, targeted field hashes, pointer relations, and stream

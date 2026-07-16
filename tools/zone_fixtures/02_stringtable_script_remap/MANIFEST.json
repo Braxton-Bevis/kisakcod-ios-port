@@ -1,9 +1,9 @@
 {
   "container": {
-    "decompressed_sha256": "8196ceadf03f101827092905c82b55374d465e8e75a25f791a1ccc49390d3572",
-    "file": "valid.ff",
+    "decompressed_sha256": "7793b60901a4b808b7d86c6cde947394807965383e2224ad76ddaaa3d617d44f",
+    "file": "fixture02_valid.ff",
     "magic": "IWffu100",
-    "sha256": "f84d582031a5508e87ec139910e90fad4a37966cb092f2babaeabae01dd3939b",
+    "sha256": "1992c373fb0216a6dc0789a7a5a726202136c8b44920b3672bd4ecdb18a87a0b",
     "version": 5
   },
   "expectation": "accept",
@@ -62,11 +62,11 @@
     "assets.pointer_token": "0xffffffff",
     "assets.total": 2,
     "blocks.bytes": [
-      144,
+      88,
       0,
       0,
       0,
-      72,
+      126,
       0,
       0,
       0,
@@ -83,8 +83,8 @@
     "script_strings.metadata_hash.fnv1a64": "5b76ef155f79d963",
     "script_strings.pointer_token": "0xffffffff",
     "targeted_hash.asset_list.fnv1a64": "0d2dd29bf8f536dd",
-    "targeted_hash.decompressed_payload.fnv1a64": "a281683fb5d008df",
-    "targeted_hash.xfile.fnv1a64": "8d21b7d7fc412c49",
+    "targeted_hash.decompressed_payload.fnv1a64": "989e9221d7f07b01",
+    "targeted_hash.xfile.fnv1a64": "b996ccead3f6d137",
     "xfile.external_size": 0,
     "xfile.size": 228
   },
@@ -116,52 +116,52 @@
       "offset": 32
     },
     {
-      "block": 0,
+      "block": 4,
       "bytes": 16,
       "label": "stringtable[0]",
-      "offset": 0
+      "offset": 48
     },
     {
-      "block": 0,
+      "block": 4,
       "bytes": 20,
       "label": "stringtable[0].name",
-      "offset": 16
+      "offset": 64
     },
     {
-      "block": 0,
+      "block": 4,
       "bytes": 8,
       "label": "stringtable[0].values",
-      "offset": 36
+      "offset": 84
     },
     {
-      "block": 0,
+      "block": 4,
       "bytes": 4,
       "label": "stringtable[0].value[0]",
-      "offset": 44
+      "offset": 92
     },
     {
-      "block": 0,
+      "block": 4,
       "bytes": 6,
       "label": "stringtable[0].value[1]",
-      "offset": 48
+      "offset": 96
     },
     {
       "block": 0,
       "bytes": 88,
       "label": "xanimparts[0]",
-      "offset": 56
+      "offset": 0
     },
     {
       "block": 4,
       "bytes": 21,
       "label": "xanimparts[0].name",
-      "offset": 48
+      "offset": 102
     },
     {
       "block": 4,
       "bytes": 2,
       "label": "xanimparts[0].names",
-      "offset": 70
+      "offset": 124
     }
   ]
 }

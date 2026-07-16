@@ -206,6 +206,11 @@ class FixtureDefinition:
     malformed_builder: Callable[[], BuiltZone]
     refusal_code: str
     refusal_note: str
+    # Zone basename. Fixture pairs that ship flat inside one app bundle need
+    # unique basenames: fixture 02 is namespaced (fixture02_*.ff); fixture
+    # 01's two basenames are frozen; 03-07 keep valid.ff until the wave that
+    # bundles each one namespaces it.
+    valid_name: str = "valid.ff"
 
     @property
     def directory(self) -> str:
@@ -316,23 +321,29 @@ def build_stringtable_script_remap(*, bad_count: bool = False) -> BuiltZone:
         label="asset_array",
     )
 
+    # ENGINE-QUALIFIED block assignment (see ENGINE_TRACE_02.md):
+    # Load_StringTablePtr (src/database/db_load.cpp:5711-5728) pushes NO
+    # stream block, so every StringTable allocation stays in the ACTIVE
+    # block — block 4, pushed for the whole asset walk at
+    # src/database/db_file_load.cpp:281. The original block-0 assignment
+    # here was a corpus defect (Sol K0/K1 review, challenge 5).
     table_name = "synthetic/remap.csv"
     table_values = ["key", "value"]
     stream.read(
-        0,
+        4,
         stringtable(SENTINEL_INLINE, 2, 1, 1),
         align=3,
         label="stringtable[0]",
     )
-    stream.read(0, table_name.encode() + b"\0", label="stringtable[0].name")
+    stream.read(4, table_name.encode() + b"\0", label="stringtable[0].name")
     stream.read(
-        0,
+        4,
         u32(SENTINEL_INLINE) * 2,
         align=3,
         label="stringtable[0].values",
     )
     for index, value in enumerate(table_values):
-        stream.read(0, value.encode() + b"\0", label=f"stringtable[0].value[{index}]")
+        stream.read(4, value.encode() + b"\0", label=f"stringtable[0].value[{index}]")
 
     stream.read(
         0,
@@ -706,10 +717,11 @@ FIXTURES = [
         "stringtable_script_remap",
         "StringTable plus script-string interning and XAnimParts uint16 index remap.",
         build_stringtable_script_remap,
-        "malformed_bad_script_count.ff",
+        "fixture02_malformed_bad_script_count.ff",
         lambda: build_stringtable_script_remap(bad_count=True),
         "bad_count",
         "Refuse the impossible script-string count before allocation or array walking.",
+        valid_name="fixture02_valid.ff",
     ),
     FixtureDefinition(
         3,
@@ -802,7 +814,7 @@ def valid_manifest(definition: FixtureDefinition, built: BuiltZone) -> dict[str,
         "purpose": definition.purpose,
         "expectation": "accept",
         "container": {
-            "file": "valid.ff",
+            "file": definition.valid_name,
             "sha256": sha256(zone),
             "decompressed_sha256": sha256(built.payload),
             "magic": MAGIC.decode(),
@@ -862,13 +874,15 @@ def expected_files(selected: list[FixtureDefinition]) -> dict[Path, bytes]:
         prefix = Path(definition.directory)
         valid_zone = valid.zone_bytes()
         malformed_zone = malformed.zone_bytes()
-        files[prefix / "valid.ff"] = valid_zone
+        files[prefix / definition.valid_name] = valid_zone
         files[prefix / "MANIFEST.json"] = json_bytes(valid_manifest(definition, valid))
         files[prefix / definition.malformed_name] = malformed_zone
         files[prefix / "MALFORMED_MANIFEST.json"] = json_bytes(
             malformed_manifest(definition, malformed)
         )
-        sums.append((sha256(valid_zone), str(prefix / "valid.ff").replace("\\", "/")))
+        sums.append(
+            (sha256(valid_zone), str(prefix / definition.valid_name).replace("\\", "/"))
+        )
         sums.append(
             (
                 sha256(malformed_zone),
