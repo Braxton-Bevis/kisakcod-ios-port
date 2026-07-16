@@ -1,0 +1,153 @@
+{
+  "schema": "bmk4.supported-data.v1",
+  "edition": "Call of Duty 4: Modern Warfare \u2014 Steam PC (App 7940), English",
+  "generated_from": "docs/ASSET_INVENTORY.md (owner install, 2026-07-13)",
+  "notes": "Hashes only; game files never enter git/CI/artifacts/logs. This is the exact file set the first-playable contract accepts; verification rejects unknown or modified files before any deep parsing.",
+  "required": [
+    {
+      "path": "localization.txt",
+      "bytes": 2482,
+      "sha256": "a16bb05dafc15ca5e8fc6b82dc5f8ff20332d9f4f123b769a2547428b14b33a0"
+    },
+    {
+      "path": "main/iw_00.iwd",
+      "bytes": 167780172,
+      "sha256": "95d8497f5c7ab62c8e715810c58675e3b4af51ef4c499882e720430ae07dd8f4"
+    },
+    {
+      "path": "main/iw_01.iwd",
+      "bytes": 167885112,
+      "sha256": "984c0573dfeb5a5531b0e75d4305379f2bacd3ab68690ccf904f72a26ff8b369"
+    },
+    {
+      "path": "main/iw_02.iwd",
+      "bytes": 166957774,
+      "sha256": "f3e347403a31ffeaa87caedd019955f87924c2a3b7b94999f2d5f41452acc698"
+    },
+    {
+      "path": "main/iw_03.iwd",
+      "bytes": 166904484,
+      "sha256": "eab1c2165731a06fec80c1875a8c0879f1712e3154f434e0c600de50edf5c26e"
+    },
+    {
+      "path": "main/iw_04.iwd",
+      "bytes": 167682009,
+      "sha256": "85114736cde49486c3f9be62eb8bc0764ea966f9f2a16f2686f7b4e850bb6177"
+    },
+    {
+      "path": "main/iw_05.iwd",
+      "bytes": 167489996,
+      "sha256": "b15db07a430b90c6fe60306bbd70b62eb8ca00abd63fda81c71b3b7be1d1aecb"
+    },
+    {
+      "path": "main/iw_06.iwd",
+      "bytes": 167754503,
+      "sha256": "074ae94032b228ddcd43df4bfb33f98516f12faaa678502d36ea4f83614ac32e"
+    },
+    {
+      "path": "main/iw_07.iwd",
+      "bytes": 162987361,
+      "sha256": "76cba12ffb861291619c0d4381813cee330ad04d76569549dc0695fb99d860b7"
+    },
+    {
+      "path": "main/iw_08.iwd",
+      "bytes": 167544651,
+      "sha256": "1588068e0545680205a398223d3d80abaabd1b76c690aa61267b233ba4de821b"
+    },
+    {
+      "path": "main/iw_09.iwd",
+      "bytes": 167076481,
+      "sha256": "b600a86ca1cd2b8070852d4178609243b21c15b5cf370f4c0f96050999e97d42"
+    },
+    {
+      "path": "main/iw_10.iwd",
+      "bytes": 165389824,
+      "sha256": "3dd3529f65d20b28f827f555f5e74d48bbf5abccd1ebf51b309b9c6fc3a7458c"
+    },
+    {
+      "path": "main/iw_11.iwd",
+      "bytes": 151420446,
+      "sha256": "cc1d4781f8f99a0de91322b9b5f7864042b42d22f76fa90f16dd4e80cc9774d2"
+    },
+    {
+      "path": "main/iw_12.iwd",
+      "bytes": 5559373,
+      "sha256": "a63bcfc3f4248acc63220743bced2dd2fb9384c782521b75a4dbe21f0ee2d4b5"
+    },
+    {
+      "path": "main/iw_13.iwd",
+      "bytes": 28644036,
+      "sha256": "42a4de64e9b2504d2e7af9ced686a396bdb9c2eec7213031f836f3dc529a1166"
+    },
+    {
+      "path": "main/localized_english_iw00.iwd",
+      "bytes": 168239387,
+      "sha256": "728258788df24158e12e45fd5d02336eefc5806ff61fdfa44b6f84b1e9b78f77"
+    },
+    {
+      "path": "main/localized_english_iw01.iwd",
+      "bytes": 168314744,
+      "sha256": "c06d13a18388a38c79eebacfa350aed28f440f66b21199a98575b3861e808b4c"
+    },
+    {
+      "path": "main/localized_english_iw02.iwd",
+      "bytes": 168417931,
+      "sha256": "70daa54f60730daf311a64fe6714de8a79069fd993862943ae89e888a7afcc40"
+    },
+    {
+      "path": "main/localized_english_iw03.iwd",
+      "bytes": 168443199,
+      "sha256": "0b97e15dc8ff944abdb9e31922755f909b49b261890cf683b9c424a3a659ebee"
+    },
+    {
+      "path": "main/localized_english_iw04.iwd",
+      "bytes": 168056737,
+      "sha256": "811ab1c6303b573ee3afb18a0187f80e66ade2d357141a502cc625da085d8151"
+    },
+    {
+      "path": "main/localized_english_iw05.iwd",
+      "bytes": 167906464,
+      "sha256": "d05d662f0d2d4b1e6ac8b7f822367ec0a01ead9d748d3b5ed819d45b909f37d6"
+    },
+    {
+      "path": "main/localized_english_iw06.iwd",
+      "bytes": 773661,
+      "sha256": "df764ade4b0e8a34fea5ee5f0ac750f25239130290dd456f446d83977f994efe"
+    },
+    {
+      "path": "zone/english/code_post_gfx_mp.ff",
+      "bytes": 89196,
+      "sha256": "5a95e2d10a51c9dd872396c56e1e319a4e68ac9018ec36651d5862f953af290c"
+    },
+    {
+      "path": "zone/english/common_mp.ff",
+      "bytes": 13517381,
+      "sha256": "602c068b34f6a32147bfc7727b4f18b6a37fe47b4e99c68f5e25c6507c637320"
+    },
+    {
+      "path": "zone/english/localized_code_post_gfx_mp.ff",
+      "bytes": 832726,
+      "sha256": "116c1ef51a5a325be75c43e50e440a74f25ebc366fd307a99f184f4e2a480209"
+    },
+    {
+      "path": "zone/english/localized_common_mp.ff",
+      "bytes": 57032972,
+      "sha256": "d3923a91c7eddeda646d6550ee99b44fa948d0e9bd024e7e54e5cc98ff81e6fa"
+    },
+    {
+      "path": "zone/english/mp_killhouse.ff",
+      "bytes": 39319415,
+      "sha256": "4e9a7ce3090650e344fcba0c9c15b5fc8b3cfbe0013ecb0cf78819044284dffc"
+    },
+    {
+      "path": "zone/english/mp_killhouse_load.ff",
+      "bytes": 262,
+      "sha256": "f4b8296348f8c09c44ebecb2099613411b3f94f2cfe7dd81b881e6db18f0b568"
+    },
+    {
+      "path": "zone/english/ui_mp.ff",
+      "bytes": 420146,
+      "sha256": "5ab5c7d1593f8c50d34db9b379ba186561b8359550719641ec5066e67d52c60e"
+    }
+  ]
+}
