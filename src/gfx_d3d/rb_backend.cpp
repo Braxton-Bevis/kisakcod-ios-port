@@ -638,7 +638,13 @@ void __cdecl RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const
     _D3DLOCKED_RECT lockedRect; // [esp+10h] [ebp-2Ch] BYREF
     IDirect3DSurface9 *rawSurf; // [esp+18h] [ebp-24h] BYREF
     uint8_t *dest; // [esp+1Ch] [ebp-20h]
+#ifdef KISAK_IOS
+    // DXVK's windows_base.h declares RECT without the Win32 tagRECT tag
+    // name; the struct layout is identical.
+    RECT dstRect; // [esp+20h] [ebp-1Ch] BYREF
+#else
     tagRECT dstRect; // [esp+20h] [ebp-1Ch] BYREF
+#endif
     int colIndex; // [esp+30h] [ebp-Ch]
     int newline; // [esp+34h] [ebp-8h]
     int rowIndex; // [esp+38h] [ebp-4h]
