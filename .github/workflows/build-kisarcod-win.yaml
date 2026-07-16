@@ -85,6 +85,7 @@ jobs:
           cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --target "KisakCOD-mp"
           cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --target "KisakCOD-dedi"
           cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --target "bmk4-ff-oracle"
+          cmake --build build-${{ matrix.config }} --config ${{ matrix.config }} --target "bmk4-oracle1"
           popd
 
       - name: FF0a synthetic dump, byte-stability, and fixture allowlist gate
@@ -174,6 +175,117 @@ jobs:
           # if we reached this line.
           exit 0
 
+      # Oracle 1 (slice 7 / kernel qualification): load the synthetic zone
+      # fixtures through the REAL engine loader TUs and gate on the traces.
+      # Determinism = double-run byte compare; gate b = fixture 01 agrees
+      # with the shipped kernel model; gate c = fixture 02 StringTable block
+      # adjudication; refusals must refuse (allowlist exit 3, malformed !=0).
+      # Fixture inputs are repo-confined by the allowlist root: no game
+      # assets can enter this step or its artifacts.
+      - name: Oracle 1 engine loader gate
+        id: oracle1_gate
+        shell: powershell
+        run: |
+          $root = "${{ github.workspace }}"
+          $tool = Join-Path $root "bin\${{ matrix.config }}\bmk4-oracle1.exe"
+          $outDir = Join-Path $root "build-${{ matrix.config }}\oracle1-out"
+          New-Item -ItemType Directory -Force $outDir | Out-Null
+
+          # Engine-refusal exits (4/5) and allowlist exits (3) are intentional;
+          # relax EAP like the FF0a gate so PS 5.1 does not wrap native stderr
+          # in a terminating NativeCommandError. `throw` still enforces.
+          $savedEap = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+
+          $fixtures = @(
+            "01_rawfile_inline",
+            "02_stringtable_script_remap",
+            "03_alias_forward",
+            "04_cross_block_offset",
+            "05_interior_offset",
+            "06_delayed_stream_order",
+            "07_tagged_union_arm"
+          )
+          foreach ($fixture in $fixtures) {
+            $zone = Join-Path $root "tools\zone_fixtures\$fixture\valid.ff"
+            $traceA = Join-Path $outDir "$fixture-a.txt"
+            $traceB = Join-Path $outDir "$fixture-b.txt"
+            & $tool --fixture-allowlist-root $root --emit-names --zone-name $fixture --input $zone --output $traceA 2>$null
+            $exitA = $LASTEXITCODE
+            & $tool --fixture-allowlist-root $root --emit-names --zone-name $fixture --input $zone --output $traceB 2>$null
+            $exitB = $LASTEXITCODE
+            if ($exitA -ne $exitB) { throw "oracle1 $fixture exit codes differ across runs: $exitA vs $exitB" }
+            $hashA = (Get-FileHash -Algorithm SHA256 $traceA).Hash.ToLowerInvariant()
+            $hashB = (Get-FileHash -Algorithm SHA256 $traceB).Hash.ToLowerInvariant()
+            if ($hashA -cne $hashB) { throw "oracle1 $fixture trace is not byte-deterministic: $hashA != $hashB" }
+            $line = "BMK4_ORACLE1 fixture=$fixture exit=$exitA sha256=$hashA"
+            Write-Host $line
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+          }
+
+          # Gate b: fixture 01 must load clean and agree with the kernel model.
+          $trace01 = Join-Path $outDir "01_rawfile_inline-a.txt"
+          if (-not (Select-String -Path $trace01 -Pattern "^ev=zone_loaded" -Quiet)) {
+            throw "oracle1 fixture 01 did not complete a clean engine load"
+          }
+          python tools/oracle1/check_trace.py $trace01 --manifest tools/zone_fixtures/01_rawfile_inline/MANIFEST.json --gate b
+          if ($LASTEXITCODE -ne 0) { throw "oracle1 gate b (fixture 01 vs kernel model) is red" }
+
+          # Gate c: fixture 02 StringTable block adjudication (runtime verdict).
+          $trace02 = Join-Path $outDir "02_stringtable_script_remap-a.txt"
+          $verdict = python tools/oracle1/check_trace.py $trace02 --gate c
+          $gateC = $LASTEXITCODE
+          $verdict | Write-Host
+          $verdict | Where-Object { $_ -like "FIXTURE02_*" } | ForEach-Object {
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $_
+          }
+          if ($gateC -ne 0) { throw "oracle1 gate c (fixture 02 adjudication) is red" }
+
+          # Gates must demonstrably fail: malformed twins must refuse with an
+          # engine-native nonzero exit that is not the allowlist code 3.
+          $malformed = @(
+            @("01_rawfile_inline", "malformed_truncated_buffer.ff"),
+            @("02_stringtable_script_remap", "malformed_bad_script_count.ff")
+          )
+          foreach ($case in $malformed) {
+            $zone = Join-Path $root "tools\zone_fixtures\$($case[0])\$($case[1])"
+            $trace = Join-Path $outDir "$($case[0])-malformed.txt"
+            & $tool --fixture-allowlist-root $root --emit-names --zone-name "$($case[0])-malformed" --input $zone --output $trace 2>$null
+            if ($LASTEXITCODE -eq 0) { throw "oracle1 accepted malformed zone $($case[1])" }
+            if ($LASTEXITCODE -eq 3) { throw "oracle1 refused malformed zone $($case[1]) via allowlist instead of the engine" }
+            $line = "BMK4_ORACLE1 malformed=$($case[1]) exit=$LASTEXITCODE (engine refusal)"
+            Write-Host $line
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+          }
+
+          # Allowlist refusal (exit 3), FF0a pattern: input outside the root...
+          $outsideFixture = Join-Path $env:RUNNER_TEMP "bmk4-outside-oracle1.ff"
+          Copy-Item (Join-Path $root "tools\zone_fixtures\01_rawfile_inline\valid.ff") $outsideFixture -Force
+          & $tool --fixture-allowlist-root $root --input $outsideFixture --output (Join-Path $outDir "refused-input.txt") 2>$null
+          if ($LASTEXITCODE -ne 3) { throw "oracle1 outside input was not refused with exit code 3" }
+
+          # ...and output outside the root.
+          $outsideOutput = Join-Path $env:RUNNER_TEMP "bmk4-outside-oracle1-trace.txt"
+          & $tool --fixture-allowlist-root $root --input (Join-Path $root "tools\zone_fixtures\01_rawfile_inline\valid.ff") --output $outsideOutput 2>$null
+          if ($LASTEXITCODE -ne 3) { throw "oracle1 outside output was not refused with exit code 3" }
+          if (Test-Path $outsideOutput) { throw "oracle1 refused outside output was created" }
+          $ErrorActionPreference = $savedEap
+          # The wrapper ends the step with `exit $LASTEXITCODE`; the last native
+          # call above is the intentional exit-3 refusal. All assertions passed
+          # if we reached this line.
+          exit 0
+
+      - name: Upload Oracle 1 traces (synthetic fixtures only)
+        id: upload_oracle1_traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle1-traces-${{ matrix.config }}
+          path: ${{ github.workspace }}/build-${{ matrix.config }}/oracle1-out/**
+          if-no-files-found: ignore
+          compression-level: 9
+          retention-days: 7
+
       - id: upload_binaries
         uses: actions/upload-artifact@v4
         with:
@@ -254,6 +366,8 @@ jobs:
           OUTCOME_CONFIGURE: ${{ steps.configure.outcome }}
           OUTCOME_BUILD_TARGETS: ${{ steps.build_targets.outcome }}
           OUTCOME_FF0A_GATE: ${{ steps.ff0a_gate.outcome }}
+          OUTCOME_ORACLE1_GATE: ${{ steps.oracle1_gate.outcome }}
+          OUTCOME_UPLOAD_ORACLE1_TRACES: ${{ steps.upload_oracle1_traces.outcome }}
           OUTCOME_UPLOAD_BINARIES: ${{ steps.upload_binaries.outcome }}
           OUTCOME_UPLOAD_ORACLE_DUMP: ${{ steps.upload_oracle_dump.outcome }}
           OUTCOME_UPLOAD_ORACLE_TOOL: ${{ steps.upload_oracle_tool.outcome }}
@@ -269,6 +383,8 @@ jobs:
             @($env:OUTCOME_CONFIGURE, "Configure CMake ${{ matrix.config }}"),
             @($env:OUTCOME_BUILD_TARGETS, "Build ${{ matrix.config }}"),
             @($env:OUTCOME_FF0A_GATE, "FF0a synthetic dump, byte-stability, and fixture allowlist gate"),
+            @($env:OUTCOME_ORACLE1_GATE, "Oracle 1 engine loader gate"),
+            @($env:OUTCOME_UPLOAD_ORACLE1_TRACES, "Upload Oracle 1 traces (synthetic fixtures only)"),
             @($env:OUTCOME_UPLOAD_BINARIES, "Upload KisakCOD binaries"),
             @($env:OUTCOME_UPLOAD_ORACLE_DUMP, "Upload FF0a synthetic oracle dump only"),
             @($env:OUTCOME_UPLOAD_ORACLE_TOOL, "Upload FF0a oracle tool binary"),
