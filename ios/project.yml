@@ -65,10 +65,22 @@ targets:
         # Device builds additionally link the TRANSLATION renderer stack:
         # DXVK d3d9 (+ its component libs, built by build-dxvk-ios.sh with the
         # iOS CAMetalLayer WSI) and MoltenVK static. D3D9Smoke.mm drives it.
-        # MoltenVK must be force-loaded AND dead-stripping disabled: DXVK
-        # reaches Vulkan only via dlsym at runtime, so no link-time reference
-        # exists — the linker would drop the archive members, and -dead_strip
-        # would remove the symbols even after -force_load (learned on device:
-        # signal 5 inside Direct3DCreate9, zero vk* symbols in the binary).
+        # MoltenVK must be force-loaded: DXVK reaches Vulkan only via dlsym at
+        # runtime, so no link-time reference exists — the linker would drop
+        # the archive members. M12's original device config additionally set
+        # DEAD_CODE_STRIPPING=NO because plain -dead_strip removed the vk*
+        # symbols even after -force_load (learned on device: signal 5 inside
+        # Direct3DCreate9, zero vk* symbols in the binary).
         DEAD_CODE_STRIPPING: NO
-        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lkisakff", "-lz", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]
+        # Lane B device-enablement: the device now links libkisakrenderer,
+        # whose 11 exact real IW3 R/RB owners carry relocations into renderer
+        # waves that have not graduated (RB_DrawProfile, R_ReadBspPreTess*,
+        # ...). Bounding that closure requires dead stripping, and MoltenVK
+        # survives it because the Vulkan loader entry is explicitly rooted
+        # with -u (a root for ld64's liveness pass, unlike bare -force_load).
+        # CI proves the rooting held: the device job nm-gates
+        # _vkGetInstanceProcAddr/_vkCreateInstance/_vkCreateDevice in the
+        # packaged app binary. First runtime proof of this config happens at
+        # the owner's sideload sitting — documented, not claimed.
+        "DEAD_CODE_STRIPPING[sdk=iphoneos*]": YES
+        "OTHER_LDFLAGS[sdk=iphoneos*]": ["-lkisakrenderer", "-lkisakcominit", "-lkisakpmove", "-lkisaksmoke", "-lkisakff", "-lz", "-ldxvk_d3d9", "-ldxso", "-ldxvk", "-lutil", "-lspirv", "-lwsi", "-lvkcommon", "-ldisplay-info", "-Wl,-force_load,$(PROJECT_DIR)/libs/iphoneos/libMoltenVK.a", "-Wl,-u,_vkGetInstanceProcAddr", "-framework", "IOSurface", "-framework", "CoreGraphics", "-framework", "Metal", "-framework", "QuartzCore"]

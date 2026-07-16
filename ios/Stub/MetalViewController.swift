@@ -72,6 +72,15 @@ final class MetalViewController: UIViewController {
     private let d3d9Layer = CAMetalLayer()
     private var d3d9Status = "pending"
 
+    // Lane B device-enablement: the generated IW3 R/RB placeholder scene.
+    // Native C++ owns the pass/fail text (RendererPlaceholder.cpp via
+    // D3D9Smoke.mm); Swift only transcribes it. The simulator build reports
+    // an honest device-only refusal — never a fabricated success.
+    private static let rendererProofOK = "IW3 R/RB placeholder scene OK — generated assets, RC_DRAW_TRIANGLES, readback non-background, Present"
+    private var rendererStatus = "waiting for DXVK smoke"
+    private var rendererDetailStatus = "not run"
+    private let rendererProofLabel = UILabel()
+
     // Phase 3 fresh cold-start path. This exact B1 preflight is earned before
     // the retained M13/FS/M14 probes run; the retired staged entry is absent.
     private static let comInitPreflightOK = "dvar enum/external string OK — cold Dvar_Init path"
@@ -213,6 +222,8 @@ final class MetalViewController: UIViewController {
         let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
         if crashes >= 3 {
             d3d9Status = "skipped — crashed \(crashes)x (see dxvk_stderr.log)"
+            rendererStatus = "blocked by DXVK crash guard"
+            rendererDetailStatus = "blocked by DXVK crash guard"
             return
         }
 
@@ -223,11 +234,69 @@ final class MetalViewController: UIViewController {
             try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
             let t0 = CACurrentMediaTime()
             let result = String(cString: kisak_d3d9_smoke(Unmanaged.passUnretained(self.d3d9Layer).toOpaque()))
-            try? FileManager.default.removeItem(at: sentinel)
             self.d3d9Status = "\(result) (\(String(format: "%.0f", (CACurrentMediaTime() - t0) * 1000))ms)"
             NSLog("KISAK_D3D9_SMOKE %@", self.d3d9Status)
+            // Lane B scene stage. The native bridge is the capability gate:
+            // it drives the generated IW3 R/RB scene only on a device whose
+            // D3D9 smoke behaviorally earned, and refuses honestly otherwise
+            // ("device-only stage, not run" on the simulator). The crash
+            // sentinel stays armed through this stage so an abort inside the
+            // real R/RB path cannot relaunch into an endless crash loop or
+            // be mistaken for a completed attempt.
+            let rendererResult = String(cString: kisak_renderer_placeholder())
+            let rendererDetail = String(cString: kisak_renderer_placeholder_detail())
+            self.rendererStatus = rendererResult
+            self.rendererDetailStatus = rendererDetail
+            NSLog("KISAK_IW3_RENDERER %@", rendererResult)
+            NSLog("KISAK_IW3_RENDERER_DETAIL %@", rendererDetail)
+            if rendererResult == Self.rendererProofOK {
+                self.presentRendererProofCanvas()
+            }
+            try? FileManager.default.removeItem(at: sentinel)
             self.writeFirstFrameMarker()
         }
+    }
+
+    // Reached only when the native scene stage earned its exact marker (the
+    // string equality above cannot manufacture evidence — the C++ side wrote
+    // it only after draw-count/readback/Present verification). Promote the
+    // 640x480 engine frame to a distortion-free 4:3 fit and label it honestly
+    // for the owner's evidence screenshot.
+    private func presentRendererProofCanvas() {
+        let available = view.bounds.insetBy(dx: 8, dy: 8)
+        let targetAspect: CGFloat = 4.0 / 3.0
+        let frame: CGRect
+        if available.width / available.height > targetAspect {
+            let width = available.height * targetAspect
+            frame = CGRect(x: available.midX - width / 2,
+                           y: available.minY,
+                           width: width,
+                           height: available.height)
+        } else {
+            let height = available.width / targetAspect
+            frame = CGRect(x: available.minX,
+                           y: available.midY - height / 2,
+                           width: available.width,
+                           height: height)
+        }
+        d3d9Layer.frame = frame
+        // Unclutter the evidence shot; movement HUD interaction is not part
+        // of this stage's claim.
+        virtualController?.disconnect()
+        virtualController = nil
+        rendererProofLabel.text = "COD4 IW3 R/RB renderer — generated placeholder scene; no retail assets; not mp_killhouse"
+        rendererProofLabel.textColor = .white
+        rendererProofLabel.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+        rendererProofLabel.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
+        rendererProofLabel.textAlignment = .center
+        rendererProofLabel.numberOfLines = 2
+        rendererProofLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(rendererProofLabel)
+        NSLayoutConstraint.activate([
+            rendererProofLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            rendererProofLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            rendererProofLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+        ])
     }
 
     // MARK: - Fresh Com_Init path (see BootComInit.cpp / BootSmoke.cpp)
@@ -790,6 +859,7 @@ final class MetalViewController: UIViewController {
             Controller: \(controllerStatus)  stick (\(String(format: "%.2f", stick.x)), \(String(format: "%.2f", stick.y)))
             engine: \(engineSmoke)
             d3d9: \(d3d9Status)
+            renderer: \(rendererStatus)
             Com_Init preflight: \(comInitPreflightStatus)
             Com_Init spine: \(comInitSpineStatus)
             boot: \(bootStatus)
@@ -830,6 +900,8 @@ final class MetalViewController: UIViewController {
         settings=fx:\(fxEnabled ? "on" : "off") scale:\(renderScalePct)% cap:\(frameCap == 0 ? "max" : String(frameCap))
         engine=\(engineSmoke)
         d3d9=\(d3d9Status)
+        render=\(rendererStatus)
+        render-detail=\(rendererDetailStatus)
         cominit-preflight=\(comInitPreflightStatus)
         cominit-spine=\(comInitSpineStatus)
         boot=\(bootStatus)

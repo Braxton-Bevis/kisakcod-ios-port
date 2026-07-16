@@ -82,6 +82,77 @@ it whenever work pauses.
 - Lane 1 (device-enablement of the placeholder renderer) queued behind the
   kernel wave per Sol amendment 2.
 
+### Lane B device-enablement (renderer-device-enable, from main 6475ec7)
+
+- The preserved `renderer-placeholder-queued` scene (5121928) is re-applied
+  toward main as a DEVICE wave: census grows 42 → 52 with the 10 R/RB TUs,
+  `libkisakrenderer.a` is an exact 11-member archive built for both SDKs but
+  linked ONLY into the `iphoneos` app, `RendererPlaceholder.cpp` /
+  `RendererProofScaffold.cpp` are device-gated (`#if !TARGET_OS_SIMULATOR`),
+  and the simulator returns the honest bridge status
+  `device-only stage, not run (no DXVK simulator build)`. None of staging's
+  simulator-DXVK plumbing (f780d19..90d835d) is included; the sim job keeps
+  main's workflow text byte-identical.
+- Device link config change (Sol round-1 BLOCKER remedy): the archive members
+  carry relocations into unported renderer waves (`RB_DrawProfile`,
+  `R_ReadBspPreTessDrawSurfs`, ...), so the device app now dead-strips with
+  the Vulkan loader entry explicitly rooted
+  (`DEAD_CODE_STRIPPING[sdk=iphoneos*]=YES` + `-Wl,-u,_vkGetInstanceProcAddr`,
+  force_load retained). M12's original no-dead-strip config is superseded;
+  the device job nm-gates `_vkGetInstanceProcAddr` / `_vkCreateInstance` /
+  `_vkCreateDevice` plus the scene entry and live R/RB symbols in the packaged
+  IPA binary, so a rooting failure is caught before any sideload. First
+  RUNTIME proof of this config is the owner's sideload sitting — device
+  runtime is explicitly NOT claimed by this wave.
+- The scene stage runs on device after the D3D9 smoke behaviorally earns
+  (Clear+readback==0xFFBA55D3+Present all SUCCEEDED — the smoke now records
+  its Clear HRESULT for this predicate; its public status string is
+  unchanged). The intended exact device marker lines (CI-gated only once
+  device-runtime evidence exists; today they are documentation, not a gate):
+
+```text
+render=IW3 R/RB placeholder scene OK — generated assets, RC_DRAW_TRIANGLES, readback non-background, Present
+render-detail=IW3 R/RB placeholder detail — vertices=339 indices=483 triangles=161 cmdBytes=14552 stats=1/161/339/483 changedPixels=<decimal ≥153600> fnv1a=0x<8 hex> center=0x<8 hex> uploads=10848/483
+```
+
+  Both are written natively by C++ only after exact command-cursor advance,
+  prim stats 1/161/339/483, tess drain, dynamic-buffer upload accounting,
+  ≥50% non-background readback of the 640×480 target, and successful Present.
+  An unearned attempt prefixes the detail line with
+  `NOT EARNED (see render= failure)` so it can never match the exact earned
+  shape (Sol round 2 hardening).
+  On the simulator the marker carries the honest `render=device-only stage,
+  not run (no DXVK simulator build)` line — an expected observation, not a
+  gated assertion; the sim job's existing exact greps are untouched.
+- Owner sideload: download the `KisakStub-unsigned-ipa` artifact from the
+  green `ios-stub.yml` run on `renderer-device-enable`, sign/install
+  `KisakStub-unsigned.ipa` with Sideloadly (personal Apple ID), launch on the
+  iPad, then pull `Documents/metal_first_frame.txt` (Sideloadly/iTunes-style
+  file sharing or Xcode Devices) and require both exact lines above plus the
+  labeled on-screen 4:3 scene before publishing any screenshot.
+- Cross-review log: docs/reviews/renderer-device-lane-b-notes.md (Sol round 1
+  NEEDS-FIX adjudicated: dead-strip+root remedy adopted, Clear HRESULT added
+  to the admission predicate, one-shot bridge semantics documented,
+  sim-archive build-step strengthening acknowledged as intentional compile
+  coverage, `Sys_DestroySplashWindow` graduation exception documented.
+  Sol round 2 NEEDS-FIX adjudicated: adaptive-sync spin-timeout wraparound
+  and 64-bit delay-accumulator fixes, bridge verdict latching, the
+  NOT-EARNED detail prefix above, stale fence comment; round 2 verified the
+  round-1 remedy, sim-job byte-identity, marker honesty, and LP64 producer
+  seam clean).
+- EARNED (2026-07-16): evidence SHA `1e1007e` is ALL GREEN — stub run
+  `29524410781` (simulator job with every pre-existing exact gate intact AND
+  the device job: DXVK+MoltenVK build, 52-TU archives, exact 11-member
+  libkisakrenderer, device app LINKED under dead-strip+root, packaged
+  unsigned IPA carrying the scene entries, the live R/RB path, and the three
+  Vulkan root symbols), census run `29524412448` (52/52), Windows run
+  `29524414225` (Debug+Release byte-identity). Four fix rounds used
+  (tagRECT fence → outdoor-bias fail-closed dvar definitions → nm -U for
+  Release-hidden app symbols → drop the inlined R_GetCommandBuffer from the
+  binary-level gate, archive gate unchanged); full table in the review log.
+  DEVICE_RUN remains open by design: next step is the owner's Sideloadly
+  sitting per the instructions above.
+
 ## Active seat state — M15 headless Com_Init earned on staging
 
 - B4 was permanently gated and promoted through PR #5. Protected `main` merge

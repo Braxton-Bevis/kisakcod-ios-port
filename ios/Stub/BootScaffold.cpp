@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <TargetConditionals.h>
 #include <unistd.h> // sysconf(_SC_NPROCESSORS_ONLN) in Sys_GetCpuCount
 
 // Minimal ABI-identical dvar layout. Only current.enabled is read by the
@@ -97,6 +98,7 @@ struct fileData_s;
 struct msg_t;
 struct sysEvent_t;
 struct XZoneInfo;
+struct GfxCmdBufSourceState;
 
 [[noreturn]] static void BootScaffoldAbort(const char *symbol)
 {
@@ -346,19 +348,34 @@ void SV_ShutdownGameProgs() BOOT_UNREACHED("SV_ShutdownGameProgs")
 
 // Renderer/sound/system owners: renderer-content, audio, and platform waves.
 void DevGui_Update(int, float) BOOT_UNREACHED("DevGui_Update")
-void R_BeginDebugFrame() BOOT_UNREACHED("R_BeginDebugFrame")
-void R_ComErrorCleanup() BOOT_UNREACHED("R_ComErrorCleanup")
-void R_EndDebugFrame() BOOT_UNREACHED("R_EndDebugFrame")
-void R_PopRemoteScreenUpdate() BOOT_UNREACHED("R_PopRemoteScreenUpdate")
+#if TARGET_OS_SIMULATOR
+// libkisakrenderer is device-only in this wave (the simulator links no DXVK
+// on main). Preserve the established simulator scaffolds; the device omits
+// them because the exact real r_init.cpp / r_rendercmds.cpp owners enter its
+// link, fail-closed under their KISAK_IOS proof-boundary fences.
+void R_BeginDebugFrame() BOOT_UNREACHED("R_BeginDebugFrame(simulator; device owner r_rendercmds.cpp)")
+void R_ComErrorCleanup() BOOT_UNREACHED("R_ComErrorCleanup(simulator; device owner r_init.cpp)")
+void R_EndDebugFrame() BOOT_UNREACHED("R_EndDebugFrame(simulator; device owner r_rendercmds.cpp)")
+int R_PopRemoteScreenUpdate() BOOT_UNREACHED("R_PopRemoteScreenUpdate(simulator; device owner r_rendercmds.cpp)")
+void R_SyncRenderThread() BOOT_UNREACHED("R_SyncRenderThread(simulator; device owner r_rendercmds.cpp)")
+#endif
+// r_cmdbuf.cpp remains outside the bounded renderer archive on device. The
+// generated placeholder proof preinitializes VIEW_MODE_3D, so this must
+// remain unreachable until that real owner graduates.
+void R_CmdBufSet3D(GfxCmdBufSourceState *) BOOT_UNREACHED("R_CmdBufSet3D(r_cmdbuf.cpp renderer boundary)")
 void R_SetEndTime(int) BOOT_UNREACHED("R_SetEndTime")
-void R_SyncRenderThread() BOOT_UNREACHED("R_SyncRenderThread")
 void R_WaitEndTime() BOOT_UNREACHED("R_WaitEndTime")
 void R_WaitWorkerCmds() BOOT_UNREACHED("R_WaitWorkerCmds")
 void Ragdoll_Update(int) BOOT_UNREACHED("Ragdoll_Update")
 void SCR_UpdateScreen() BOOT_UNREACHED("SCR_UpdateScreen")
 void SND_ErrorCleanup() BOOT_UNREACHED("SND_ErrorCleanup")
 void SND_ShutdownChannels() BOOT_UNREACHED("SND_ShutdownChannels")
-void Sys_DestroySplashWindow() BOOT_UNREACHED("Sys_DestroySplashWindow")
+#if TARGET_OS_SIMULATOR
+// Device graduation exception, documented: the real owner (r_init.cpp) is an
+// explicit iOS no-op — there is no Win32 splash window on iOS — so the device
+// build inherits behavior-matching real-minimal semantics, not an abort.
+void Sys_DestroySplashWindow() BOOT_UNREACHED("Sys_DestroySplashWindow(simulator; device owner r_init.cpp)")
+#endif
 void Sys_Init() BOOT_UNREACHED("Sys_Init")
 void Sys_IsRemoteDebugClient() BOOT_UNREACHED("Sys_IsRemoteDebugClient")
 void Sys_Print(const char *) BOOT_UNREACHED("Sys_Print")
@@ -385,9 +402,11 @@ int Com_BlockChecksumKey32(const uint8_t *, uint32_t, uint32_t) BOOT_UNREACHED("
 // Com_SafeMode: real owner common.cpp joined the cominit archive (dupe
 // caught at CI run 29350156834; same graduated-owner class as Com_Filter).
 void PMem_DumpMemStats() BOOT_UNREACHED("PMem_DumpMemStats")
-void R_BeginRemoteScreenUpdate() BOOT_UNREACHED("R_BeginRemoteScreenUpdate")
-void R_EndRemoteScreenUpdate() BOOT_UNREACHED("R_EndRemoteScreenUpdate")
-void R_InitThreads() BOOT_UNREACHED("R_InitThreads")
+#if TARGET_OS_SIMULATOR
+void R_BeginRemoteScreenUpdate() BOOT_UNREACHED("R_BeginRemoteScreenUpdate(simulator; device owner r_rendercmds.cpp)")
+void R_EndRemoteScreenUpdate() BOOT_UNREACHED("R_EndRemoteScreenUpdate(simulator; device owner r_rendercmds.cpp)")
+void R_InitThreads() BOOT_UNREACHED("R_InitThreads(simulator; device owner r_init.cpp)")
+#endif
 char SND_InitDriver() BOOT_UNREACHED("SND_InitDriver")
 void SND_Init() BOOT_UNREACHED("SND_Init")
 void SND_StopSounds(snd_stopsounds_arg_t) BOOT_UNREACHED("SND_StopSounds")

@@ -358,6 +358,30 @@ jobs:
           ./scripts/platform/ios/build-engine-lib.sh \
             "$PWD/dxvk-ios-work/dxvk/include/native" iphoneos
 
+          # Lane B device-enablement gates: exact 11-member renderer archive
+          # and real ownership of the IW3 R/RB producer/consumer path plus
+          # the graduated lifecycle owners (mirrors the sim job's ar/nm
+          # style for its exact archives).
+          mkdir -p proof-device
+          xcrun ar -t ios/libs/iphoneos/libkisakrenderer.a \
+            | tee proof-device/renderer-archive-members.txt
+          test "$(grep -vc '__\.SYMDEF' proof-device/renderer-archive-members.txt)" -eq 11
+          xcrun nm -gU ios/libs/iphoneos/libkisakrenderer.a \
+            | c++filt | tee proof-device/renderer-defined-symbols.txt
+          for symbol in 'R_GetCommandBuffer(' 'R_iOS_ResetCommandList(' \
+                        'R_iOS_QueueDrawTrianglesCommand(' 'RB_DrawTrianglesCmd(' \
+                        'RB_EndTessSurface(' 'R_DrawTessTechnique(' \
+                        'R_DrawIndexedPrimitive('; do
+            grep -F "$symbol" proof-device/renderer-defined-symbols.txt
+          done
+          for symbol in 'R_InitThreads(' 'R_ComErrorCleanup(' \
+                        'R_SyncRenderThread(' 'R_BeginRemoteScreenUpdate(' \
+                        'R_EndRemoteScreenUpdate(' 'R_PopRemoteScreenUpdate(' \
+                        'R_BeginDebugFrame(' 'R_EndDebugFrame(' \
+                        'Sys_DestroySplashWindow('; do
+            grep -F "$symbol" proof-device/renderer-defined-symbols.txt
+          done
+
       - name: Install XcodeGen
         id: install_xcodegen
         run: brew install xcodegen
@@ -391,6 +415,44 @@ jobs:
           otool -l "$APP/KisakStub" | grep -A3 LC_BUILD_VERSION
           mkdir -p Payload
           cp -R "$APP" Payload/
+          # Lane B device-enablement: the binary that ships in the IPA must
+          # carry the scene entry points and the live IW3 R/RB path.
+          # nm -U (defined, INCLUDING locals): app-target TUs are built with
+          # Xcode Release's symbols-hidden-by-default, so the kisak_* bridges
+          # land in the symtab as local 't' — present and live, just not
+          # external (CI round 3). Archive-built engine and MoltenVK symbols
+          # stay external; the [Tt] class covers both.
+          mkdir -p ../proof-device
+          xcrun nm -U Payload/KisakStub.app/KisakStub \
+            | tee ../proof-device/device-app-defined-symbols.txt
+          grep -E ' [Tt] _kisak_renderer_placeholder$' \
+            ../proof-device/device-app-defined-symbols.txt
+          grep -E ' [Tt] _kisak_renderer_placeholder_detail$' \
+            ../proof-device/device-app-defined-symbols.txt
+          grep -E ' [Tt] _kisak_d3d9_smoke$' \
+            ../proof-device/device-app-defined-symbols.txt
+          # The device now dead-strips (bounds the renderer closure); MoltenVK
+          # is reached only via dlsym, so prove the explicit -u root held and
+          # the Vulkan entries survived stripping BEFORE anyone sideloads.
+          grep -E ' [Tt] _vkGetInstanceProcAddr$' \
+            ../proof-device/device-app-defined-symbols.txt
+          grep -E ' [Tt] _vkCreateInstance$' \
+            ../proof-device/device-app-defined-symbols.txt
+          grep -E ' [Tt] _vkCreateDevice$' \
+            ../proof-device/device-app-defined-symbols.txt
+          xcrun nm -U Payload/KisakStub.app/KisakStub | c++filt \
+            | tee ../proof-device/device-app-defined-symbols-demangled.txt
+          # R_GetCommandBuffer is deliberately absent from this list: its only
+          # call site is the same-TU producer seam, so -O1 inlines it and
+          # -dead_strip removes the standalone atom (CI round 4). Its real
+          # ownership is gated above at the ARCHIVE level, and its inlined
+          # body ships inside the gated R_iOS_QueueDrawTrianglesCommand.
+          for symbol in 'kisak_renderer_placeholder_run(' \
+                        'R_iOS_QueueDrawTrianglesCommand(' 'RB_DrawTrianglesCmd(' \
+                        'RB_EndTessSurface(' 'R_DrawTessTechnique(' \
+                        'R_DrawIndexedPrimitive('; do
+            grep -F "$symbol" ../proof-device/device-app-defined-symbols-demangled.txt
+          done
           zip -qry KisakStub-unsigned.ipa Payload
 
       - id: upload_ipa
@@ -400,6 +462,7 @@ jobs:
           path: |
             ios/KisakStub-unsigned.ipa
             ios/xcodebuild-device.log
+            proof-device/
           retention-days: 14
 
       - name: Verdict for coordinator

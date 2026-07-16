@@ -25,7 +25,17 @@ build_one_sdk() {
   local sdk=$1 target=$2
   local SDKPATH; SDKPATH=$(xcrun --sdk "$sdk" --show-sdk-path)
   local OBJDIR="build-ios-lib/$sdk"
-  mkdir -p "$OBJDIR" "ios/libs/$sdk"
+  # A skipped/failed compile must never reuse an object from an earlier run,
+  # and a failed archive command must never leave yesterday's library behind
+  # (matters on the owner's Mac day; CI runners are ephemeral).
+  rm -rf "$OBJDIR" || return 1
+  mkdir -p "$OBJDIR" "ios/libs/$sdk" || return 1
+  rm -f "ios/libs/$sdk/libkisakcod.a" \
+        "ios/libs/$sdk/libkisaksmoke.a" \
+        "ios/libs/$sdk/libkisakpmove.a" \
+        "ios/libs/$sdk/libkisakcominit.a" \
+        "ios/libs/$sdk/libkisakff.a" \
+        "ios/libs/$sdk/libkisakrenderer.a" || return 1
   local ok=0 skip=0 objs=()
   for f in $FILES; do
     local o="$OBJDIR/$(echo "$f" | tr '/' '_').o"
@@ -42,9 +52,9 @@ build_one_sdk() {
       skip=$((skip+1))
     fi
   done
-  xcrun libtool -static -o "ios/libs/$sdk/libkisakcod.a" "${objs[@]}" 2>/dev/null
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakcod.a" "${objs[@]}" 2>/dev/null || return 1
   echo "[$sdk] archived $ok TUs (skipped $skip) -> ios/libs/$sdk/libkisakcod.a"
-  lipo -info "ios/libs/$sdk/libkisakcod.a"
+  lipo -info "ios/libs/$sdk/libkisakcod.a" || return 1
 
   # Leaf subset the stub app links today (see ios/Stub/EngineSmoke.cpp): TUs
   # whose engine-extern closure is small enough for the documented scaffolding.
@@ -61,7 +71,7 @@ build_one_sdk() {
     fi
   done
   [ "$missing" -eq 0 ] || return 1
-  xcrun libtool -static -o "ios/libs/$sdk/libkisaksmoke.a" "${smoke[@]}" 2>/dev/null
+  xcrun libtool -static -o "ios/libs/$sdk/libkisaksmoke.a" "${smoke[@]}" 2>/dev/null || return 1
   echo "[$sdk] smoke subset (${#smoke[@]} TUs) -> ios/libs/$sdk/libkisaksmoke.a"
 
   # Real movement closure. Keeping it in a separate required archive makes a
@@ -78,7 +88,7 @@ build_one_sdk() {
     fi
   done
   [ "$pmove_missing" -eq 0 ] || return 1
-  xcrun libtool -static -o "ios/libs/$sdk/libkisakpmove.a" "${pmove[@]}" 2>/dev/null
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakpmove.a" "${pmove[@]}" 2>/dev/null || return 1
   echo "[$sdk] pmove subset (${#pmove[@]} TUs) -> ios/libs/$sdk/libkisakpmove.a"
 
   # Phase 3 Com_Init closure. This archive is exact and required:
@@ -111,7 +121,7 @@ build_one_sdk() {
     fi
   done
   [ "$cominit_missing" -eq 0 ] || return 1
-  xcrun libtool -static -o "ios/libs/$sdk/libkisakcominit.a" "${cominit[@]}" 2>/dev/null
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakcominit.a" "${cominit[@]}" 2>/dev/null || return 1
   echo "[$sdk] Com_Init subset (${#cominit[@]} TUs) -> ios/libs/$sdk/libkisakcominit.a"
 
   # Prove the archive member list is neither silently smaller nor padded.
@@ -121,7 +131,7 @@ build_one_sdk() {
   actual_members=$(xcrun ar -t "ios/libs/$sdk/libkisakcominit.a" | grep -v '__\.SYMDEF')
   diff -u \
     <(printf '%s\n' "${cominit_members[@]}") \
-    <(printf '%s\n' "$actual_members")
+    <(printf '%s\n' "$actual_members") || return 1
 
   # Slice 7 fastfile kernel (K0 container spine + K1 RawFile walk). Exact and
   # required: BootFFSmoke.cpp's oracle round-trip gate links this archive.
@@ -138,13 +148,49 @@ build_one_sdk() {
     fi
   done
   [ "$ffk_missing" -eq 0 ] || return 1
-  xcrun libtool -static -o "ios/libs/$sdk/libkisakff.a" "${ffk[@]}" 2>/dev/null
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakff.a" "${ffk[@]}" 2>/dev/null || return 1
   echo "[$sdk] FF-kernel subset (${#ffk[@]} TUs) -> ios/libs/$sdk/libkisakff.a"
   local ffk_actual
   ffk_actual=$(xcrun ar -t "ios/libs/$sdk/libkisakff.a" | grep -v '__\.SYMDEF')
   diff -u \
     <(printf '%s\n' "${ffk_members[@]}") \
-    <(printf '%s\n' "$ffk_actual")
+    <(printf '%s\n' "$ffk_actual") || return 1
+
+  # Lane B first real R/RB closure. Exact and required for BOTH SDKs: every
+  # owner must compile (the simulator lane keeps full compile coverage even
+  # though only the device app links this archive), and no unrelated census
+  # object may silently enter the app link.
+  local renderer=() renderer_missing=0
+  local renderer_members=(
+    src_gfx_d3d_r_init.cpp.o
+    src_gfx_d3d_r_rendercmds.cpp.o
+    src_gfx_d3d_rb_backend.cpp.o
+    src_gfx_d3d_rb_shade.cpp.o
+    src_gfx_d3d_rb_state.cpp.o
+    src_gfx_d3d_rb_stats.cpp.o
+    src_gfx_d3d_r_state_utils.cpp.o
+    src_gfx_d3d_r_shade.cpp.o
+    src_gfx_d3d_r_state.cpp.o
+    src_gfx_d3d_r_buffers.cpp.o
+    src_gfx_d3d_r_draw_bsp.cpp.o
+  )
+  for leaf in "${renderer_members[@]}"; do
+    if [ -f "$OBJDIR/$leaf" ]; then
+      renderer+=("$OBJDIR/$leaf")
+    else
+      echo "ERROR ($sdk): required renderer-wave object missing: $leaf" >&2
+      renderer_missing=1
+    fi
+  done
+  [ "$renderer_missing" -eq 0 ] || return 1
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakrenderer.a" "${renderer[@]}" 2>/dev/null || return 1
+  echo "[$sdk] renderer subset (${#renderer[@]} TUs) -> ios/libs/$sdk/libkisakrenderer.a"
+
+  local renderer_actual_members
+  renderer_actual_members=$(xcrun ar -t "ios/libs/$sdk/libkisakrenderer.a" | grep -v '__\.SYMDEF')
+  diff -u \
+    <(printf '%s\n' "${renderer_members[@]}") \
+    <(printf '%s\n' "$renderer_actual_members") || return 1
 }
 
 case "$WHICH" in

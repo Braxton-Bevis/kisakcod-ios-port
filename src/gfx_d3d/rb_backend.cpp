@@ -638,7 +638,13 @@ void __cdecl RB_StretchRaw(int x, int y, int w, int h, int cols, int rows, const
     _D3DLOCKED_RECT lockedRect; // [esp+10h] [ebp-2Ch] BYREF
     IDirect3DSurface9 *rawSurf; // [esp+18h] [ebp-24h] BYREF
     uint8_t *dest; // [esp+1Ch] [ebp-20h]
+#ifdef KISAK_IOS
+    // DXVK's windows_base.h declares RECT without the Win32 tagRECT tag
+    // name; the struct layout is identical.
+    RECT dstRect; // [esp+20h] [ebp-1Ch] BYREF
+#else
     tagRECT dstRect; // [esp+20h] [ebp-1Ch] BYREF
+#endif
     int colIndex; // [esp+30h] [ebp-Ch]
     int newline; // [esp+34h] [ebp-8h]
     int rowIndex; // [esp+38h] [ebp-4h]
@@ -1325,7 +1331,13 @@ void __cdecl RB_DrawTrianglesCmd(GfxRenderCommandExecState *execState)
 
     GfxCmdDrawTriangles *cmd = (GfxCmdDrawTriangles *)execState->cmd;
 
+#ifdef KISAK_IOS
+    static_assert(sizeof(GfxCmdDrawTriangles) == 24, "arm64 draw-triangles command ABI drift");
+    xyzwOffset = sizeof(GfxCmdDrawTriangles);
+#else
+    // Preserve the original 32-bit Windows command layout byte-for-byte.
     xyzwOffset = 16;
+#endif
     xyzwSize = 16 * cmd->vertexCount;
 
     normalOffset = xyzwOffset + xyzwSize;
@@ -1377,6 +1389,23 @@ void __cdecl RB_DrawTriangles_Internal(
     for (index = 0; index < indexCount; ++index)
         tess.indices[index + tess.indexCount] = LOWORD(tess.vertexCount) + indices[index];
     for (indexa = 0; indexa < vertexCount; ++indexa)
+#ifdef KISAK_IOS
+        // The recovered Win32 expressions flatten pointer-to-array inputs by
+        // indexing beyond their first subarray, which is undefined C++ and
+        // unsafe under the arm64 optimizer. Use the declared array types.
+        R_SetVertex4dWithNormal(
+            &tess.verts[indexa + tess.vertexCount],
+            xyzw[indexa][0],
+            xyzw[indexa][1],
+            xyzw[indexa][2],
+            xyzw[indexa][3],
+            normal[indexa][0],
+            normal[indexa][1],
+            normal[indexa][2],
+            st[indexa][0],
+            st[indexa][1],
+            (const uint8_t *)&color[indexa]);
+#else
         R_SetVertex4dWithNormal(
             &tess.verts[indexa + tess.vertexCount],
             (*xyzw)[4 * indexa],
@@ -1389,6 +1418,7 @@ void __cdecl RB_DrawTriangles_Internal(
             (*st)[2 * indexa],
             (*st)[2 * indexa + 1],
             (const uint8_t *)&color[indexa]);
+#endif
     tess.indexCount += indexCount;
     tess.vertexCount += vertexCount;
     RB_EndTessSurface();
@@ -2644,6 +2674,60 @@ void __cdecl RB_Draw3D()
     }
 }
 
+#ifdef KISAK_IOS
+// LP64 sweep (Lane B device wave, hardened per Sol round 2): the recovered
+// 32-bit register pattern in the #else branch writes only LODWORD(v0) of an
+// uninitialized 64-bit local and then tests/returns the full 64-bit value —
+// on arm64 the upper half is garbage and can flip the branch. This typed
+// rewrite reproduces the original x86 semantics exactly: the fence flag,
+// spin-elapsed delta, and return value are 32-bit register quantities with a
+// signed sign-bit timeout test (the delta math must be uint32 wraparound,
+// NOT a 64-bit unsigned compare, or RB_AbandonGpuFence is unreachable),
+// while the dx.gpuSyncDelay accumulator keeps its full 64-bit width.
+int RB_AdaptiveGpuSyncFinal()
+{
+    uint32_t result;
+
+    result = RB_IsGpuFenceFinished();
+    if (result)
+    {
+        if (dx.gpuSyncDelay > 0x4E20)
+        {
+            const unsigned long long decayed =
+                127ull * ((dx.gpuSyncDelay - 20000ull) / 0x80u);
+            dx.gpuSyncDelay = decayed;
+            result = static_cast<uint32_t>(decayed);
+        }
+        else
+        {
+            dx.gpuSyncDelay = 0;
+        }
+    }
+    else
+    {
+        const uint32_t startTime = static_cast<uint32_t>(__rdtsc());
+        while (!RB_IsGpuFenceFinished())
+        {
+            const uint32_t spinElapsed =
+                static_cast<uint32_t>(__rdtsc()) - startTime;
+            if (static_cast<int32_t>(spinElapsed) < 0)
+            {
+                RB_AbandonGpuFence();
+                break;
+            }
+        }
+        const uint32_t waitedTime =
+            static_cast<uint32_t>(__rdtsc()) - startTime;
+        result = waitedTime;
+        if ((waitedTime & 0x80000000u) == 0)
+        {
+            result = static_cast<uint32_t>(dx.gpuSyncDelay) + waitedTime / 16;
+            dx.gpuSyncDelay += waitedTime / 16;
+        }
+    }
+    return static_cast<int>(result);
+}
+#else
 int RB_AdaptiveGpuSyncFinal()
 {
     unsigned __int64 v0; // rax
@@ -2684,6 +2768,7 @@ int RB_AdaptiveGpuSyncFinal()
     }
     return v0;
 }
+#endif
 
 void __cdecl RB_CallExecuteRenderCommands()
 {
@@ -3065,4 +3150,3 @@ void __cdecl RB_RegisterBackendAssets()
 {
     backEnd.debugFont = R_RegisterFont("fonts/smalldevfont", 1);
 }
-

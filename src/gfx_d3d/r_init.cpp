@@ -34,6 +34,17 @@
 
 #ifdef KISAK_IOS
 #include <ios/r_ios_window.h> // Sys_iOS_GetHostWindow — app shell owns the window
+#include <cstdio>
+#include <cstdlib>
+
+[[noreturn]] static void R_iOS_InitProofBoundaryAbort(const char *symbol)
+{
+    std::fprintf(stderr,
+                 "BMK4 renderer proof reached deferred lifecycle: %s\n",
+                 symbol);
+    std::fflush(stderr);
+    std::abort();
+}
 #endif
 
 enum DxCapsResponse : __int32
@@ -2829,10 +2840,18 @@ void __cdecl SetGfxConfig(const GfxConfiguration *config)
 
 void __cdecl R_InitThreads()
 {
+#ifdef KISAK_IOS
+    // The bounded device placeholder proof is deliberately single-threaded.
+    // Keep this real owner fail-closed until r_workercmds.cpp and
+    // qcommon/threads.cpp graduate with the complete renderer-thread
+    // lifecycle.
+    R_iOS_InitProofBoundaryAbort("R_InitThreads");
+#else
     iassert(!r_glob.isRenderingRemoteUpdate);
 
     R_InitRenderThread();
     R_InitWorkerThreads();
+#endif
 }
 
 void __cdecl R_ShutdownStreams()
@@ -4312,6 +4331,12 @@ void __cdecl R_ConfigureRenderer(const GfxConfiguration *config)
 
 void __cdecl R_ComErrorCleanup()
 {
+#ifdef KISAK_IOS
+    // Successful placeholder rendering never enters the engine error-cleanup
+    // lifecycle. Abort by name instead of retaining a partial threaded owner
+    // closure from this live Com_Error edge.
+    R_iOS_InitProofBoundaryAbort("R_ComErrorCleanup");
+#else
     iassert( Sys_IsMainThread() );
     R_AbortRenderCommands();
     R_SyncRenderThread();
@@ -4321,6 +4346,7 @@ void __cdecl R_ComErrorCleanup()
         dx.device->EndScene();
         dx.inScene = 0;
     }
+#endif
 }
 
 bool __cdecl R_CanRecoverLostDevice()
