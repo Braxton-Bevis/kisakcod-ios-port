@@ -1,4 +1,4 @@
-// BMK4 slice 7 — fastfile translation kernel, stages K0 + K1.
+// BMK4 slice 7 — fastfile translation kernel, stages K0 + K1 + K2.
 //
 // K0 (container spine): IWffu100 v5 outer header parse + zlib inflate +
 // oracle-domain FNV-1a64 hashing of the decompressed image. Byte-for-byte
@@ -11,8 +11,19 @@
 // XAssetList -> inline asset array -> RawFile struct (32-bit layout:
 // name ptr / len / buffer ptr) -> -1 inline string + buffer payloads, with
 // per-block cursor accounting checked against the XFile block-size table.
-// Anything outside that contract REFUSES with a stable reason code —
-// unknown semantics fail closed, never guess (see docs/reviews/
+//
+// K2 (StringTable + script strings + XAnimParts u16 remap, fixture
+// mechanism 02): the walker becomes FFK_WalkZone, a type-indexed dispatch
+// table over an engine-faithful stream context — one PHYSICAL file cursor
+// separated from NINE ALIGNED LOGICAL block cursors with push/pop and
+// reservation support (DB_AllocStreamPos advances a logical cursor with
+// alignment and NO file bytes; DB_PopStreamPos REWINDS the temp block 0 to
+// its push-time cursor, so XFile.blockSize[0] is a HIGH-WATER mark). The
+// engine trace with file:line citations is
+// tools/zone_fixtures/ENGINE_TRACE_02.md.
+//
+// Anything outside the qualified contracts REFUSES with a stable reason
+// code — unknown semantics fail closed, never guess (see docs/reviews/
 // orchestrator-doctrine-claude.md, gates-must-fail).
 //
 // iOS-lane only: this TU is in the census and libkisakff.a; it is NOT part
@@ -51,8 +62,19 @@ enum FFKRefusal : uint32_t
     FFK_REFUSE_BLOCK_ACCOUNTING,           // per-block use != XFile block table
     // appended (stable codes never renumber)
     FFK_REFUSE_INPUT_TOO_LARGE,            // input exceeds the 32-bit zlib lane
-    FFK_REFUSE_UNSUPPORTED_ASSET_COUNT,    // K1 scope: exactly one asset
+    FFK_REFUSE_UNSUPPORTED_ASSET_COUNT,    // K1: exactly one asset; K2: at most one per type
     FFK_REFUSE_STALE_CONTAINER,            // container is not for the current payload
+    // appended at K2 (stable codes never renumber)
+    FFK_REFUSE_BAD_COUNT,                  // script-string count cannot fit the payload
+                                           // (KERNEL-ADDED: engine is undefined here;
+                                           // checked BEFORE any allocation)
+    FFK_REFUSE_STRING_NOT_INLINE,          // script-string/cell token != -1 (offset and
+                                           // null forms are unimplemented mechanisms)
+    FFK_REFUSE_SCRIPT_STRING_INDEX_RANGE,  // u16 remap index >= script-string count
+                                           // (KERNEL-ADDED: engine does not bounds-check,
+                                           // db_stringtable_load.cpp:3-6)
+    FFK_REFUSE_UNSUPPORTED_ASSET_FIELD,    // K2 scope: an XAnimParts field that would
+                                           // drive reads of an unimplemented mechanism
 };
 
 struct FFKContainer // K0 result
@@ -88,15 +110,57 @@ struct FFKRawFileK1 // K1 result (single-RawFile zone; assetCount must be 1)
     uint32_t blockUse[9];        // per-block bytes consumed by the walk
 };
 
+struct FFKZoneK2 // K2 result (typed dispatch over RAWFILE/STRINGTABLE/XANIMPARTS)
+{
+    uint32_t refusal;            // FFKRefusal; fields below valid when FFK_OK
+    // Script-string mechanism: the interned list loaded by the walk.
+    uint32_t scriptStringCount;
+    uint64_t hashScriptStrings;  // FNV-1a64 of every string incl NUL, in
+                                 // declaration order (manifest canonical form)
+    // Per-type asset tallies. K2 scope: at most ONE asset of each supported
+    // type per zone — the scalar fields below can only honestly represent one.
+    uint32_t rawFileCount;
+    uint32_t stringTableCount;
+    uint32_t xanimPartsCount;
+    // RawFile (valid when rawFileCount == 1; same semantics as FFKRawFileK1).
+    uint32_t rawfileLen;
+    uint32_t rawfileBufferPresent;
+    uint64_t hashRawFileName;
+    uint64_t hashRawFileLenField;
+    uint64_t hashRawFileBuffer;  // ONLY meaningful when bufferPresent != 0
+    // StringTable (valid when stringTableCount == 1).
+    uint32_t stringTableColumns;
+    uint32_t stringTableRows;
+    uint64_t hashStringTableName;    // utf8_nul
+    uint64_t hashStringTableValues;  // utf8_nul_sequence of all cells in order;
+                                     // ONLY meaningful when the wire values
+                                     // field was truthy (engine truthiness)
+    // XAnimParts (valid when xanimPartsCount == 1).
+    uint32_t xanimNamesCount;            // boneCount[9] entries loaded
+    uint32_t xanimFirstSourceIndex;      // wire u16 value before remap
+    uint64_t hashXAnimFirstSourceIndex;  // FNV-1a64 of the 2 little-endian bytes
+    uint64_t hashXAnimFirstResolved;     // remapped interned text incl NUL
+    // Accounting: per-block HIGH-WATER marks (block 0 rewinds on pop; see
+    // ENGINE_TRACE_02.md). Equal to the XFile table when FFK_OK.
+    uint32_t blockUse[9];
+};
+
 // K0: parse + inflate + hash a candidate fastfile held in memory. The
 // payload buffer is owned by the kernel; PayloadBytes/PayloadSize expose it
-// to the K1 walk and are valid until the next FFK_LoadContainer call.
+// to the walkers and are valid until the next FFK_LoadContainer call.
 // Single-threaded by contract (boot-stage usage only).
 bool FFK_LoadContainer(const uint8_t* bytes, size_t size, FFKContainer* out);
 const uint8_t* FFK_PayloadBytes();
 size_t FFK_PayloadSize();
 
-// K1: walk the CURRENT loaded payload as a single-RawFile zone.
+// K1 (FROZEN behavior): walk the CURRENT loaded payload as a single-RawFile
+// zone. Keeps its exact K1 scope fences and refusal codes; internally runs
+// the K2 stream context with a RAWFILE-only dispatch mask.
 bool FFK_WalkRawFileZone(const FFKContainer* container, FFKRawFileK1* out);
+
+// K2: walk the CURRENT loaded payload through the type-indexed dispatch
+// table (RAWFILE=31, STRINGTABLE=32, XANIMPARTS=2). Loads the script-string
+// list into the interning table and applies the engine's u16 index remap.
+bool FFK_WalkZone(const FFKContainer* container, FFKZoneK2* out);
 
 const char* FFK_RefusalName(uint32_t refusal);

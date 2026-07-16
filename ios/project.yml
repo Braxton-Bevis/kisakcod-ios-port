@@ -14,12 +14,19 @@ targets:
     platform: iOS
     sources:
       - Stub
-      # Slice 7 K0/K1 proof inputs: SYNTHETIC oracle-qualified zone fixtures
-      # (tools/zone_fixtures — generated, zero game data, CI-legal). Bundled
-      # so BootFFSmoke.cpp can round-trip them against the manifest anchors.
+      # Slice 7 K0/K1/K2 proof inputs: SYNTHETIC oracle-qualified zone
+      # fixtures (tools/zone_fixtures — generated, zero game data, CI-legal).
+      # Bundled so BootFFSmoke.cpp can round-trip them against the manifest
+      # anchors. Resources are flat-copied by BASENAME, so fixture 02 onward
+      # uses namespaced basenames (Sol K0/K1 review, challenge 8); fixture
+      # 01's two basenames are frozen and remain unique.
       - path: ../tools/zone_fixtures/01_rawfile_inline/valid.ff
         buildPhase: resources
       - path: ../tools/zone_fixtures/01_rawfile_inline/malformed_truncated_buffer.ff
+        buildPhase: resources
+      - path: ../tools/zone_fixtures/02_stringtable_script_remap/fixture02_valid.ff
+        buildPhase: resources
+      - path: ../tools/zone_fixtures/02_stringtable_script_remap/fixture02_malformed_bad_script_count.ff
         buildPhase: resources
     info:
       path: Stub/Info.plist

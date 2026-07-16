@@ -13,7 +13,7 @@ set(IOS_PROBE_SOURCES
     "${SRC_DIR}/ios/sys_ios_main.mm"         # iOS platform entry layer (replaces win32/win_main.cpp)
     "${SRC_DIR}/ios/sys_ios_events.cpp"       # B4 real Sys_QueEvent/Sys_GetEvent ring
     "${SRC_DIR}/ios/msvc_crt_compat.cpp"     # MSVC CRT functions with no libc equivalent
-    "${SRC_DIR}/ios/ff_kernel.cpp"           # slice 7 K0/K1 fastfile kernel (oracle round-trip gated)
+    "${SRC_DIR}/ios/ff_kernel.cpp"           # slice 7 K0/K1/K2 fastfile kernel (oracle round-trip gated)
     "${SRC_DIR}/ios/snd_ios_stub.cpp"        # no-op Miles (AIL_*) backend, pre-AVAudioEngine
     "${SRC_DIR}/bgame/bg_pmove.cpp"          # real player movement entry point
     "${SRC_DIR}/bgame/bg_jump.cpp"           # jump mechanics used by the pmove sandbox
