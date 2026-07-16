@@ -58,12 +58,15 @@ ev=error kind=assert detail=...db_stream.cpp:91...    (exit 4)
 ```
 
 **Verdict (static tier, runtime confirmation pending).** The engine puts
-the StringTable body in the **active block 4**,
-not block 0. The builder's block-0 claim is **refuted at RUNTIME tier**.
-Lane A's regeneration must (i) move the StringTable struct, name, values
-array, and value strings into block-4 accounting, (ii) resize the declared
-block sizes accordingly (block 0 carries only the XAnimParts struct), and
-(iii) regenerate `stream_events` / `oracle_v1.blocks.bytes` /
-container hashes. The coordinator reconciles this document against Lane
-A's static-derived regeneration; on any disagreement, this runtime trace
-is the final word (RUNTIME > static reading).
+the StringTable body in the **active block 4**, not block 0. The builder's
+block-0 claim is refuted at the STATIC tier now, and becomes refuted at
+the RUNTIME tier the moment the pending section above is filled from a
+green CI trace — the tier claimed by this document is exactly the tier of
+the evidence recorded in it (no forward-dated claims). Lane A's
+regeneration must (i) move the StringTable struct, name, values array,
+and value strings into block-4 accounting, (ii) resize the declared block
+sizes accordingly (block 0 carries only the XAnimParts struct), and (iii)
+regenerate `stream_events` / `oracle_v1.blocks.bytes` / container hashes.
+The coordinator reconciles this document against Lane A's static-derived
+regeneration; once the runtime section is filled, the runtime trace is
+the final word (RUNTIME > static reading).

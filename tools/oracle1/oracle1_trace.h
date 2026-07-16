@@ -1,6 +1,7 @@
 // BMK4 Oracle 1 trace writer — tool-owned.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace bmk4or1

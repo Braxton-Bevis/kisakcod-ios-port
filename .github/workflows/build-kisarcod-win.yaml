@@ -206,8 +206,15 @@ jobs:
           }
           function Assert-PinnedFixture([string]$relPath) {
             if (-not $sums.ContainsKey($relPath)) { throw "fixture $relPath is not pinned in SHA256SUMS" }
-            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $root "tools\zone_fixtures\$($relPath -replace '/', '\')")).Hash.ToLowerInvariant()
+            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $root "tools\zone_fixtures\$($relPath -replace '/', '\')") -ErrorAction Stop).Hash.ToLowerInvariant()
             if ($actual -cne $sums[$relPath]) { throw "fixture $relPath content does not match its pinned SHA-256" }
+          }
+          # Hash helper hardened against the relaxed EAP below: a missing or
+          # unreadable trace must throw, never yield $null (two $null hashes
+          # would compare equal and silently pass determinism).
+          function Get-TraceHash([string]$path) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "oracle1 expected trace file is missing: $path" }
+            return (Get-FileHash -Algorithm SHA256 -LiteralPath $path -ErrorAction Stop).Hash.ToLowerInvariant()
           }
 
           # Engine-refusal exits (4/5) and allowlist exits (3) are intentional;
@@ -227,6 +234,7 @@ jobs:
             "06_delayed_stream_order",
             "07_tagged_union_arm"
           )
+          $exits = @{}
           foreach ($fixture in $fixtures) {
             Assert-PinnedFixture "$fixture/valid.ff"
             $zone = Join-Path $root "tools\zone_fixtures\$fixture\valid.ff"
@@ -237,14 +245,15 @@ jobs:
             & $tool --fixture-allowlist-root $root --emit-names --zone-name $fixture --input $zone --output $traceB 2>$null
             $exitB = $LASTEXITCODE
             if ($exitA -ne $exitB) { throw "oracle1 $fixture exit codes differ across runs: $exitA vs $exitB" }
-            $hashA = (Get-FileHash -Algorithm SHA256 $traceA).Hash.ToLowerInvariant()
-            $hashB = (Get-FileHash -Algorithm SHA256 $traceB).Hash.ToLowerInvariant()
+            $hashA = Get-TraceHash $traceA
+            $hashB = Get-TraceHash $traceB
             if ($hashA -cne $hashB) { throw "oracle1 $fixture trace is not byte-deterministic: $hashA != $hashB" }
             # Closure enforcement: every outcome must be ENGINE-native
             # (0 = loaded, 4 = engine assert, 5 = Com_Error). A scaffold
             # abort (6) or tool error (2/3) is a red closure gap, never a
             # recordable "refusal".
             if ($exitA -notin 0, 4, 5) { throw "oracle1 $fixture exited $exitA (not an engine-native outcome)" }
+            $exits[$fixture] = $exitA
             $line = "BMK4_ORACLE1 fixture=$fixture exit=$exitA sha256=$hashA"
             Write-Host $line
             Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
@@ -259,6 +268,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "oracle1 gate b (fixture 01 vs kernel model) is red" }
 
           # Gate c: fixture 02 StringTable block adjudication (runtime verdict).
+          # The as-built fixture MUST refuse via the engine assert fence:
+          # exit is pinned to exactly 4 (Sol round-2 finding 7 — a completed
+          # or Com_Error'd fixture 02 must not pass).
+          if ($exits["02_stringtable_script_remap"] -ne 4) {
+            throw "oracle1 fixture 02 exited $($exits['02_stringtable_script_remap']), expected the engine assert fence (exit 4)"
+          }
           $trace02 = Join-Path $outDir "02_stringtable_script_remap-a.txt"
           $verdict = python tools/oracle1/check_trace.py $trace02 --gate c
           $gateC = $LASTEXITCODE
@@ -284,8 +299,8 @@ jobs:
             & $tool --fixture-allowlist-root $root --emit-names --zone-name "$($case[0])-malformed" --input $zone --output $traceB 2>$null
             $exitB = $LASTEXITCODE
             if ($exitA -ne $exitB) { throw "oracle1 malformed $($case[1]) exit codes differ: $exitA vs $exitB" }
-            $hashA = (Get-FileHash -Algorithm SHA256 $traceA).Hash.ToLowerInvariant()
-            $hashB = (Get-FileHash -Algorithm SHA256 $traceB).Hash.ToLowerInvariant()
+            $hashA = Get-TraceHash $traceA
+            $hashB = Get-TraceHash $traceB
             if ($hashA -cne $hashB) { throw "oracle1 malformed $($case[1]) refusal trace is not deterministic" }
             if ($exitA -eq 0) { throw "oracle1 accepted malformed zone $($case[1])" }
             if ($exitA -notin 4, 5) { throw "oracle1 refused malformed zone $($case[1]) with exit $exitA instead of an engine-native refusal" }

@@ -89,7 +89,72 @@ walk recomputation), and determinism.
 
 ## Round 2 — implementation (pre-CI)
 
-*Pending round 1 closure.*
+Brief: attack (1) trace truthfulness, (2) determinism, (3) whether the
+fixture-02 verdict follows from what gate c actually checks, (4) MSVC x86
+compile/link closure, (5) CI PowerShell correctness.
+
+**Sol STANDING: NEEDS-FIX — 14 findings (2 CI-killers) + 3 OK.** Rulings
+and actions (Lane C):
+
+1. `oracle1_trace.h` missing `<cstddef>` for `std::size_t`
+   (CONFIRMED-DEFECT, compile blocker) — **FIXED**.
+2. `Material_ReleaseTechniqueSet` + `Image_Free` unresolved
+   (CONFIRMED-DEFECT, link blocker) — **FIXED** (abort-loud scaffolds;
+   declared xanim.h:1476 / r_image.h:130). These are ADDRESS-TAKEN in the
+   `DB_RemoveXAssetHandler` table (db_registry.cpp:2884-2885), the exact
+   class a call-site grep census cannot see; Lane C swept all nine TUs for
+   `&identifier` references and found no further misses
+   (`R_IsInRemoteScreenUpdate` was already scaffolded; the rest are
+   TU-internal or data globals already defined).
+3. `fill` emitted pre-action without attempt semantics (CONFIRMED-DEFECT)
+   — **FIXED by contract**: `fill` is documented as a REQUEST like `inc`
+   (committed unless followed by `ev=error`), in DESIGN §4 and at the
+   hook. Rationale for not moving the hook: the file branch's
+   `DB_LoadXFileData` never returns on refusal, so a post-action hook
+   would silently DROP the very request the refusal interrupted.
+4. End-inclusive, span-blind block containment (CONFIRMED-DEFECT) —
+   **FIXED**: `ResolveBlock` is now half-open and span-aware; the first
+   out-of-budget byte of an over-model walk reports `external`.
+5. SL interning dangling `c_str()` on vector growth (CONFIRMED-DEFECT) —
+   **FIXED**: `std::deque` (stable element addresses for process
+   lifetime; DB_CreateDefaultEntry stores the pointer permanently).
+6. Gate C first-match latching could pass a block-0 StringTable / fail a
+   correct trace (CONFIRMED-DEFECT) — **FIXED**: gate c rewritten to
+   ADJACENCY matching in real emission order (struct alloc must be the
+   FIRST post-dispatch alloc, align=3, immediately followed by its
+   block/offset-matched 16-byte `src=file` fill).
+7. Gate C weaker than the accepted round-1 ruling (CONFIRMED-DEFECT) —
+   **FIXED**: gate c now REQUIRES the align-0 name alloc, the fence
+   adjacency, name_block==struct_block==4, and NO `zone_loaded`; the CI
+   step additionally pins fixture 02's exit to exactly 4.
+8. `engine_fence_tripped` could lie on any error (CONFIRMED-DEFECT) —
+   **FIXED**: fence is true only for `inc size=20` at the name position
+   immediately followed by `kind=assert`.
+9. Verdict doc claimed RUNTIME tier while marked PENDING
+   (CONFIRMED-DEFECT) — **FIXED**: tier language now tracks the evidence
+   actually recorded; no forward-dated claims.
+10. `asset_insert` name overstates post-link observation (RISK) —
+    **ACCEPTED**: event renamed `asset_link`; unhooked
+    `allowOverride=1` relink and the pass-through branches documented;
+    `redirected` documented as pointer-inequality observation only.
+11. Relaxed EAP could null-hash missing traces into a silent pass (RISK)
+    — **FIXED**: `Get-TraceHash` helper (Test-Path + `-ErrorAction
+    Stop`) for all four hash sites; pinning hash also `-ErrorAction
+    Stop`.
+12. Refusal traces embed `__FILE__` build paths (RISK) — **ACCEPTED &
+    DOCUMENTED** (DESIGN §5): determinism claims are scoped to
+    same-binary runs.
+13. EscapeField silent truncation (RISK) — **FIXED**: unambiguous `%TR`
+    truncation marker (invalid as percent-encoding by construction).
+14. /W4 /WX design-vs-CMake mismatch (NIT) — already resolved at
+    `dbe08f1` (DESIGN now documents the no-/WX policy); Sol reviewed a
+    mid-edit state.
+15-17. OK findings (hook placement + pinned-walk determinism; build
+    wiring incl. driver externs matching db_registry exactly; PS 5.1
+    constructs) — noted; finding 15 explicitly confirms `alloc`/`inc`
+    placement and source classification are truthful and that no
+    pointer/clock/thread/padding value reaches trace bytes on the pinned
+    walks.
 
 ## Lane C desk evidence gathered independently of Sol
 

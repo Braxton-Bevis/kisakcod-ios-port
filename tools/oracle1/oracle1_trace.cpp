@@ -28,7 +28,8 @@ const char *EscapeField(const char *text, char *out, std::size_t outSize)
 {
     static const char hex[] = "0123456789ABCDEF";
     std::size_t o = 0;
-    for (std::size_t i = 0; text[i] && o + 4 < outSize; ++i)
+    std::size_t i = 0;
+    for (; text[i] && o + 7 < outSize; ++i) // reserve room for one escape + %TR marker
     {
         const unsigned char c = static_cast<unsigned char>(text[i]);
         const bool plain = (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
@@ -44,15 +45,25 @@ const char *EscapeField(const char *text, char *out, std::size_t outSize)
             out[o++] = hex[c & 0xF];
         }
     }
+    if (text[i])
+    {
+        // Truncation marker: "%TR" is not valid percent-encoding ("%" must
+        // be followed by two hex digits), so it is unambiguous (Sol round-2
+        // finding 13: silent truncation could collapse distinct values).
+        out[o++] = '%';
+        out[o++] = 'T';
+        out[o++] = 'R';
+    }
     out[o] = '\0';
     return out;
 }
 
-// Resolve a pointer into the zone's blocks. Containment is tested against
-// the block START and declared size; a cursor that walked PAST a declared
-// size (over-model walk, e.g. fixture 02) still resolves by start pointer
-// because the event of interest begins inside the block.
-bool ResolveBlock(const void *ptr, unsigned int *blockOut, unsigned int *offsetOut)
+// Resolve a byte span into the zone's blocks. Containment is HALF-OPEN
+// against the declared size and span-aware: the whole [p, p+span) range
+// must sit inside [data, data+size) (Sol round-2 finding 4 — end-inclusive
+// containment misattributed the first out-of-budget byte of an over-model
+// walk to the block instead of external).
+bool ResolveBlock(const void *ptr, unsigned int span, unsigned int *blockOut, unsigned int *offsetOut)
 {
     if (!g_streamZoneMem)
         return false;
@@ -60,7 +71,7 @@ bool ResolveBlock(const void *ptr, unsigned int *blockOut, unsigned int *offsetO
     for (unsigned int i = 0; i < 9; ++i)
     {
         const XBlock &b = g_streamZoneMem->blocks[i];
-        if (b.data && b.size && p >= b.data && p <= b.data + b.size)
+        if (b.data && b.size && p >= b.data && p + (span ? span : 1) <= b.data + b.size)
         {
             *blockOut = i;
             *offsetOut = static_cast<unsigned int>(p - b.data);
@@ -176,12 +187,15 @@ void Bmk4Or1_InsertPointer(const void **slot)
 {
     unsigned int block = 0;
     unsigned int offset = 0;
-    if (ResolveBlock(slot, &block, &offset))
+    if (ResolveBlock(slot, 4, &block, &offset))
         TraceLine("ev=alias_insert block=%u offset=%u", block, offset);
     else
         TraceLine("ev=alias_insert block=? offset=?");
 }
 
+// NOTE (Sol round-2 finding 3): like `inc`, `fill` is a REQUEST recorded at
+// classification time, before the zero-fill/queue/inflate action runs — it
+// is committed unless followed by ev=error. See DESIGN.md schema notes.
 void Bmk4Or1_Fill(const unsigned char *ptr, int size)
 {
     const char *src = "file";
@@ -191,7 +205,7 @@ void Bmk4Or1_Fill(const unsigned char *ptr, int size)
         src = "delay_queue";
     unsigned int block = 0;
     unsigned int offset = 0;
-    if (ResolveBlock(ptr, &block, &offset))
+    if (ResolveBlock(ptr, static_cast<unsigned int>(size > 0 ? size : 1), &block, &offset))
         TraceLine("ev=fill block=%u offset=%u size=%d src=%s", block, offset, size, src);
     else
         TraceLine("ev=fill block=%u offset=? size=%d src=%s", g_streamPosIndex, size, src);
@@ -213,7 +227,7 @@ void Bmk4Or1_XFileData(const unsigned char *pos, unsigned int size)
 {
     unsigned int block = 0;
     unsigned int offset = 0;
-    if (ResolveBlock(pos, &block, &offset))
+    if (ResolveBlock(pos, size, &block, &offset))
         TraceLine("ev=inflate size=%u dest=block%u+%u", size, block, offset);
     else
         TraceLine("ev=inflate size=%u dest=external", size);
@@ -256,22 +270,26 @@ void Bmk4Or1_AssetInsert(int type, const void *loadedData, const void *linkedAss
     const XAsset *linked = static_cast<const XAsset *>(linkedAsset);
     const char *name = DB_GetXAssetName(linked);
     const std::uint64_t hash = bmk4or1::Fnv1a64(name, std::strlen(name) + 1); // utf8_nul convention
-    // Engine truth worth recording: DB_LinkXAssetEntry CLONES a fresh insert
-    // into the per-type pool (DB_AllocXAssetEntry + DB_CloneXAssetInternal,
-    // db_registry.cpp:1886-1889), so the header handed back — and written
-    // over the asset-array cell by Load_*Asset — normally does NOT equal the
-    // zone-block pointer. redirected=1 records that redirect happened.
+    // Event name is asset_link (Sol round-2 finding 10): this is a POST-LINK
+    // OBSERVATION at DB_AddXAsset, not proof of a fresh insertion —
+    // DB_LinkXAssetEntry has stub-existing / override / delayed-clone
+    // branches that all pass through here, and the allowOverride=1 relink
+    // (DB_PostLoadXZone) is outside the load walk and unhooked.
+    // redirected=1 is the accurate pointer-inequality observation: a fresh
+    // insert is pool-cloned (DB_AllocXAssetEntry + DB_CloneXAssetInternal)
+    // and Load_*Asset writes the POOL pointer back over the asset-array
+    // cell, so linked->header normally differs from the zone-block pointer.
     const int redirected = (linked->header.data != loadedData) ? 1 : 0;
     const char *typeName = (type >= 0 && type < 33) ? g_assetNames[type] : "?";
     if (bmk4or1::TraceEmitNames())
     {
         char escaped[512];
-        TraceLine("ev=asset_insert type=%d typename=%s namehash=%016llx redirected=%d name=%s",
+        TraceLine("ev=asset_link type=%d typename=%s namehash=%016llx redirected=%d name=%s",
                   type, typeName, static_cast<unsigned long long>(hash), redirected,
                   EscapeField(name, escaped, sizeof(escaped)));
     }
     else
-        TraceLine("ev=asset_insert type=%d typename=%s namehash=%016llx redirected=%d",
+        TraceLine("ev=asset_link type=%d typename=%s namehash=%016llx redirected=%d",
                   type, typeName, static_cast<unsigned long long>(hash), redirected);
 }
 

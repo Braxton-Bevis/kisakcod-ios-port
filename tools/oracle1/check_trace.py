@@ -76,10 +76,11 @@ def gate_b(events: list[dict[str, str]], manifest: dict) -> int:
         # buffer truthiness: nonzero token -> len+1 inline bytes (db_load.cpp:5649)
         {"ev": "alloc", "block": "4", "align": "0", "offset": "33"},
         {"ev": "fill", "block": "4", "offset": "33", "size": "6", "src": "file"},
-        # real DB_LinkXAssetEntry insertion, manifest utf8_nul hash; a fresh
-        # insert is pool-cloned so the linked header is redirected off-block
-        # (db_registry.cpp:1886-1889) — an engine truth the kernel must model
-        {"ev": "asset_insert", "type": "31", "namehash": expected_namehash, "redirected": "1"},
+        # real DB_LinkXAssetEntry post-link observation, manifest utf8_nul
+        # hash; a fresh insert is pool-cloned so the linked header is
+        # redirected off-block (db_registry.cpp DB_AllocXAssetEntry +
+        # DB_CloneXAssetInternal) — an engine truth the kernel must model
+        {"ev": "asset_link", "type": "31", "namehash": expected_namehash, "redirected": "1"},
         {"ev": "zone_loaded"},
     ]
     failures = find_subsequence(events, wants)
@@ -91,7 +92,28 @@ def gate_b(events: list[dict[str, str]], manifest: dict) -> int:
 
 
 def gate_c(events: list[dict[str, str]]) -> int:
-    """Fixture 02 StringTable block adjudication (DESIGN.md gate c)."""
+    """Fixture 02 StringTable block adjudication (DESIGN.md gate c).
+
+    Pinned to fixture 02 AS BUILT (its bytes are SHA-pinned by the CI gate),
+    per the Sol round-2 hardening (findings 6/7/8): every required event is
+    identified by ADJACENCY in the real emission order, not by first-match
+    scanning, so an interleaved decoy cannot satisfy the gate and an
+    unrelated event cannot fail it:
+
+        asset_dispatch type=32
+        alloc  align=3 (block B, offset O)      <- struct alloc: FIRST alloc
+        fill   block=B offset=O size=16 src=file   (immediately next event)
+        ... inflate/inc for the struct ...
+        alloc  align=0 (block B2, offset O2)    <- name alloc: next alloc
+        ... per-byte inflate events ...
+        inc    block=B2 offset=O2 size=20       <- fence attempt
+        error  kind=assert                         (immediately next event)
+
+    GREEN requires: B == B2 == 4, the fence-adjacency above, and NO
+    zone_loaded anywhere (fixture 02 as built cannot complete a real-engine
+    load). Anything else is RED and forces reconciliation of
+    FIXTURE02_VERDICT.md.
+    """
     dispatch_index = None
     for i, event in enumerate(events):
         if event.get("ev") == "asset_dispatch" and event.get("type") == "32":
@@ -101,32 +123,59 @@ def gate_c(events: list[dict[str, str]]) -> int:
         print("RED gate-c: no STRINGTABLE(32) dispatch event in trace")
         return 1
 
-    struct_alloc = None
-    struct_fill = None
-    name_alloc = None
-    error_event = None
+    segment = []
     for event in events[dispatch_index + 1 :]:
         if event.get("ev") == "asset_dispatch":
             break  # next asset began
-        if event.get("ev") == "alloc" and struct_alloc is None and event.get("align") == "3":
-            struct_alloc = event
-            continue
-        if event.get("ev") == "fill" and struct_alloc and struct_fill is None and event.get("size") == "16":
-            struct_fill = event
-            continue
-        if event.get("ev") == "alloc" and struct_fill and name_alloc is None:
-            name_alloc = event
-            continue
-        if event.get("ev") == "error":
-            error_event = event
-            break
+        segment.append(event)
 
-    if struct_alloc is None or struct_fill is None:
-        print("RED gate-c: trace lacks the 16-byte StringTable struct alloc/fill events")
+    # Struct alloc = FIRST alloc after dispatch; its fill must be adjacent.
+    struct_i = next((i for i, e in enumerate(segment) if e.get("ev") == "alloc"), None)
+    if struct_i is None:
+        print("RED gate-c: no allocation after the STRINGTABLE dispatch")
+        return 1
+    struct_alloc = segment[struct_i]
+    if struct_alloc.get("align") != "3":
+        print(f"RED gate-c: first post-dispatch alloc has align={struct_alloc.get('align')}, expected 3")
+        return 1
+    struct_fill = segment[struct_i + 1] if struct_i + 1 < len(segment) else {}
+    if not (
+        struct_fill.get("ev") == "fill"
+        and struct_fill.get("block") == struct_alloc.get("block")
+        and struct_fill.get("offset") == struct_alloc.get("offset")
+        and struct_fill.get("size") == "16"
+        and struct_fill.get("src") == "file"
+    ):
+        print(f"RED gate-c: struct alloc not adjacently followed by its 16-byte file fill: {struct_fill}")
         return 1
 
+    # Name alloc = next alloc after the struct fill.
+    name_i = next(
+        (i for i, e in enumerate(segment) if i > struct_i + 1 and e.get("ev") == "alloc"),
+        None,
+    )
+    name_alloc = segment[name_i] if name_i is not None else None
+    if name_alloc is None or name_alloc.get("align") != "0":
+        print(f"RED gate-c: no align-0 name allocation after the struct: {name_alloc}")
+        return 1
+
+    # Fence: the inc at the name position, immediately followed by an assert.
+    fence = False
+    fence_inc = None
+    for i in range(name_i + 1, len(segment) - 1):
+        e = segment[i]
+        if (
+            e.get("ev") == "inc"
+            and e.get("block") == name_alloc.get("block")
+            and e.get("offset") == name_alloc.get("offset")
+            and e.get("size") == "20"
+        ):
+            fence_inc = e
+            fence = segment[i + 1].get("ev") == "error" and segment[i + 1].get("kind") == "assert"
+            break
+
     struct_block = struct_alloc.get("block")
-    name_block = name_alloc.get("block") if name_alloc else "?"
+    name_block = name_alloc.get("block")
     completed = any(e.get("ev") == "zone_loaded" for e in events)
 
     print(
@@ -134,23 +183,35 @@ def gate_c(events: list[dict[str, str]]) -> int:
         f"stringtable_struct_block={struct_block} "
         f"stringtable_struct_offset={struct_alloc.get('offset')} "
         f"name_block={name_block} "
+        f"name_offset={name_alloc.get('offset')} "
         f"builder_claim_block=0 "
         f"engine_contradicts_builder={'true' if struct_block != '0' else 'false'} "
         f"load_completed={'true' if completed else 'false'} "
-        f"engine_fence_tripped={'true' if error_event else 'false'}"
+        f"engine_fence_tripped={'true' if fence else 'false'}"
     )
-    if error_event:
-        print(f"FIXTURE02_ERROR_EVENT: {error_event}")
+    if fence_inc:
+        print(f"FIXTURE02_FENCE_INC: {fence_inc}")
 
+    failures = []
     if struct_block != "4":
-        print(
-            "RED gate-c: runtime placed the StringTable struct in block "
-            f"{struct_block}, contradicting the static reading of "
-            "Load_StringTablePtr (db_load.cpp:5711, no DB_PushStreamPos -> "
-            "active block 4). Reconcile FIXTURE02_VERDICT.md before merging."
+        failures.append(
+            f"struct landed in block {struct_block}, contradicting the static reading of "
+            "Load_StringTablePtr (db_load.cpp:5711, no DB_PushStreamPos -> active block 4)"
         )
+    if name_block != "4":
+        failures.append(f"name landed in block {name_block}, expected active block 4")
+    if not fence:
+        failures.append(
+            "the DB_IncStreamPos fence adjacency (inc size=20 at the name position "
+            "immediately followed by kind=assert) is absent"
+        )
+    if completed:
+        failures.append("zone_loaded present: fixture 02 as built must NOT complete a real-engine load")
+    for failure in failures:
+        print(f"RED gate-c: {failure}. Reconcile FIXTURE02_VERDICT.md before merging.")
+    if failures:
         return 1
-    print("GREEN gate-c: engine placed the StringTable body in ACTIVE block 4; builder block-0 claim refuted")
+    print("GREEN gate-c: engine placed the StringTable body in ACTIVE block 4 and its own fence refused the zone; builder block-0 claim refuted")
     return 0
 
 

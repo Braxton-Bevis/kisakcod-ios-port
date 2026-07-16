@@ -54,9 +54,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <string>
-#include <vector>
 
 // ---------------------------------------------------------------------------
 // Abort-loud default.
@@ -348,9 +348,14 @@ void __cdecl Hunk_AddAsset(XAssetHeader, _DWORD *) { OR1_UNREACHED("Hunk_AddAsse
 
 namespace
 {
-std::vector<std::string> &SlStrings()
+// std::deque: growth never relocates existing elements, so c_str()
+// pointers handed to the engine (DB_CreateDefaultEntry stores one
+// permanently via DB_SetXAssetName, db_registry.cpp:1596) stay valid for
+// process lifetime. A vector's reallocation would dangle them (Sol
+// round-2 finding 5).
+std::deque<std::string> &SlStrings()
 {
-    static std::vector<std::string> strings{std::string()}; // slot 0 reserved: engine treats 0 as none
+    static std::deque<std::string> strings{std::string()}; // slot 0 reserved: engine treats 0 as none
     return strings;
 }
 
@@ -477,6 +482,11 @@ void __cdecl DObjArchive(DObj_s *) { OR1_UNREACHED("DObjArchive"); }
 void __cdecl DObjUnarchive(DObj_s *) { OR1_UNREACHED("DObjUnarchive"); }
 
 void __cdecl R_DelayLoadImage(XAssetHeader) { OR1_UNREACHED("R_DelayLoadImage"); }
+// Address-taken by DB_RemoveXAssetHandler (db_registry.cpp:2884-2885) —
+// invisible to a call-site grep census; found by Sol round-2 finding 2 and
+// confirmed by an address-taken sweep (declared xanim.h:1476, r_image.h:130).
+void __cdecl Material_ReleaseTechniqueSet(XAssetHeader, void *) { OR1_UNREACHED("Material_ReleaseTechniqueSet"); }
+void __cdecl Image_Free(GfxImage *) { OR1_UNREACHED("Image_Free"); }
 bool __cdecl Image_IsProg(GfxImage *) { OR1_UNREACHED("Image_IsProg"); }
 void __cdecl RB_UnbindAllImages() { OR1_UNREACHED("RB_UnbindAllImages"); }
 void __cdecl Load_Texture(GfxTexture *, GfxImage *) { OR1_UNREACHED("Load_Texture"); }

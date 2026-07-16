@@ -182,13 +182,13 @@ the shipping view against the pre-edit git baseline (`--baseline-rev`).
 | db_stream_load.cpp | `Load_Stream` (atStreamStart && size) | `fill` (block, offset, size, source = file / zerofill / delay_queue) |
 | db_stream_load.cpp | `DB_ConvertOffsetToPointer` | `ptr_offset` (raw token, decoded block, decoded offset) |
 | db_stream_load.cpp | `DB_ConvertOffsetToAlias` | `ptr_alias` (raw token, decoded block, decoded offset) |
-| db_stream_load.cpp | `Load_DelayStream` | `delay_drain` (index, size, dest block+offset) |
+| db_stream_load.cpp | `Load_DelayStream` | no dedicated hook: drains surface as `inflate dest=block2/3+O` via the `DB_LoadXFileData` hook |
 | db_file_load.cpp | `DB_LoadXFileData` | `inflate` (request size; dest resolved to block+offset or `external`) |
 | db_file_load.cpp | `DB_LoadXFileInternal` (post-XFile read) | `xfile` (size, externalSize, 9 block sizes) |
 | db_file_load.cpp | `Load_XAssetListCustom` (post-header read) | `assetlist` (string count + token, asset count + token) |
 | db_load.cpp | `Load_XAsset` (post 8-byte read) | `asset_dispatch` (running index, type id, type name) |
 | db_stringtable_load.cpp | `Load_ScriptStringCustom` | `scriptstring_remap` (local index before, handle after) |
-| db_registry.cpp | `DB_AddXAsset` (post-link) | `asset_insert` (type, FNV-1a64 of name incl. NUL, outcome) |
+| db_registry.cpp | `DB_AddXAsset` (post-link) | `asset_link` (type, FNV-1a64 of name incl. NUL, redirected flag) |
 
 `-1` inline pointer tokens are not separately hooked: an inline token is
 precisely "a pointer field followed by `alloc`+`fill` with no
@@ -221,13 +221,16 @@ inc              block=B offset=O size=N  (an ATTEMPT: recorded at entry,
                                            committed unless followed by
                                            ev=error)
 fill             block=B offset=O size=N src=file|zerofill|delay_queue
+                                          (a REQUEST like inc: recorded at
+                                           classification time; committed
+                                           unless followed by ev=error)
 ptr_offset       token=0x… block=B offset=O
 ptr_alias        token=0x… block=B offset=O
 alias_insert     block=4 offset=O
 asset_dispatch   index=I type=T name=<typename>
 sl_intern        handle=H hash=<fnv64 of bytes incl NUL> [text=<str>]
 scriptstring_remap index=I handle=H
-asset_insert     type=T typename=<name> namehash=<fnv64 incl NUL> redirected=0|1 [name=<str>]
+asset_link       type=T typename=<name> namehash=<fnv64 incl NUL> redirected=0|1 [name=<str>]
 zone_loaded      name=<zonename>
 error            kind=assert|com_error|scaffold detail=<escaped text>
 ```
@@ -237,22 +240,31 @@ is an `alloc`(+`fill`/`inc`) with no `ptr_offset`/`ptr_alias`/
 `alias_insert`. (2) Delayed drains appear as `inflate dest=block2/3+O`
 events after the walk (issued by `Load_DelayStream` through the real
 `DB_LoadXFileData`); queueing appears as `fill … src=delay_queue`.
-(3) `asset_insert redirected=1` records an engine truth: a fresh
-`DB_LinkXAssetEntry` insert CLONES the struct into the per-type pool
-(db_registry.cpp DB_AllocXAssetEntry + DB_CloneXAssetInternal) and
-`Load_*Asset` writes the POOL pointer back over the asset-array cell — the
-linked header normally does not equal the zone-block pointer. A post-link
-hook cannot distinguish new/existing/override robustly (Sol round-1
-finding 17), so the trace records the observable redirect, not a guessed
+(3) `asset_link` (named for what it IS — a post-`DB_LinkXAssetEntry`
+observation at `DB_AddXAsset`, not proof of a fresh insertion; Sol round-2
+finding 10) records an engine truth: a fresh insert CLONES the struct into
+the per-type pool (db_registry.cpp DB_AllocXAssetEntry +
+DB_CloneXAssetInternal) and `Load_*Asset` writes the POOL pointer back
+over the asset-array cell — the linked header normally does not equal the
+zone-block pointer, reported as `redirected=1`. The stub-existing /
+override / delayed-clone branches also pass through this event, and the
+`allowOverride=1` relink in `DB_PostLoadXZone` is outside the load walk
+and unhooked; consumers must never read this event as an insertion
 outcome. (4) `sl_intern` handles are tool-defined (first-use order,
 1-based); the engine-real fact is the remap structure, never the handle
-values. (5) `inflate` destinations beyond a block's declared size resolve
-as `external` (containment is checked against declared size).
+values. (5) `inflate`/`fill` destinations are resolved HALF-OPEN and
+span-aware against declared block sizes: a request whose [start,
+start+size) range does not fit inside [data, data+size) reports
+`external` — the first out-of-budget byte of an over-model walk is
+already external (Sol round-2 finding 4).
 
 Escaping contract: `name=`, `text=`, `detail=` and the `zone_open`/
 `zone_loaded` names are percent-encoded — every byte outside
 `[0-9A-Za-z_./:-]` becomes `%XX` — so arbitrary engine bytes can neither
-split records nor inject events (Sol round-1 finding 10).
+split records nor inject events (Sol round-1 finding 10). A value that
+exceeds the writer's field buffer ends with the marker `%TR` (not valid
+percent-encoding, hence unambiguous) instead of truncating silently (Sol
+round-2 finding 13).
 
 String hashing convention: FNV-1a64 over the UTF-8 bytes INCLUDING the
 terminating NUL — the same `utf8_nul` convention as the fixture manifests
@@ -297,6 +309,14 @@ Sources of nondeterminism examined:
   `SleepEx`'s return value is ignored by the engine; the tool queues no
   user APCs, so no premature wake source exists in-process.
 
+- **Build-path dependence of refusal traces** (Sol round-2 finding 12) —
+  `iassert` embeds `__FILE__`, and the CMake target registers the database
+  sources by absolute path, so an assert's `detail=` bytes include the
+  checkout path. Within one build (the CI double-run) they are identical;
+  traces produced by DIFFERENT checkouts differ in exactly those bytes.
+  Determinism claims are therefore scoped to same-binary runs; cross-build
+  comparison would need path normalization (not a current gate).
+
 CI enforces the gate mechanically: every fixture — including malformed
 refusal twins — is loaded twice in separate processes; SHA-256 of the two
 traces AND the two exit codes must match. stdout/stderr are diagnostics
@@ -321,7 +341,7 @@ contains, in order (kernel claims ↔ engine events):
 5. buffer truthiness: `alloc block=4 align=0 offset=33` + `fill block=4
    offset=33 size=6 src=file` — buffer loaded because the stored token was
    nonzero (db_load.cpp:5649–5653), `len+1` bytes.
-6. `asset_insert type=31 namehash=fc7845dd3a44c753 redirected=1` (manifest
+6. `asset_link type=31 namehash=fc7845dd3a44c753 redirected=1` (manifest
    `rawfile[0].name` `utf8_nul` hash; pool-clone redirect per §4 note 3).
 7. exit code 0 and `zone_loaded`.
 
