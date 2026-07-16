@@ -436,7 +436,12 @@ jobs:
             ../proof-device/device-app-defined-symbols.txt
           xcrun nm -U Payload/KisakStub.app/KisakStub | c++filt \
             | tee ../proof-device/device-app-defined-symbols-demangled.txt
-          for symbol in 'kisak_renderer_placeholder_run(' 'R_GetCommandBuffer(' \
+          # R_GetCommandBuffer is deliberately absent from this list: its only
+          # call site is the same-TU producer seam, so -O1 inlines it and
+          # -dead_strip removes the standalone atom (CI round 4). Its real
+          # ownership is gated above at the ARCHIVE level, and its inlined
+          # body ships inside the gated R_iOS_QueueDrawTrianglesCommand.
+          for symbol in 'kisak_renderer_placeholder_run(' \
                         'R_iOS_QueueDrawTrianglesCommand(' 'RB_DrawTrianglesCmd(' \
                         'RB_EndTessSurface(' 'R_DrawTessTechnique(' \
                         'R_DrawIndexedPrimitive('; do
