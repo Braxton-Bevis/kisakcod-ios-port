@@ -1,4 +1,8 @@
 #include "database.h"
+#ifdef BMK4_ORACLE1
+#include <bmk4_oracle1_instr.h>
+#endif
+#line 2
 
 #include <xanim/xanim.h>
 #include <xanim/xmodel.h>
@@ -6854,6 +6858,10 @@ void __cdecl Load_XAssetHeader(bool atStreamStart)
 void __cdecl Load_XAsset(bool atStreamStart)
 {
     Load_Stream(atStreamStart, (uint8_t *)varXAsset, 8);
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_AssetDispatch(varXAsset->type);
+#endif
+#line 6857
     varXAssetHeader = &varXAsset->header;
     Load_XAssetHeader(0);
 }

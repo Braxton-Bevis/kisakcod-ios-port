@@ -1,4 +1,8 @@
 #include "database.h"
+#ifdef BMK4_ORACLE1
+#include <bmk4_oracle1_instr.h>
+#endif
+#line 2
 
 uint32_t g_streamDelayIndex;
 XBlock * g_streamBlocks;
@@ -26,6 +30,10 @@ void __cdecl DB_InitStreams(XZoneMemory *zoneMem)
 
 void __cdecl DB_PushStreamPos(uint32_t index)
 {
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_StreamPush(index);
+#endif
+#line 29
     iassert(index < ARRAY_COUNT(g_streamPosArray));
     iassert(g_streamPosIndex < ARRAY_COUNT(g_streamPosArray));
     iassert(g_streamPosStackIndex < ARRAY_COUNT(g_streamPosStack));
@@ -71,6 +79,10 @@ void __cdecl DB_PopStreamPos()
     if (!g_streamPosIndex)
         g_streamPos = g_streamPosStack[g_streamPosStackIndex].pos;
     DB_SetStreamIndex(g_streamPosStack[g_streamPosStackIndex].index);
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_StreamPop();
+#endif
+#line 74
 }
 
 uint8_t *__cdecl DB_GetStreamPos()
@@ -82,11 +94,19 @@ uint8_t *__cdecl DB_AllocStreamPos(int32_t alignment)
 {
     iassert(g_streamPos);
     g_streamPos = (uint8_t *)(~alignment & (uint32_t)&g_streamPos[alignment]);
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_Alloc(alignment);
+#endif
+#line 85
     return g_streamPos;
 }
 
 void __cdecl DB_IncStreamPos(int32_t size)
 {
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_Inc(size);
+#endif
+#line 90
     iassert(g_streamPos);
     iassert(g_streamPos + size <= g_streamZoneMem->blocks[g_streamPosIndex].data + g_streamZoneMem->blocks[g_streamPosIndex].size);
 
@@ -101,6 +121,10 @@ const void **__cdecl DB_InsertPointer()
     pData = (const void **)DB_AllocStreamPos(3);
     DB_IncStreamPos(4);
     DB_PopStreamPos();
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_InsertPointer(pData);
+#endif
+#line 104
     return pData;
 }
 

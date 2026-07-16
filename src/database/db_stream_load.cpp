@@ -1,4 +1,8 @@
 #include "database.h"
+#ifdef BMK4_ORACLE1
+#include <bmk4_oracle1_instr.h>
+#endif
+#line 2
 
 
 void __cdecl Load_Stream(bool atStreamStart, uint8_t *ptr, int32_t size)
@@ -6,6 +10,10 @@ void __cdecl Load_Stream(bool atStreamStart, uint8_t *ptr, int32_t size)
     iassert(atStreamStart == (ptr == DB_GetStreamPos()));
     if (atStreamStart && size)
     {
+#ifdef BMK4_ORACLE1
+        Bmk4Or1_Fill(ptr, size);
+#endif
+#line 9
         if (g_streamPosIndex - 1 < 3)
         {
             if (g_streamPosIndex == 1)
@@ -47,12 +55,20 @@ void __cdecl DB_ConvertOffsetToAlias(uint32_t *data)
     uint32_t offset; // [esp+0h] [ebp-8h]
 
     offset = *data;
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_PtrAlias(offset);
+#endif
+#line 50
     iassert((offset && (offset != -1) && (offset != -2)));
     *data = *(uint32_t *)&g_streamZoneMem->blocks[(offset - 1) >> 28].data[(offset - 1) & 0xFFFFFFF];
 }
 
 void __cdecl DB_ConvertOffsetToPointer(uint32_t *data)
 {
+#ifdef BMK4_ORACLE1
+    Bmk4Or1_PtrOffset(*data);
+#endif
+#line 56
     *data = (uint32_t)&g_streamZoneMem->blocks[(uint32_t)(*data - 1) >> 28].data[(*data - 1) & 0xFFFFFFF];
 }
 
