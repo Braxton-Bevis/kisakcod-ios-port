@@ -122,6 +122,29 @@ build_one_sdk() {
   diff -u \
     <(printf '%s\n' "${cominit_members[@]}") \
     <(printf '%s\n' "$actual_members")
+
+  # Slice 7 fastfile kernel (K0 container spine + K1 RawFile walk). Exact and
+  # required: BootFFSmoke.cpp's oracle round-trip gate links this archive.
+  local ffk_members=(
+    src_ios_ff_kernel.cpp.o
+  )
+  local ffk=() ffk_missing=0
+  for leaf in "${ffk_members[@]}"; do
+    if [ -f "$OBJDIR/$leaf" ]; then
+      ffk+=("$OBJDIR/$leaf")
+    else
+      echo "ERROR ($sdk): required FF-kernel object missing: $leaf" >&2
+      ffk_missing=1
+    fi
+  done
+  [ "$ffk_missing" -eq 0 ] || return 1
+  xcrun libtool -static -o "ios/libs/$sdk/libkisakff.a" "${ffk[@]}" 2>/dev/null
+  echo "[$sdk] FF-kernel subset (${#ffk[@]} TUs) -> ios/libs/$sdk/libkisakff.a"
+  local ffk_actual
+  ffk_actual=$(xcrun ar -t "ios/libs/$sdk/libkisakff.a" | grep -v '__\.SYMDEF')
+  diff -u \
+    <(printf '%s\n' "${ffk_members[@]}") \
+    <(printf '%s\n' "$ffk_actual")
 }
 
 case "$WHICH" in

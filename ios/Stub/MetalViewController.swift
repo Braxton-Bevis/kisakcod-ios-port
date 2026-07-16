@@ -103,6 +103,10 @@ final class MetalViewController: UIViewController {
     // Real COD4 movement on the synthetic flat world. The immutable proof is
     // CI-gated; the live string carries thumbstick-driven origin/velocity.
     private static let pmoveProofOK = "real bg_pmove OK: walk+jump+land+friction on synthetic z=0"
+
+    // Slice 7 K0/K1: fastfile kernel vs oracle-qualified fixture 01. The C++
+    // stage owns the pass/fail text; Swift only records it.
+    private var ffkStatus = "waiting for pmove"
     private var pmoveProofStatus = "pending"
     private var pmoveLiveStatus = "waiting for boot"
     private var pmoveReady = false
@@ -409,6 +413,34 @@ final class MetalViewController: UIViewController {
             pmoveLiveStatus = "proof failed"
         }
         NSLog("KISAK_PMOVE_PROOF %@", result)
+        writeFirstFrameMarker()
+        runFFKernelSmoke()
+    }
+
+    private func runFFKernelSmoke() {
+        NSLog("KISAK_STAGE_ENTER ffk")
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let sentinel = docs.appendingPathComponent("ffk_attempt_in_flight")
+        let crashes = (try? String(contentsOf: sentinel, encoding: .utf8)).flatMap(Int.init) ?? 0
+        if crashes >= 3 {
+            ffkStatus = "skipped — crashed \(crashes)x"
+            return
+        }
+        // The oracle-qualified synthetic fixtures ship in the app bundle
+        // (tools/zone_fixtures/01_rawfile_inline — generated, zero game data).
+        guard let validPath = Bundle.main.path(forResource: "valid", ofType: "ff"),
+              let malformedPath = Bundle.main.path(forResource: "malformed_truncated_buffer",
+                                                   ofType: "ff") else {
+            ffkStatus = "FF kernel FAIL: fixtures missing from bundle"
+            writeFirstFrameMarker()
+            return
+        }
+
+        try? "\(crashes + 1)".data(using: .utf8)!.write(to: sentinel)
+        let result = String(cString: kisak_ff_kernel_smoke(validPath, malformedPath))
+        try? FileManager.default.removeItem(at: sentinel)
+        ffkStatus = result
+        NSLog("KISAK_FFK_SMOKE %@", result)
         writeFirstFrameMarker()
     }
 
@@ -761,6 +793,7 @@ final class MetalViewController: UIViewController {
             M15 closeout: \(m15Status)
             pmove proof: \(pmoveProofStatus)
             pmove live: \(pmoveLiveStatus)
+            ff kernel: \(ffkStatus)
             """
         }
     }
@@ -799,6 +832,7 @@ final class MetalViewController: UIViewController {
         fs=\(fsStatus)
         cominit=\(m15Status)
         pmove=\(pmoveProofStatus)
+        ffk=\(ffkStatus)
         pmoveLive=\(pmoveLiveStatus)
         date=\(ISO8601DateFormatter().string(from: Date()))
         """

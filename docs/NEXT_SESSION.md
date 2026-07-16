@@ -1,10 +1,56 @@
-# NEXT_SESSION - BMK4 live state (2026-07-15, M15 earned)
+# NEXT_SESSION - BMK4 live state (2026-07-16, slice 7 K0+K1 earned)
 
 Read `docs/HANDOFF_TO_CODEX.md`, the ratified roadmap in
 `docs/reviews/roadmap-sol.md` plus
 `docs/reviews/roadmap-claude-response.md`, and the latest `PORT_JOURNAL.md`
 entries before continuing. Re-reference this file before each edit and refresh
 it whenever work pauses.
+
+## 2026-07-16 — slice 7 opens: FF kernel K0+K1 SIM_RUN on ff-kernel
+
+- Coordination seat (Claude, quota restored) is lead + implementer; Sol is
+  the plan/code critic (owner directive 2026-07-16). Cross-review round on
+  the pre-Mac plan: docs/reviews/pre-mac-plan-claude.md + -response.md —
+  Sol standing NEEDS-FIX, all three amendments accepted (device-enablement
+  replaces the hosted sampler fallback; kernel lane branches from main;
+  Mac runbook/evidence upgrades).
+- Fixture corpus ORACLE-QUALIFIED locally: fixture 01 matches MANIFEST.json
+  exactly under the real bmk4-ff-oracle.exe; all 7 valid fixtures accepted;
+  all malformed twins container-ACCEPTED by design
+  (oracle_v1_static_parser_may_accept) — they are KERNEL-layer refusals.
+- Branch `ff-kernel` @ 835b14b (from main 0cc70dd): src/ios/ff_kernel.cpp
+  (census 42) = K0 container spine (oracle-identical acceptance + FNV
+  domains) + K1 RawFile 32-bit wire walk (explicit little-endian reads,
+  per-block cursor accounting vs the XFile table, stable refusal codes,
+  fail closed). ios/Stub/BootFFSmoke.cpp proves it against bundled fixture
+  01; libkisakff.a exact archive; marker
+  `ffk=FF kernel K0+K1 OK — fixture01 hashes match oracle, RawFile round trip, refused 4 container + 1 stream`
+  hard-gated in ios-stub.yml; census floor 42.
+- Round 1 red was the gate WORKING: my walker demanded -1 on RawFile.buffer;
+  the wire carries 1. Engine adjudicated — Load_RawFile
+  (src/database/db_load.cpp:5643-5656) truthiness-checks buffer; -1 token
+  discipline is for pointer-typed fields (name via Load_XString). Fixed,
+  desk-checked in Python on the real fixture bytes, round 2 FULLY GREEN
+  (dispatch runs on 835b14b: census, stub sim+device, exact marker).
+- Landing route: staging is occupied by the red sim-renderer WIP, so the
+  kernel promotes via its own PR (ff-kernel → main) with the required
+  Windows checks on the PR; iOS lanes verified green on the exact SHA via
+  workflow_dispatch. Staging merges main afterward.
+- NEXT kernel waves (REVISED per Sol's ff-kernel review,
+  docs/reviews/ff-kernel-k01-claude-response.md): every mechanism is
+  ENGINE-QUALIFIED immediately before its wave (trace the real loader path,
+  regenerate the fixture from engine truth if it disagrees — fixture 02's
+  StringTable block assignment is already known-suspect: Load_StringTablePtr
+  pushes no block, builder claims block 0). K2 preconditions: engine-trace
+  fixture 02 + regenerate; replace StreamWalk with a context separating the
+  physical cursor from nine ALIGNED logical block cursors with reservation
+  support; namespaced fixture resource names; `FFK_WalkZone` becomes a
+  type-indexed dispatch table with typed handlers. Then K3 = 03 alias +
+  04/05 offsets (block<<28|offset-1 conversion + alias table). K4 SPLITS:
+  K4a delayed streams, K4b union arms — separate gates. Then real
+  common_mp.ff locally.
+- Lane 1 (device-enablement of the placeholder renderer) queued behind the
+  kernel wave per Sol amendment 2.
 
 ## Active seat state — M15 headless Com_Init earned on staging
 
